@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SkoolTools — Design Document · by Playology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@400;600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4EFE6;
+  --paper-2:#EDE6D6;
+  --ink:#171514;
+  --ink-2:#3A3631;
+  --muted:#6B645A;
+  --rule:#1715141A;
+  --accent:#FF4D2E;        /* highlighter red-orange */
+  --accent-2:#FFD23F;      /* highlighter yellow */
+  --accent-3:#2E7D32;      /* notebook green */
+  --accent-4:#1E40AF;      /* ink blue */
+  --shadow:0 1px 0 #00000010,0 12px 32px -16px #00000022;
+  --serif:'Fraunces',ui-serif,Georgia,serif;
+  --sans:'Inter Tight',ui-sans-serif,system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:17px;
+  line-height:1.55;
+  font-feature-settings:"ss01","cv11";
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(#00000008 1px,transparent 1px),
+    radial-gradient(#00000005 1px,transparent 1px);
+  background-size:24px 24px,8px 8px;
+  background-position:0 0,4px 4px;
+}
+a{color:var(--ink);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;text-decoration-color:var(--accent)}
+a:hover{background:var(--accent-2)}
+::selection{background:var(--accent-2);color:var(--ink)}
+
+/* ---------- Layout shell ---------- */
+.page{max-width:1240px;margin:0 auto;padding:48px 32px 96px}
+@media (max-width:720px){.page{padding:24px 18px 64px}}
+
+/* ---------- Masthead ---------- */
+.mast{
+  border:2px solid var(--ink);
+  background:var(--paper);
+  position:relative;
+  padding:28px 32px 24px;
+  box-shadow:var(--shadow);
+}
+.mast::before{
+  content:"";position:absolute;inset:8px;border:1px solid var(--ink);pointer-events:none;
+}
+.mast-top{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);border-bottom:1px solid var(--rule);padding-bottom:10px;margin-bottom:18px;gap:16px;flex-wrap:wrap}
+.mast-top span+span::before{content:"·";margin:0 10px;color:var(--muted)}
+.kicker{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;background:var(--ink);color:var(--paper);padding:5px 10px;border-radius:2px}
+.title{
+  font-family:var(--serif);
+  font-weight:600;
+  font-variation-settings:"opsz" 144,"SOFT" 30,"WONK" 1;
+  font-size:clamp(56px,11vw,148px);
+  line-height:.86;
+  letter-spacing:-.045em;
+  margin:18px 0 8px;
+}
+.title em{font-style:italic;color:var(--accent);font-variation-settings:"opsz" 144,"SOFT" 100,"WONK" 1}
+.subtitle{
+  font-family:var(--serif);
+  font-style:italic;
+  font-weight:400;
+  font-size:clamp(20px,2.4vw,28px);
+  line-height:1.3;
+  color:var(--ink-2);
+  max-width:62ch;
+  margin:0 0 22px;
+}
+.mast-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-top:1px solid var(--rule);padding-top:14px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.mast-meta div{padding-right:12px}
+.mast-meta div b{display:block;color:var(--ink);font-weight:600;font-family:var(--sans);font-size:13px;letter-spacing:0;text-transform:none;margin-top:2px}
+@media (max-width:720px){.mast-meta{grid-template-columns:repeat(2,1fr);row-gap:10px}}
+
+/* ---------- Section structure ---------- */
+section{margin:72px 0 0}
+.sec-num{
+  display:flex;align-items:baseline;gap:18px;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:28px;
+}
+.sec-num .n{
+  font-family:var(--serif);font-style:italic;font-weight:300;font-size:64px;line-height:1;color:var(--accent);
+}
+.sec-num h2{
+  font-family:var(--serif);font-weight:500;font-size:clamp(28px,4vw,44px);line-height:1;letter-spacing:-.02em;margin:0;
+}
+.sec-num .tag{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);align-self:center}
+h3{
+  font-family:var(--serif);font-weight:500;font-size:24px;line-height:1.2;letter-spacing:-.01em;margin:36px 0 12px;
+}
+h3 .num{font-family:var(--mono);font-size:11px;color:var(--accent);margin-right:10px;letter-spacing:.1em;vertical-align:middle}
+h4{font-family:var(--sans);font-weight:600;font-size:14px;text-transform:uppercase;letter-spacing:.1em;margin:22px 0 8px;color:var(--ink-2)}
+p{margin:0 0 14px;max-width:72ch}
+.lead{font-family:var(--serif);font-size:22px;line-height:1.45;color:var(--ink-2);max-width:60ch}
+.lead::first-letter{
+  font-family:var(--serif);font-weight:600;font-size:5em;float:left;line-height:.85;padding:6px 12px 0 0;color:var(--accent);font-variation-settings:"opsz" 144,"SOFT" 60,"WONK" 1;
+}
+
+/* ---------- Pull quote / callout ---------- */
+.pull{
+  border-left:3px solid var(--accent);
+  padding:6px 0 6px 22px;
+  font-family:var(--serif);font-style:italic;font-size:24px;line-height:1.35;color:var(--ink);
+  margin:24px 0;max-width:62ch;
+}
+.note{
+  background:var(--paper-2);border:1px solid var(--ink);padding:18px 22px;font-size:15px;position:relative;
+}
+.note::before{content:"NOTE";position:absolute;top:-9px;left:14px;background:var(--paper);padding:0 8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em}
+
+/* ---------- Two/three col ---------- */
+.cols{display:grid;gap:32px}
+.cols.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cols.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:820px){.cols.c2,.cols.c3{grid-template-columns:1fr}}
+
+/* ---------- Brand identity panels ---------- */
+.brand-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:28px}
+@media (max-width:820px){.brand-grid{grid-template-columns:1fr}}
+.logo-card{
+  background:var(--ink);color:var(--paper);padding:48px 36px;border-radius:4px;position:relative;overflow:hidden;min-height:320px;display:flex;flex-direction:column;justify-content:space-between;
+}
+.logo-card::before{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(circle at 85% 15%,var(--accent) 0,var(--accent) 60px,transparent 62px),
+    radial-gradient(circle at 92% 30%,var(--accent-2) 0,var(--accent-2) 28px,transparent 30px);
+  opacity:.9;
+}
+.logo-card .logo{
+  font-family:var(--serif);font-weight:600;font-size:72px;line-height:.9;letter-spacing:-.04em;position:relative;
+  font-variation-settings:"opsz" 144,"SOFT" 30,"WONK" 1;
+}
+.logo-card .logo em{font-style:italic;color:var(--accent-2);font-variation-settings:"opsz" 144,"SOFT" 100,"WONK" 1}
+.logo-card .by{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;opacity:.7;position:relative}
+.logo-card .tag{font-family:var(--serif);font-style:italic;font-size:20px;line-height:1.3;color:var(--paper);position:relative;max-width:24ch}
+
+.swatch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sw{aspect-ratio:1/1.1;display:flex;flex-direction:column;justify-content:flex-end;padding:10px 12px;border:1px solid var(--ink);border-radius:2px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;line-height:1.2}
+.sw b{display:block;font-size:11px;letter-spacing:.04em;font-weight:600}
+.sw.s1{background:var(--paper);color:var(--ink)}
+.sw.s2{background:var(--paper-2);color:var(--ink)}
+.sw.s3{background:var(--ink);color:var(--paper)}
+.sw.s4{background:var(--accent);color:var(--paper)}
+.sw.s5{background:var(--accent-2);color:var(--ink)}
+.sw.s6{background:var(--accent-3);color:var(--paper)}
+
+.type-spec{border:1px solid var(--ink);padding:22px;background:var(--paper);display:grid;gap:14px}
+.type-row{display:grid;grid-template-columns:90px 1fr;gap:14px;align-items:baseline;border-bottom:1px dashed var(--rule);padding-bottom:12px}
+.type-row:last-child{border-bottom:0;padding-bottom:0}
+.type-row .label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.type-row .demo.display{font-family:var(--serif);font-weight:500;font-size:34px;line-height:1;letter-spacing:-.02em}
+.type-row .demo.display em{font-style:italic;color:var(--accent)}
+.type-row .demo.body{font-family:var(--sans);font-size:16px}
+.type-row .demo.mono{font-family:var(--mono);font-size:14px}
+
+/* ---------- Voice samples ---------- */
+.voice{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--ink)}
+.voice div{padding:18px 22px}
+.voice div:first-child{border-right:1px solid var(--ink);background:var(--paper-2)}
+.voice h5{margin:0 0 6px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.voice p{margin:0;font-family:var(--serif);font-size:18px;line-height:1.4;font-style:italic}
+@media (max-width:720px){.voice{grid-template-columns:1fr}.voice div:first-child{border-right:0;border-bottom:1px solid var(--ink)}}
+
+/* ---------- Audit table ---------- */
+.audit-wrap{border:1px solid var(--ink);overflow-x:auto;background:var(--paper);margin:18px 0}
+table.audit{width:100%;border-collapse:collapse;min-width:780px;font-size:14px}
+table.audit th,table.audit td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+table.audit thead th{background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;border-bottom:0;position:sticky;top:0}
+table.audit tbody tr:nth-child(even){background:#ffffff30}
+table.audit td.name{font-weight:600;width:22%}
+.verdict{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:3px 7px;border-radius:2px;white-space:nowrap}
+.v-keep{background:var(--accent-3);color:#fff}
+.v-improve{background:var(--accent-2);color:var(--ink)}
+.v-merge{background:#9C6BFF;color:#fff}
+.v-cut{background:var(--ink);color:var(--paper)}
+
+/* ---------- Tool roster ---------- */
+.tool-shelf{margin:20px 0}
+.shelf-label{display:flex;align-items:baseline;gap:14px;margin:28px 0 12px}
+.shelf-label .dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.shelf-label.s2 .dot{background:var(--accent-4)}
+.shelf-label.s3 .dot{background:var(--accent-3)}
+.shelf-label.s4 .dot{background:var(--accent-2)}
+.shelf-label.s5 .dot{background:#9C6BFF}
+.shelf-label.s6 .dot{background:#E91E63}
+.shelf-label h3{margin:0;font-family:var(--serif);font-size:22px;font-weight:500;letter-spacing:-.01em}
+.shelf-label .count{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.tool{
+  border:1px solid var(--ink);background:var(--paper);padding:12px 14px;border-radius:3px;position:relative;
+  transition:transform .12s ease,box-shadow .12s ease;
+}
+.tool:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+.tool .ico{font-size:20px;line-height:1;margin-bottom:6px;display:block}
+.tool .nm{font-family:var(--serif);font-size:17px;font-weight:500;letter-spacing:-.005em;margin-bottom:2px}
+.tool .ds{font-size:12px;color:var(--muted);line-height:1.35}
+.tool.new::after{
+  content:"NEW";position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:9px;letter-spacing:.12em;background:var(--accent);color:var(--paper);padding:2px 5px;border-radius:2px;
+}
+.tool.upgraded::after{
+  content:"UPGRADED";position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:9px;letter-spacing:.12em;background:var(--accent-4);color:var(--paper);padding:2px 5px;border-radius:2px;
+}
+
+/* ---------- Wireframe ---------- */
+.wire{border:1px solid var(--ink);background:var(--paper-2);padding:18px;margin:22px 0;font-family:var(--mono);font-size:12px;color:var(--ink-2);overflow-x:auto}
+.wire pre{margin:0;white-space:pre;line-height:1.5}
+
+/* ---------- Spec list ---------- */
+ul.spec{list-style:none;padding:0;margin:8px 0 18px}
+ul.spec li{padding:10px 0 10px 28px;border-bottom:1px dashed var(--rule);position:relative;max-width:72ch}
+ul.spec li::before{content:"§";position:absolute;left:0;top:10px;font-family:var(--serif);font-style:italic;color:var(--accent);font-weight:600}
+ul.spec li b{font-family:var(--sans);font-weight:600}
+ul.spec li:last-child{border-bottom:0}
+
+ul.checklist{list-style:none;padding:0;margin:8px 0 18px}
+ul.checklist li{padding:8px 0 8px 28px;position:relative}
+ul.checklist li::before{content:"";position:absolute;left:0;top:14px;width:14px;height:14px;border:1.5px solid var(--ink);border-radius:2px;background:var(--paper)}
+ul.checklist li.done::before{background:var(--accent-3);border-color:var(--accent-3)}
+ul.checklist li.done::after{content:"";position:absolute;left:3px;top:16px;width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg)}
+
+/* ---------- Roadmap ---------- */
+.road{border:1px solid var(--ink);background:var(--paper);padding:0;margin:18px 0;display:grid;grid-template-columns:repeat(4,1fr)}
+.road .ph{padding:18px 18px;border-right:1px solid var(--ink)}
+.road .ph:last-child{border-right:0}
+.road .ph h5{margin:0 0 4px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.road .ph .when{font-family:var(--serif);font-style:italic;font-size:18px;margin-bottom:8px;display:block}
+.road .ph ul{list-style:none;padding:0;margin:0;font-size:13px;line-height:1.5}
+.road .ph li{padding:3px 0 3px 14px;position:relative;color:var(--ink-2)}
+.road .ph li::before{content:"›";position:absolute;left:0;color:var(--accent);font-weight:700}
+@media (max-width:820px){.road{grid-template-columns:1fr 1fr}.road .ph{border-right:0;border-bottom:1px solid var(--ink)}.road .ph:nth-child(2){border-right:1px solid var(--ink)}}
+@media (max-width:520px){.road{grid-template-columns:1fr}.road .ph:nth-child(2){border-right:0}}
+
+/* ---------- KPIs ---------- */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--ink);margin:20px 0}
+.kpi{padding:20px 22px;border-right:1px solid var(--ink)}
+.kpi:last-child{border-right:0}
+.kpi b{display:block;font-family:var(--serif);font-weight:500;font-size:42px;line-height:1;letter-spacing:-.02em;color:var(--accent)}
+.kpi span{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);display:block;margin-top:6px}
+@media (max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi:nth-child(2){border-right:0}.kpi:nth-child(1),.kpi:nth-child(2){border-bottom:1px solid var(--ink)}}
+
+/* ---------- TOC ---------- */
+.toc{
+  border:1px solid var(--ink);padding:22px 26px;background:var(--paper-2);
+  margin:28px 0 0;
+}
+.toc h4{margin:0 0 12px}
+.toc ol{list-style:none;padding:0;margin:0;columns:2;column-gap:32px}
+.toc li{padding:6px 0;font-family:var(--serif);font-size:17px;break-inside:avoid;display:flex;gap:10px}
+.toc li b{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:24px;font-weight:600;padding-top:4px}
+.toc li a{text-decoration:none}
+.toc li a:hover{background:none;color:var(--accent)}
+@media (max-width:600px){.toc ol{columns:1}}
+
+/* ---------- Footer ---------- */
+footer.foot{
+  margin-top:96px;padding-top:24px;border-top:2px solid var(--ink);
+  display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)
+}
+.foot .mark{font-family:var(--serif);font-style:italic;font-size:16px;text-transform:none;letter-spacing:0;color:var(--ink)}
+.foot .mark em{color:var(--accent)}
+
+/* Print */
+@media print{
+  body{background:#fff;color:#000}
+  .mast,.tool,.note,.wire,.audit-wrap,.road,.kpis,.brand-grid,.toc{break-inside:avoid}
+  a{text-decoration:none;color:#000}
+  section{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ============ MASTHEAD ============ -->
+<header class="mast">
+  <div class="mast-top">
+    <span>The Playology Press</span>
+    <span>Vol. 1 · No. 1</span>
+    <span>Product Design Document</span>
+    <span style="margin-left:auto">Confidential · Internal Draft</span>
+  </div>
+  <span class="kicker">Design Document</span>
+  <h1 class="title">Skool<em>Tools</em>.</h1>
+  <p class="subtitle">A thirty-eight-tool study site, rebuilt as a calm, fast, single-file companion for high-school and college students — by Playology.</p>
+  <div class="mast-meta">
+    <div><span>Project</span><b>SkoolTools v1.0</b></div>
+    <div><span>Successor to</span><b>study4class.com</b></div>
+    <div><span>Audience</span><b>HS primary · College secondary</b></div>
+    <div><span>Document</span><b>Stand-alone HTML</b></div>
+  </div>
+</header>
+
+<!-- ============ TOC ============ -->
+<nav class="toc" aria-label="Table of contents">
+  <h4>In this document</h4>
+  <ol>
+    <li><b>01</b><a href="#vision">Vision &amp; principles</a></li>
+    <li><b>02</b><a href="#audience">Audience &amp; jobs-to-be-done</a></li>
+    <li><b>03</b><a href="#brand">Playology brand identity</a></li>
+    <li><b>04</b><a href="#audit">Audit of the 38 existing tools</a></li>
+    <li><b>05</b><a href="#roster">New tool roster</a></li>
+    <li><b>06</b><a href="#ia">Information architecture</a></li>
+    <li><b>07</b><a href="#patterns">Interaction patterns</a></li>
+    <li><b>08</b><a href="#access">Accessibility &amp; performance</a></li>
+    <li><b>09</b><a href="#tech">Technical architecture</a></li>
+    <li><b>10</b><a href="#safeguards">Trust, safety, privacy</a></li>
+    <li><b>11</b><a href="#metrics">Success metrics</a></li>
+    <li><b>12</b><a href="#roadmap">Roadmap</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 01 VISION ============ -->
+<section id="vision">
+  <div class="sec-num"><span class="n">01</span><h2>Vision &amp; principles</h2><span class="tag">The why</span></div>
+  <p class="lead">SkoolTools is a single page that loads in under a second, holds thirty-plus tiny tools a student actually uses in a school day, and never asks them to sign up, install anything, or hand over their data. Study4Class proved the demand. SkoolTools is the version a student would screenshot and send to a friend.</p>
+
+  <div class="pull">"School is the user's job. Our job is to disappear into it."</div>
+
+  <h3><span class="num">1.1</span>Five principles</h3>
+  <ul class="spec">
+    <li><b>One page, no install.</b> Everything lives in a single HTML file. Open it on a Chromebook in class, on a phone on the bus, on a borrowed laptop at the library. It works offline once loaded.</li>
+    <li><b>Tool first, brand second.</b> The student came here to solve a thing. Branding sets the tone but never the obstacle. No splash screens, no nags, no email walls.</li>
+    <li><b>Local by default.</b> Notes, flashcards, GPAs, checklists — all saved to the device. Nothing leaves the browser unless the student explicitly exports it.</li>
+    <li><b>Small tools, sharp edges.</b> Each tool does one thing exceptionally. We resist becoming a do-everything dashboard. If a tool can't justify its tile, it goes.</li>
+    <li><b>Playful, never childish.</b> A sixteen-year-old will not tolerate cartoons. They will tolerate — and quietly enjoy — a site that respects them with good typography, sharp interactions, and a sense of humour.</li>
+  </ul>
+
+  <div class="note">
+    <b>Why "SkoolTools" and not "Study4Class 2.0"?</b> The new name signals a clean slate: a different aesthetic, a curated toolset, an opinion about what matters. The intentional "Skool" misspelling earns permission to be a little irreverent — which is the entire point of the Playology brand.
+  </div>
+</section>
+
+<!-- ============ 02 AUDIENCE ============ -->
+<section id="audience">
+  <div class="sec-num"><span class="n">02</span><h2>Audience &amp; jobs-to-be-done</h2><span class="tag">Who, what for</span></div>
+
+  <div class="cols c2">
+    <div>
+      <h3><span class="num">2.1</span>Primary: the high-schooler</h3>
+      <p>Ages 14–18. Carrying a Chromebook with locked-down extensions. Switching between Google Docs, a calculator app, a class website, and TikTok. Time-poor and attention-fragmented. Cares more about <em>speed of access</em> than feature depth.</p>
+      <ul class="spec">
+        <li><b>Job:</b> "I have to turn in something by 11:59pm and I just need the answer to one thing without a five-step funnel."</li>
+        <li><b>Job:</b> "I'm in class right now and I need a calculator that doesn't get me in trouble."</li>
+        <li><b>Job:</b> "I'm studying for the SAT/AP exam tomorrow and I need flashcards that don't suck."</li>
+      </ul>
+    </div>
+    <div>
+      <h3><span class="num">2.2</span>Secondary: the college student</h3>
+      <p>Ages 18–24. Personal laptop, multiple monitors, a Notion or Obsidian habit. Less about quick utilities, more about <em>writing support, citation accuracy, GPA tracking across semesters, and exam-week productivity rituals</em>.</p>
+      <ul class="spec">
+        <li><b>Job:</b> "I'm three weeks into the semester and need to model whether I can still get a B in this class."</li>
+        <li><b>Job:</b> "My professor said APA 7. I have a website, a journal article, and a book chapter. Format them correctly in two minutes."</li>
+        <li><b>Job:</b> "It is 1am, I have 1,200 words to go, and I need a Pomodoro that doesn't preach at me."</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3><span class="num">2.3</span>Anti-audience</h3>
+  <p>SkoolTools is <em>not</em> for: teachers building gradebooks, parents tracking children, schools needing FERPA-grade data warehousing, or anyone wanting an AI tutor. Those markets are well served. We are deliberately a personal tool for the student.</p>
+</section>
+
+<!-- ============ 03 BRAND ============ -->
+<section id="brand">
+  <div class="sec-num"><span class="n">03</span><h2>Playology brand identity</h2><span class="tag">The look</span></div>
+
+  <p class="lead">Playology comes from <em>play</em> + <em>-ology</em> (the study of). The brand sits at the seam between rigour and mischief — the energy of a paperback textbook someone has actually doodled in. SkoolTools is the first product to wear the full Playology identity.</p>
+
+  <div class="brand-grid" style="margin-top:24px">
+    <div class="logo-card">
+      <div class="by">A Playology Product</div>
+      <div class="logo">Skool<em>Tools</em>.</div>
+      <div class="tag">"We've got school down to a science."</div>
+    </div>
+    <div>
+      <h4>Palette</h4>
+      <div class="swatch-grid">
+        <div class="sw s1"><b>Paper</b>#F4EFE6</div>
+        <div class="sw s2"><b>Card</b>#EDE6D6</div>
+        <div class="sw s3"><b>Ink</b>#171514</div>
+        <div class="sw s4"><b>Red Pen</b>#FF4D2E</div>
+        <div class="sw s5"><b>Highlighter</b>#FFD23F</div>
+        <div class="sw s6"><b>Pass</b>#2E7D32</div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-top:10px">Paper warm-neutral background. Ink is near-black, never pure black. Red Pen is the single saturated accent — used once per screen, like a teacher's mark. Highlighter and Pass support category tags and success states only.</p>
+    </div>
+  </div>
+
+  <h3><span class="num">3.1</span>Typography</h3>
+  <div class="type-spec">
+    <div class="type-row">
+      <div class="label">Display</div>
+      <div class="demo display">Solve for <em>x</em>.</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Spec</div>
+      <div class="demo body"><b>Fraunces</b> — variable serif, "Soft" and "Wonk" axes engaged. Used for tool names, headings, and any moment the brand needs personality. Italics in the accent color act as a verbal highlighter.</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Body</div>
+      <div class="demo body">The quick brown fox jumps over the lazy dog. 0123456789</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Spec</div>
+      <div class="demo body"><b>Inter Tight</b> — geometric sans for UI labels, body copy, input fields. Tight tracking to keep dense tool cards from feeling sparse.</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Mono</div>
+      <div class="demo mono">const grade = (gpa * 4) / total;</div>
+    </div>
+    <div class="type-row">
+      <div class="label">Spec</div>
+      <div class="demo body"><b>JetBrains Mono</b> — for calculator displays, formula reference, code playground, and small metadata labels (tags, version, kbd shortcuts).</div>
+    </div>
+  </div>
+
+  <h3><span class="num">3.2</span>Voice</h3>
+  <p>Plain-spoken, dry, occasionally winking. Never cheerleader-y. Never condescending. We talk to a smart sixteen-year-old, not a focus-grouped persona.</p>
+  <div class="voice">
+    <div>
+      <h5>Off-brand</h5>
+      <p>"🎉 Awesome job studying! You're a superstar! Keep up the great work and crush that test! ✨"</p>
+    </div>
+    <div>
+      <h5>On-brand</h5>
+      <p>"Three pomodoros done. Take five minutes — actually take them, the timer is rude about it."</p>
+    </div>
+  </div>
+  <div class="voice" style="margin-top:14px">
+    <div>
+      <h5>Off-brand</h5>
+      <p>"To utilize the GPA calculator, please proceed to input your course information into the form fields provided below."</p>
+    </div>
+    <div>
+      <h5>On-brand</h5>
+      <p>"Add courses. Pick a grade. We do the math. Drag rows to reorder."</p>
+    </div>
+  </div>
+
+  <h3><span class="num">3.3</span>Logo behavior</h3>
+  <ul class="spec">
+    <li><b>Wordmark.</b> "SkoolTools" set in Fraunces 600. The "Tools" italic is always in Red Pen. A terminal period grounds it — every tool ends with one too.</li>
+    <li><b>Lock-up.</b> "A Playology Product" appears in the masthead, in the about page, and nowhere else. Playology is the parent, not the headline.</li>
+    <li><b>Mark.</b> A two-dot mark (●●) — one Red Pen, one Highlighter — works as favicon, social avatar, and watchlist bullet. Reads as a colon, a domino, a pair of pencil dots.</li>
+  </ul>
+</section>
+
+<!-- ============ 04 AUDIT ============ -->
+<section id="audit">
+  <div class="sec-num"><span class="n">04</span><h2>Audit of the 38 existing tools</h2><span class="tag">Keep · Improve · Merge · Cut</span></div>
+
+  <p class="lead">Every tool on study4class.com was reviewed against three questions: <em>Would a student use this more than once a year? Does it do the job better than the obvious alternative? Does it stand on its own or is it a duplicate?</em> The result: 28 kept (most reworked), 6 merged into 3, and 4 cut.</p>
+
+  <div class="audit-wrap">
+  <table class="audit">
+    <thead>
+      <tr><th>Original tool</th><th>Verdict</th><th>Rationale &amp; change</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="name">Scientific Calculator</td><td><span class="verdict v-improve">Improve</span></td><td>Add expression history, ANS variable, degree/radian toggle, unit-aware results.</td></tr>
+      <tr><td class="name">Timer &amp; Stopwatch</td><td><span class="verdict v-keep">Keep</span></td><td>Best-in-class basic. Add audible tick option for ADHD students.</td></tr>
+      <tr><td class="name">Word counter</td><td><span class="verdict v-improve">Improve</span></td><td>Add Flesch-Kincaid reading level, sentence count, repeated-word detector.</td></tr>
+      <tr><td class="name">Quick notes</td><td><span class="verdict v-improve">Improve</span></td><td>Merge with Cornell Notes as a single Notes tool with template switcher.</td></tr>
+      <tr><td class="name">Unit converter</td><td><span class="verdict v-keep">Keep</span></td><td>Coverage is genuinely strong. Add currency (offline last-fetched rates).</td></tr>
+      <tr><td class="name">Formula reference</td><td><span class="verdict v-improve">Improve</span></td><td>Render proper LaTeX via KaTeX. Add "send to clipboard as LaTeX."</td></tr>
+      <tr><td class="name">Flashcards</td><td><span class="verdict v-improve">Improve</span></td><td>Add spaced-repetition (SM-2 lite) mode and Anki-compatible CSV import.</td></tr>
+      <tr><td class="name">Pomodoro timer</td><td><span class="verdict v-keep">Keep</span></td><td>Strong. Add cycle counter and dim-screen "deep focus" mode.</td></tr>
+      <tr><td class="name">GPA calculator</td><td><span class="verdict v-improve">Improve</span></td><td>Add weighted (AP/Honors), +/− grades, multi-semester running GPA.</td></tr>
+      <tr><td class="name">Study checklist</td><td><span class="verdict v-improve">Improve</span></td><td>Subsumed into the new <em>Assignments &amp; Planner</em> tool with due dates.</td></tr>
+      <tr><td class="name">Citation helper</td><td><span class="verdict v-improve">Improve</span></td><td>Add Chicago/Turabian, journal article, in-text vs full bibliography toggle, DOI lookup.</td></tr>
+      <tr><td class="name">Math practice</td><td><span class="verdict v-improve">Improve</span></td><td>Add timed-drill mode and per-operation accuracy tracking.</td></tr>
+      <tr><td class="name">Final grade</td><td><span class="verdict v-keep">Keep</span></td><td>Most-used tool by college audience. Keep simple.</td></tr>
+      <tr><td class="name">Typing test</td><td><span class="verdict v-improve">Improve</span></td><td>Replace generic Lorem with classroom-appropriate passages (history, science, lit).</td></tr>
+      <tr><td class="name">Cornell notes</td><td><span class="verdict v-merge">Merge</span></td><td>Merged into <em>Notes</em> as a template option (also: Outline, Free, Cornell, Q&amp;A).</td></tr>
+      <tr><td class="name">Quadratic solver</td><td><span class="verdict v-merge">Merge</span></td><td>Folded into a new <em>Graphing Calculator</em> that shows roots visually.</td></tr>
+      <tr><td class="name">Periodic table</td><td><span class="verdict v-keep">Keep</span></td><td>Iconic. Add electron-config view and student-mode (hides atomic data on click for quiz).</td></tr>
+      <tr><td class="name">Roman numerals</td><td><span class="verdict v-keep">Keep</span></td><td>Tiny, useful, ships.</td></tr>
+      <tr><td class="name">Percentage calculator</td><td><span class="verdict v-keep">Keep</span></td><td>Daily-driver. Keep.</td></tr>
+      <tr><td class="name">Fraction helper</td><td><span class="verdict v-keep">Keep</span></td><td>Keep.</td></tr>
+      <tr><td class="name">Chemistry helpers</td><td><span class="verdict v-improve">Improve</span></td><td>Add stoichiometry calculator, gas-law solver, common molar masses lookup.</td></tr>
+      <tr><td class="name">Physics rearranger</td><td><span class="verdict v-improve">Improve</span></td><td>Add unit-checking and step-by-step "show work" output.</td></tr>
+      <tr><td class="name">Paraphrase checker</td><td><span class="verdict v-cut">Cut</span></td><td>Heuristic version is misleading; suggesting it works invites academic-integrity issues.</td></tr>
+      <tr><td class="name">Sig figs &amp; sci notation</td><td><span class="verdict v-keep">Keep</span></td><td>Lab-report essential. Keep.</td></tr>
+      <tr><td class="name">Statistics sheet</td><td><span class="verdict v-improve">Improve</span></td><td>Add t-tests, confidence intervals, paste-from-spreadsheet support.</td></tr>
+      <tr><td class="name">Right triangle</td><td><span class="verdict v-merge">Merge</span></td><td>Folded into a single <em>Geometry Solver</em> (any triangle + common shapes).</td></tr>
+      <tr><td class="name">Line graph</td><td><span class="verdict v-merge">Merge</span></td><td>Subsumed by the new <em>Graphing Calculator</em>.</td></tr>
+      <tr><td class="name">Base converter</td><td><span class="verdict v-keep">Keep</span></td><td>CS-class staple. Add octal and arbitrary base 2–36.</td></tr>
+      <tr><td class="name">Markdown preview</td><td><span class="verdict v-cut">Cut</span></td><td>Niche. Notes tool already supports Markdown rendering.</td></tr>
+      <tr><td class="name">Reading time</td><td><span class="verdict v-merge">Merge</span></td><td>Folded into the upgraded Word Counter.</td></tr>
+      <tr><td class="name">Thesis outline</td><td><span class="verdict v-improve">Improve</span></td><td>Becomes <em>Essay Planner</em> — thesis, outline, transitions, source list, word target.</td></tr>
+      <tr><td class="name">Dice &amp; random</td><td><span class="verdict v-keep">Keep</span></td><td>Keep. Useful for D&amp;D club too, frankly.</td></tr>
+      <tr><td class="name">Date calculator</td><td><span class="verdict v-keep">Keep</span></td><td>Surprisingly used for due-date math. Keep.</td></tr>
+      <tr><td class="name">Text case</td><td><span class="verdict v-keep">Keep</span></td><td>Keep. Add: remove line breaks, collapse spaces, sentence-fix.</td></tr>
+      <tr><td class="name">GCD &amp; LCM</td><td><span class="verdict v-keep">Keep</span></td><td>Keep. Show steps for the Euclidean algorithm.</td></tr>
+      <tr><td class="name">nPr &amp; nCr</td><td><span class="verdict v-keep">Keep</span></td><td>Keep.</td></tr>
+      <tr><td class="name">Shuffle lines</td><td><span class="verdict v-merge">Merge</span></td><td>Folded into Random Picker (single "List utility" tool).</td></tr>
+      <tr><td class="name">Random picker</td><td><span class="verdict v-keep">Keep</span></td><td>Kept and broadened into the unified List utility.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><b>28</b><span>Kept (most reworked)</span></div>
+    <div class="kpi"><b>6→3</b><span>Merged</span></div>
+    <div class="kpi"><b>2</b><span>Cut</span></div>
+    <div class="kpi"><b>12</b><span>New tools added</span></div>
+  </div>
+</section>
+
+<!-- ============ 05 NEW ROSTER ============ -->
+<section id="roster">
+  <div class="sec-num"><span class="n">05</span><h2>New tool roster</h2><span class="tag">37 tools, six shelves</span></div>
+
+  <p class="lead">Tools are organized into six shelves on the landing page. Each shelf has a color tag and a fixed location. Students learn the layout once and never re-learn it.</p>
+
+  <!-- Shelf 1: Math & Science -->
+  <div class="tool-shelf">
+    <div class="shelf-label s1"><span class="dot"></span><h3>Numbers</h3><span class="count">9 tools</span></div>
+    <div class="tools">
+      <div class="tool upgraded"><span class="ico">🧮</span><div class="nm">Calculator</div><div class="ds">Scientific, with history &amp; ANS.</div></div>
+      <div class="tool new"><span class="ico">📈</span><div class="nm">Graphing Calculator</div><div class="ds">Plot y=f(x), find roots, intersections.</div></div>
+      <div class="tool upgraded"><span class="ico">📊</span><div class="nm">Statistics Sheet</div><div class="ds">Mean→t-tests, paste from sheets.</div></div>
+      <div class="tool"><span class="ico">%</span><div class="nm">Percentage</div><div class="ds">% of, what %, change.</div></div>
+      <div class="tool"><span class="ico">½</span><div class="nm">Fraction Helper</div><div class="ds">Simplify, decimal, mixed.</div></div>
+      <div class="tool"><span class="ico">🔢</span><div class="nm">Base Converter</div><div class="ds">Bin · oct · dec · hex · any.</div></div>
+      <div class="tool"><span class="ico">🔣</span><div class="nm">GCD &amp; LCM</div><div class="ds">With Euclidean steps.</div></div>
+      <div class="tool"><span class="ico">🧮</span><div class="nm">nPr &amp; nCr</div><div class="ds">Permutations &amp; combinations.</div></div>
+      <div class="tool"><span class="ico">🏛️</span><div class="nm">Roman Numerals</div><div class="ds">Number ↔ Roman.</div></div>
+    </div>
+  </div>
+
+  <!-- Shelf 2: Science -->
+  <div class="tool-shelf">
+    <div class="shelf-label s2"><span class="dot"></span><h3>Lab</h3><span class="count">6 tools</span></div>
+    <div class="tools">
+      <div class="tool"><span class="ico">🧪</span><div class="nm">Periodic Table</div><div class="ds">All 118, quiz mode.</div></div>
+      <div class="tool upgraded"><span class="ico">⚗️</span><div class="nm">Chemistry Helpers</div><div class="ds">Moles, pH, stoich, gas laws.</div></div>
+      <div class="tool upgraded"><span class="ico">🧲</span><div class="nm">Physics Solver</div><div class="ds">Rearrange &amp; solve with units.</div></div>
+      <div class="tool upgraded"><span class="ico">🔬</span><div class="nm">Sig Figs</div><div class="ds">Rounding &amp; sci notation.</div></div>
+      <div class="tool upgraded"><span class="ico">📐</span><div class="nm">Geometry Solver</div><div class="ds">Triangles, circles, prisms.</div></div>
+      <div class="tool upgraded"><span class="ico">📖</span><div class="nm">Formula Reference</div><div class="ds">LaTeX-rendered, searchable.</div></div>
+    </div>
+  </div>
+
+  <!-- Shelf 3: Writing -->
+  <div class="tool-shelf">
+    <div class="shelf-label s3"><span class="dot"></span><h3>Words</h3><span class="count">7 tools</span></div>
+    <div class="tools">
+      <div class="tool upgraded"><span class="ico">📝</span><div class="nm">Word Counter</div><div class="ds">Count, reading level, reading time.</div></div>
+      <div class="tool upgraded"><span class="ico">📚</span><div class="nm">Citation Helper</div><div class="ds">MLA · APA · Chicago, DOI lookup.</div></div>
+      <div class="tool upgraded"><span class="ico">📑</span><div class="nm">Essay Planner</div><div class="ds">Thesis, outline, sources, word goal.</div></div>
+      <div class="tool new"><span class="ico">🗂️</span><div class="nm">Vocabulary Builder</div><div class="ds">Build word lists, quiz with SRS.</div></div>
+      <div class="tool new"><span class="ico">🗣️</span><div class="nm">Language Drill</div><div class="ds">Conjugation &amp; vocab trainer.</div></div>
+      <div class="tool upgraded"><span class="ico">🔤</span><div class="nm">Text Case</div><div class="ds">Case, trim, line-break fix.</div></div>
+      <div class="tool upgraded"><span class="ico">⌨️</span><div class="nm">Typing Test</div><div class="ds">Classroom passages, WPM, accuracy.</div></div>
+    </div>
+  </div>
+
+  <!-- Shelf 4: Study -->
+  <div class="tool-shelf">
+    <div class="shelf-label s4"><span class="dot"></span><h3>Study</h3><span class="count">6 tools</span></div>
+    <div class="tools">
+      <div class="tool upgraded"><span class="ico">🃏</span><div class="nm">Flashcards</div><div class="ds">SRS-lite, Anki CSV import.</div></div>
+      <div class="tool upgraded"><span class="ico">🍅</span><div class="nm">Pomodoro</div><div class="ds">Focus mode, cycle counter.</div></div>
+      <div class="tool"><span class="ico">⏱️</span><div class="nm">Timer &amp; Stopwatch</div><div class="ds">Countdown + lap timer.</div></div>
+      <div class="tool upgraded"><span class="ico">📒</span><div class="nm">Notes</div><div class="ds">Free · Cornell · Outline · Q&amp;A.</div></div>
+      <div class="tool upgraded"><span class="ico">➗</span><div class="nm">Math Practice</div><div class="ds">Timed drills, per-op accuracy.</div></div>
+      <div class="tool new"><span class="ico">🎯</span><div class="nm">Focus Lock</div><div class="ds">Fullscreen, hide tabs, countdown.</div></div>
+    </div>
+  </div>
+
+  <!-- Shelf 5: Grades & Plan -->
+  <div class="tool-shelf">
+    <div class="shelf-label s5"><span class="dot"></span><h3>Plan</h3><span class="count">5 tools</span></div>
+    <div class="tools">
+      <div class="tool upgraded"><span class="ico">🎓</span><div class="nm">GPA Calculator</div><div class="ds">Weighted, +/−, multi-semester.</div></div>
+      <div class="tool"><span class="ico">🧾</span><div class="nm">Final Grade</div><div class="ds">What do I need to score?</div></div>
+      <div class="tool new"><span class="ico">📅</span><div class="nm">Assignments &amp; Planner</div><div class="ds">Due dates, classes, checkboxes.</div></div>
+      <div class="tool new"><span class="ico">🗓️</span><div class="nm">Schedule Builder</div><div class="ds">Weekly class &amp; period grid.</div></div>
+      <div class="tool"><span class="ico">📆</span><div class="nm">Date Calculator</div><div class="ds">Days between, add days.</div></div>
+    </div>
+  </div>
+
+  <!-- Shelf 6: Toolbox -->
+  <div class="tool-shelf">
+    <div class="shelf-label s6"><span class="dot"></span><h3>Toolbox</h3><span class="count">4 tools</span></div>
+    <div class="tools">
+      <div class="tool upgraded"><span class="ico">🔄</span><div class="nm">Unit Converter</div><div class="ds">+ Currency (offline rates).</div></div>
+      <div class="tool"><span class="ico">🎲</span><div class="nm">Dice &amp; Random</div><div class="ds">Integers, dice, no repeats.</div></div>
+      <div class="tool upgraded"><span class="ico">🔀</span><div class="nm">List Utility</div><div class="ds">Pick, shuffle, sort, dedupe.</div></div>
+      <div class="tool new"><span class="ico">{ }</span><div class="nm">Code Playground</div><div class="ds">JS · Python (Pyodide) · HTML.</div></div>
+    </div>
+  </div>
+
+  <h3><span class="num">5.1</span>The twelve new tools, in detail</h3>
+  <ul class="spec">
+    <li><b>Graphing Calculator.</b> Plot one or more functions; pinch-zoom; tap to read coordinates; auto-find roots and intersections. Replaces both Quadratic Solver and Line Graph.</li>
+    <li><b>Geometry Solver.</b> Pick a shape (triangle, circle, rectangle, prism, sphere, cylinder, cone), enter what you know, get every derivable property. Replaces Right Triangle and goes much further.</li>
+    <li><b>Vocabulary Builder.</b> For SAT/ACT/AP prep. Paste a list, get definitions, build a deck. Sits next to Flashcards but specialized.</li>
+    <li><b>Language Drill.</b> Spanish/French/German verb conjugation and noun-gender drills. The most-requested feature in language-class subreddits.</li>
+    <li><b>Focus Lock.</b> Fullscreen mode that disables most page navigation, shows only a countdown and current task. Soft-block, escapable, but enough friction to keep a phone-tempted brain on-task.</li>
+    <li><b>Assignments &amp; Planner.</b> Replaces Study Checklist. Add a class, add an assignment with due date, see what's due today/this week. Calendar export to .ics.</li>
+    <li><b>Schedule Builder.</b> Weekly grid with periods and rooms. Print to PDF for binder. Color by class.</li>
+    <li><b>Code Playground.</b> Run JS in a sandboxed iframe; HTML/CSS live preview; Python via Pyodide loaded on demand. For CS class.</li>
+    <li><b>Currency (inside Unit Converter).</b> Bundled with last-fetched ECB rates; updates when online.</li>
+    <li><b>Notes upgrade.</b> Cornell, Outline, Q&amp;A, and Free templates in one tool with markdown render + print stylesheet.</li>
+    <li><b>Citation upgrade.</b> Chicago/Turabian added; journal articles and book chapters as source types; DOI lookup pulls metadata automatically when online.</li>
+    <li><b>Flashcards upgrade.</b> SM-2 spaced-repetition lite (Again/Hard/Good/Easy) and Anki .csv import for students already invested in Anki decks.</li>
+  </ul>
+</section>
+
+<!-- ============ 06 IA ============ -->
+<section id="ia">
+  <div class="sec-num"><span class="n">06</span><h2>Information architecture</h2><span class="tag">How it's laid out</span></div>
+
+  <h3><span class="num">6.1</span>One page, modal tools</h3>
+  <p>The landing page lists all 37 tools as cards, grouped into six shelves. Clicking a card opens a tool in a full-page <em>panel</em> (not a true modal — back button works, URL updates with a hash like <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">#calculator</code>). Closing the panel returns to the same scroll position.</p>
+
+  <h3><span class="num">6.2</span>Landing wireframe</h3>
+  <div class="wire">
+<pre>┌─────────────────────────────────────────────────────────────┐
+│  SkoolTools.                            ☆ Pinned   ⚙ Settings│   ← Sticky header
+│  by Playology · We've got school down to a science.          │
+├─────────────────────────────────────────────────────────────┤
+│  ⌕  Search 37 tools… ────────────────────  [ Pinned · Recent]│   ← Search bar
+├─────────────────────────────────────────────────────────────┤
+│  ● Numbers ───────────────────────────────────────  9 tools  │
+│  [Calculator] [Graphing] [Stats] [%] [Fraction] [Base] …    │
+│                                                              │
+│  ● Lab ─────────────────────────────────────────────  6 tools│
+│  [Periodic] [Chemistry] [Physics] [Sig Figs] [Geometry] …   │
+│                                                              │
+│  ● Words ──────────────────────────────────────────  7 tools │
+│  [Word Counter] [Citation] [Essay] [Vocab] [Lang] [Case] … │
+│                                                              │
+│  ● Study ─────────────────────────────────────────  6 tools  │
+│  ● Plan ──────────────────────────────────────────  5 tools  │
+│  ● Toolbox ────────────────────────────────────────  4 tools │
+├─────────────────────────────────────────────────────────────┤
+│  About · Privacy · Keyboard shortcuts · v1.0 · ●●           │
+└─────────────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <h3><span class="num">6.3</span>Tool panel wireframe</h3>
+  <div class="wire">
+<pre>┌─────────────────────────────────────────────────────────────┐
+│  ←  Back     Calculator                 ☆ Pin   ⓘ   ✕ Close │   ← Panel chrome
+├─────────────────────────────────────────────────────────────┤
+│  Expression:  2 * pi + sqrt(16) + 1                          │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │                                            11.2831853...│ │   ← Big readout
+│  └─────────────────────────────────────────────────────────┘ │
+│   History ▾   sin cos tan   deg/rad   ANS                    │
+│  ┌───┬───┬───┬───┐                                           │
+│  │ 7 │ 8 │ 9 │ ÷ │   …                                       │   ← Keypad
+│  └───┴───┴───┴───┘                                           │
+├─────────────────────────────────────────────────────────────┤
+│  Tips · Keyboard shortcuts (?) · Open another tool ▾         │
+└─────────────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <h3><span class="num">6.4</span>Navigation rules</h3>
+  <ul class="spec">
+    <li><b>Search-first.</b> A focused search bar at the top of the page accepts fuzzy queries. Typing "perc" surfaces Percentage. Hitting Enter opens the top hit.</li>
+    <li><b>Pinning.</b> Each tool card has a ☆ in the top-right. Pinned tools appear in a "Pinned" row above the shelves.</li>
+    <li><b>Recents.</b> The last five tools used appear next to Pinned. Cleared by clearing browser storage.</li>
+    <li><b>Keyboard.</b> <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">/</code> focuses search · <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">Esc</code> closes panel · <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">?</code> opens shortcuts overlay · <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">G then C</code> jumps to Calculator (Vim-style).</li>
+    <li><b>Deep links.</b> Every tool has a hash URL students can bookmark or paste in chat.</li>
+  </ul>
+</section>
+
+<!-- ============ 07 PATTERNS ============ -->
+<section id="patterns">
+  <div class="sec-num"><span class="n">07</span><h2>Interaction patterns</h2><span class="tag">How it feels</span></div>
+
+  <div class="cols c2">
+    <div>
+      <h3><span class="num">7.1</span>Inputs</h3>
+      <ul class="spec">
+        <li><b>One large primary action per panel.</b> Calculate, Solve, Convert. Solid Ink button, never accent — the accent is reserved for state and identity.</li>
+        <li><b>Auto-compute when safe.</b> Word counter, unit converter, base converter recompute on input. Expensive operations (graphing, stats) require the button.</li>
+        <li><b>Paste from spreadsheet.</b> Anywhere a list of numbers is expected, accept comma, space, tab, and newline equally.</li>
+      </ul>
+    </div>
+    <div>
+      <h3><span class="num">7.2</span>Outputs</h3>
+      <ul class="spec">
+        <li><b>Big primary result.</b> Display font, monospaced numerals, large enough to read across a classroom.</li>
+        <li><b>Show work.</b> Toggle in math tools that reveals intermediate steps — for the student who actually has to write them down.</li>
+        <li><b>Copy &amp; export.</b> Every result has a one-tap copy. Notes export to .md, schedules to .ics, decks to .csv.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3><span class="num">7.3</span>State &amp; persistence</h3>
+  <ul class="spec">
+    <li><b>localStorage namespace.</b> All keys prefixed <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">st:</code> (e.g. <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">st:flashcards:decks</code>).</li>
+    <li><b>Backup &amp; restore.</b> Settings has a "Download my data" button (single JSON) and a matching "Restore from file." Critical for Chromebook students whose browser data gets wiped.</li>
+    <li><b>Per-tool reset.</b> Each tool has its own clear/reset; no global hidden state mystery.</li>
+    <li><b>Versioned migrations.</b> A small migration runner converts old keys when the schema changes between releases.</li>
+  </ul>
+
+  <h3><span class="num">7.4</span>Motion</h3>
+  <p>One animated moment per interaction, never more. Panel opens with a 180ms fade-and-rise; results pulse the accent border once when computed; the Pomodoro tick is a subtle 1px shift, not a bouncing icon. Reduced-motion is fully honored — all transitions collapse to opacity changes when <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">prefers-reduced-motion</code> is set.</p>
+</section>
+
+<!-- ============ 08 ACCESSIBILITY ============ -->
+<section id="access">
+  <div class="sec-num"><span class="n">08</span><h2>Accessibility &amp; performance</h2><span class="tag">For all students, in any classroom</span></div>
+
+  <h3><span class="num">8.1</span>Accessibility budget</h3>
+  <ul class="checklist">
+    <li class="done">WCAG 2.2 AA contrast for all text and UI states (verified per palette pair).</li>
+    <li class="done">Full keyboard reachability; visible focus ring on every interactive element.</li>
+    <li class="done">Semantic HTML — real headings, real buttons, real labels, real <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">aria-live</code> regions for computed results.</li>
+    <li class="done">Screen-reader announcements when a tool panel opens and when a result is produced.</li>
+    <li class="done">Honor <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">prefers-reduced-motion</code>, <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">prefers-color-scheme</code>, and forced-colors mode.</li>
+    <li class="done">Text resizes up to 200% without overflow or clipping.</li>
+    <li class="done">Touch targets ≥ 44×44px on mobile; calculator keys ≥ 56×56px.</li>
+    <li class="done">Dyslexia-friendly mode in Settings — switches body to a high-readability sans (e.g. Atkinson Hyperlegible), increases line-height to 1.8, widens letter-spacing.</li>
+  </ul>
+
+  <h3><span class="num">8.2</span>Performance budget</h3>
+  <div class="kpis">
+    <div class="kpi"><b>&lt;1s</b><span>First contentful paint, 3G</span></div>
+    <div class="kpi"><b>&lt;200kb</b><span>Initial HTML+CSS+JS, gzipped</span></div>
+    <div class="kpi"><b>0</b><span>Network calls before interactive</span></div>
+    <div class="kpi"><b>100%</b><span>Offline after first load</span></div>
+  </div>
+  <p>Heavy dependencies (KaTeX for formulas, Pyodide for Python, charting library for graphing) are <b>lazy-loaded the first time their host tool is opened</b>, with a loading state. Students who never open the Code Playground never download Pyodide.</p>
+</section>
+
+<!-- ============ 09 TECH ============ -->
+<section id="tech">
+  <div class="sec-num"><span class="n">09</span><h2>Technical architecture</h2><span class="tag">How it's built</span></div>
+
+  <p class="lead">SkoolTools ships as a single <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">.html</code> file. No build step required to run it. A simple build step (concatenation + minification) exists to assemble it from per-tool source files for maintainability.</p>
+
+  <div class="cols c2">
+    <div>
+      <h4>Stack</h4>
+      <ul class="spec">
+        <li><b>Vanilla HTML, CSS, JavaScript.</b> No framework. ES modules consolidated at build time. Zero runtime dependencies for the shell.</li>
+        <li><b>Variable CSS.</b> Custom properties for theming; <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">[data-theme="dark"]</code> overrides on the root.</li>
+        <li><b>Tool registry.</b> A single JS array describes every tool — id, name, shelf, icon, deep link, init function. Adding a tool is one entry plus one module.</li>
+        <li><b>Service worker.</b> Optional install for offline; the page itself is fully usable from cache after first load even without SW.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Lazy dependencies</h4>
+      <ul class="spec">
+        <li><b>KaTeX</b> — Formula Reference, Graphing Calculator, Geometry Solver, Physics Solver.</li>
+        <li><b>Chart drawing</b> — Graphing Calculator only (custom &lt;canvas&gt;, no heavy library).</li>
+        <li><b>Pyodide</b> — Code Playground · Python tab only, deferred until tab is selected.</li>
+        <li><b>jsPDF</b> — Print/export-to-PDF (Notes, Schedule, Essay Planner).</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3><span class="num">9.1</span>Tool module contract</h3>
+  <div class="wire">
+<pre>// Every tool exports the same shape.
+export const tool = {
+  id: 'calculator',
+  name: 'Calculator',
+  shelf: 'numbers',
+  icon: '🧮',
+  description: 'Scientific, with history &amp; ANS.',
+  keywords: ['math','calc','scientific'],
+  mount(rootEl, ctx) {
+    // ctx provides: storage, theme, modals, kbd
+    rootEl.innerHTML = template();
+    wireEvents(rootEl, ctx);
+    return {
+      unmount() { /* clean listeners */ },
+      onShortcut(key) { /* optional */ }
+    };
+  }
+};</pre>
+  </div>
+
+  <h3><span class="num">9.2</span>Storage contract</h3>
+  <ul class="spec">
+    <li><b>Read.</b> <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">ctx.storage.get('flashcards:decks', defaultValue)</code></li>
+    <li><b>Write.</b> <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">ctx.storage.set('flashcards:decks', value)</code> (auto-debounced 300ms)</li>
+    <li><b>Migrate.</b> <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 6px;border-radius:2px">ctx.storage.migrate(version, fn)</code></li>
+    <li><b>Quota guard.</b> If storage fills, the shell shows a toast and offers export+clear, never silently drops data.</li>
+  </ul>
+</section>
+
+<!-- ============ 10 TRUST ============ -->
+<section id="safeguards">
+  <div class="sec-num"><span class="n">10</span><h2>Trust, safety, privacy</h2><span class="tag">What we promise students</span></div>
+
+  <div class="pull">"No account. No tracker. No upsell. Your notes never leave your laptop unless you tell them to."</div>
+
+  <ul class="spec">
+    <li><b>No accounts.</b> Period. The original site had a magic-link sign-in for cloud sync; we are dropping it. Cross-device sync, if ever needed, will use end-to-end encrypted export/import codes — never an account.</li>
+    <li><b>No third-party scripts.</b> No Google Analytics, no Hotjar, no ad networks. If we want usage metrics, we add a one-line, no-cookie, server-side counter that records nothing identifiable.</li>
+    <li><b>No "Discreet play" or game-cloaking features.</b> The original site had an About:Blank mode and tab-cloak intended to hide the site from teachers. SkoolTools is a study tool; we will not ship features whose primary purpose is to deceive supervising adults.</li>
+    <li><b>Academic-integrity stance.</b> No paraphrase tool, no AI essay generator, no "homework auto-solver" that just produces answers without showing work. Every math tool can show steps so the student can <em>learn</em> the work, not skip it.</li>
+    <li><b>Content safety.</b> Sample texts (typing test, vocabulary, language drill) are reviewed for age-appropriateness for a 14-year-old reader.</li>
+  </ul>
+</section>
+
+<!-- ============ 11 METRICS ============ -->
+<section id="metrics">
+  <div class="sec-num"><span class="n">11</span><h2>Success metrics</h2><span class="tag">How we'll know</span></div>
+
+  <div class="kpis">
+    <div class="kpi"><b>3+</b><span>Tools used per student per visit</span></div>
+    <div class="kpi"><b>40%</b><span>Returning weekly users by month 3</span></div>
+    <div class="kpi"><b>&lt;2s</b><span>Median time-to-first-tool-open</span></div>
+    <div class="kpi"><b>0</b><span>PII collected</span></div>
+  </div>
+
+  <p>Because we collect no personal data, success metrics are measured by aggregate, privacy-respecting counters (page hits, tool-open counts) and by qualitative signal — feedback form, Reddit/TikTok mentions, teachers linking the site in syllabi.</p>
+
+  <h3><span class="num">11.1</span>What we will <em>not</em> optimize for</h3>
+  <ul class="spec">
+    <li><b>Session length.</b> A student who spends less time on SkoolTools because they got their answer fast is a <em>win</em>.</li>
+    <li><b>Page views per session.</b> See above.</li>
+    <li><b>Engagement streaks, badges, gamification.</b> SkoolTools is a hammer, not a habit-tracker. The Pomodoro counter is the only streak-like thing and it resets daily.</li>
+  </ul>
+</section>
+
+<!-- ============ 12 ROADMAP ============ -->
+<section id="roadmap">
+  <div class="sec-num"><span class="n">12</span><h2>Roadmap</h2><span class="tag">What ships when</span></div>
+
+  <div class="road">
+    <div class="ph">
+      <h5>Phase 0</h5>
+      <span class="when">This week</span>
+      <ul>
+        <li>Design doc sign-off (this document)</li>
+        <li>Brand assets locked</li>
+        <li>Tool roster confirmed</li>
+      </ul>
+    </div>
+    <div class="ph">
+      <h5>Phase 1</h5>
+      <span class="when">Weeks 1–3</span>
+      <ul>
+        <li>Shell, search, theming, storage</li>
+        <li>All 24 "Keep" tools ported &amp; restyled</li>
+        <li>Internal accessibility audit</li>
+      </ul>
+    </div>
+    <div class="ph">
+      <h5>Phase 2</h5>
+      <span class="when">Weeks 4–6</span>
+      <ul>
+        <li>Graphing, Geometry, Planner, Schedule</li>
+        <li>Notes (Cornell merge) &amp; Essay Planner</li>
+        <li>Beta with 30 students</li>
+      </ul>
+    </div>
+    <div class="ph">
+      <h5>Phase 3</h5>
+      <span class="when">Weeks 7–9</span>
+      <ul>
+        <li>Vocabulary, Language Drill, Focus Lock</li>
+        <li>Code Playground (JS+HTML; Python later)</li>
+        <li>Public launch &amp; back-to-school push</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3><span class="num">12.1</span>Future, not committed</h3>
+  <ul class="spec">
+    <li><b>Cross-device sync.</b> End-to-end encrypted export code, no account. Only if asked for.</li>
+    <li><b>Teacher mode.</b> A shareable, read-only set of pinned tools for a class. A request from real teachers, not us guessing.</li>
+    <li><b>PWA install.</b> Add-to-home-screen with offline icon. Easy win, low priority.</li>
+  </ul>
+</section>
+
+<!-- ============ FOOT ============ -->
+<footer class="foot">
+  <div class="mark">Skool<em>Tools</em>. — a Playology product.</div>
+  <div>Doc v1.0 · ●● · Confidential</div>
+</footer>
+
+</div>
+</body>
+</html>
