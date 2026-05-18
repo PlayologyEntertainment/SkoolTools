@@ -1060,7 +1060,8 @@ function registerTools() {
   TOOLS.push({ id:'planner', shelf:'plan', icon:'📅', name:'Assignments & Planner',
     desc:'Due dates, classes, checkboxes.', tag:'new', status:'soon', keywords:['assignment','due','planner','todo'] });
   TOOLS.push({ id:'schedule', shelf:'plan', icon:'🗓️', name:'Schedule Builder',
-    desc:'Weekly class & period grid.', tag:'new', status:'soon', keywords:['schedule','class','timetable'] });
+    desc:'Weekly class & period grid.', tag:'new',
+    keywords:['schedule','class','timetable','period','room','classes'], mount: mountSchedule });
   TOOLS.push({ id:'datecalc', shelf:'plan', icon:'📆', name:'Date Calculator',
     desc:'Days between, add days.',
     keywords:['date','days','between','add','calendar'], mount: mountDateCalc });
@@ -2966,6 +2967,389 @@ function mountList(root) {
 
   src.value = 'Alice\nBob\nCarol\nDave\nEve';
   setOut(getLines(), 'ready');
+}
+
+
+/* ========== SCHEDULE BUILDER ========== */
+function mountSchedule(root) {
+  // ---- State ----
+  const DEFAULT_PERIODS = ['1', '2', '3', '4', 'Lunch', '5', '6', '7'];
+  const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  // Palette: pick saturated colors that survive on the dark theme
+  const PALETTE = [
+    '#FF5A3D', '#FFD23F', '#4EAE53', '#6A95FF', '#B58BFF',
+    '#FF7AA8', '#5BC9D6', '#F08544', '#7FB342', '#E94B92'
+  ];
+
+  // Default classes for first-run flavor
+  const DEFAULT_CLASSES = [
+    { id:'c1', name:'English', room:'201', color:PALETTE[3] },
+    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0] },
+    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2] },
+    { id:'c4', name:'US History',room:'205',color:PALETTE[4] },
+    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5] },
+    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1] },
+    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6] },
+  ];
+
+  let state = Storage.get('schedule:v1', null);
+  if (!state) {
+    state = {
+      periods: DEFAULT_PERIODS.slice(),
+      days: DEFAULT_DAYS.slice(),
+      classes: DEFAULT_CLASSES,
+      // grid[periodIdx][dayIdx] = classId | null
+      grid: DEFAULT_PERIODS.map((_, pi) => DEFAULT_DAYS.map((_, di) => {
+        // Seed a believable example schedule
+        const seed = [
+          ['c1','c2','c1','c2','c1'],
+          ['c2','c1','c2','c1','c2'],
+          ['c3','c4','c3','c4','c3'],
+          ['c4','c5','c4','c5','c4'],
+          ['c6','c6','c6','c6','c6'],
+          ['c5','c3','c5','c3','c5'],
+          ['c7','c7','c7','c7','c7'],
+          [null,null,null,null,null],
+        ];
+        return seed[pi]?.[di] ?? null;
+      })),
+    };
+  }
+  const save = () => Storage.set('schedule:v1', state);
+
+  let editingCell = null; // { period, day }
+  let editingClass = null;
+
+  // ---- Layout ----
+  root.innerHTML = `
+    <style>
+      .sched-wrap{display:grid;grid-template-columns:1fr 220px;gap:18px}
+      @media (max-width: 720px){.sched-wrap{grid-template-columns:1fr}}
+      .sched-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+      .sched-toolbar .spacer{flex:1}
+      .sched-grid{
+        display:grid;gap:4px;
+        background:var(--paper-2);border:1px solid var(--rule);
+        padding:8px;border-radius:3px;
+      }
+      .sched-row{display:grid;gap:4px}
+      .sched-hcell{
+        font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--muted);
+        padding:6px 4px;text-align:center;
+      }
+      .sched-pcell{
+        font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--ink-2);
+        padding:8px 4px;text-align:right;align-self:center;
+        border-right:1px solid var(--rule);
+      }
+      .sched-cell{
+        min-height:54px;border:1px solid var(--rule);border-radius:2px;
+        padding:6px 8px;cursor:pointer;
+        background:var(--paper);color:var(--ink);
+        display:flex;flex-direction:column;justify-content:center;gap:1px;
+        transition:transform .08s, box-shadow .12s, border-color .12s;
+        position:relative;overflow:hidden;
+      }
+      .sched-cell:hover{transform:translate(-1px,-1px);box-shadow:2px 2px 0 0 var(--ink)}
+      .sched-cell.filled{
+        border:none;color:#0F0D0C;
+        font-weight:600;
+      }
+      .sched-cell.filled::before{
+        content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#0F0D0C26;
+      }
+      .sched-cell .nm{font-family:var(--serif);font-size:14px;line-height:1.1;letter-spacing:-.005em}
+      .sched-cell .rm{font-family:var(--mono);font-size:10px;letter-spacing:.08em;opacity:.7}
+      .sched-cell.empty{color:var(--muted-2);font-family:var(--mono);font-size:18px;align-items:center;justify-content:center}
+
+      .sched-side{
+        background:var(--paper-2);border:1px solid var(--rule);
+        border-radius:3px;padding:14px;
+      }
+      .sched-side h4{
+        font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:500;
+      }
+      .sched-side .cls{
+        display:flex;align-items:center;gap:8px;padding:7px 9px;
+        border-radius:2px;cursor:pointer;margin-bottom:4px;
+        border:1px solid transparent;
+      }
+      .sched-side .cls:hover{background:var(--paper-3);border-color:var(--rule)}
+      .sched-side .cls .sw{
+        width:14px;height:14px;border-radius:3px;flex-shrink:0;
+        border:1px solid #00000033;
+      }
+      .sched-side .cls .nm{flex:1;font-family:var(--serif);font-size:15px;color:var(--ink);line-height:1.1}
+      .sched-side .cls .rm{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.08em}
+      .sched-side .cls .x{
+        color:var(--muted-2);font-size:16px;padding:0 4px;
+        opacity:0;transition:opacity .12s;
+      }
+      .sched-side .cls:hover .x{opacity:1}
+      .sched-side .cls .x:hover{color:var(--accent)}
+
+      .sched-add{
+        display:flex;flex-direction:column;gap:8px;
+        margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule);
+      }
+      .sched-add input{
+        padding:6px 8px;font-size:13px;
+      }
+      .sched-swatches{display:flex;gap:4px;flex-wrap:wrap}
+      .sched-swatches .sw{
+        width:18px;height:18px;border-radius:50%;cursor:pointer;
+        border:2px solid transparent;
+      }
+      .sched-swatches .sw.active{border-color:var(--ink)}
+
+      .sched-picker{
+        position:absolute;z-index:5;
+        background:var(--paper);border:1px solid var(--ink-2);
+        border-radius:3px;padding:8px;
+        box-shadow:0 12px 30px -8px #000000c0;
+        min-width:200px;max-height:280px;overflow-y:auto;
+      }
+      .sched-picker .pick{
+        display:flex;align-items:center;gap:8px;padding:6px 8px;
+        border-radius:2px;cursor:pointer;
+      }
+      .sched-picker .pick:hover{background:var(--paper-2)}
+      .sched-picker .pick .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+      .sched-picker .pick .nm{font-family:var(--serif);font-size:14px;color:var(--ink);flex:1}
+      .sched-picker .pick.clear{color:var(--muted);font-family:var(--mono);font-size:11px;border-top:1px solid var(--rule);margin-top:4px;padding-top:8px;letter-spacing:.1em;text-transform:uppercase}
+
+      /* Print styles — print-optimized layout */
+      @media print {
+        body{background:#fff !important;color:#000 !important}
+        .splash,.mast,.tagline,.rail,.shelf,.no-results,
+        .site-foot,.panel-backdrop,.panel-head,.panel-foot,
+        .sched-toolbar,.sched-side,.toast{display:none !important}
+        .panel{
+          position:static !important;transform:none !important;
+          width:100% !important;max-height:none !important;height:auto !important;
+          border:none !important;box-shadow:none !important;background:#fff !important;
+        }
+        .panel-body{padding:0 !important;background:#fff !important;color:#000 !important;overflow:visible !important}
+        .sched-wrap{grid-template-columns:1fr !important;display:block !important}
+        .sched-grid{background:#fff !important;border:1.5px solid #000 !important;padding:0 !important}
+        .sched-hcell,.sched-pcell{color:#000 !important;border-color:#000 !important}
+        .sched-cell{border:.5px solid #888 !important;min-height:60px !important;box-shadow:none !important;transform:none !important}
+        .sched-cell.filled{color:#000 !important;border:1px solid #000 !important}
+        .sched-cell.filled::before{display:none}
+        .sched-cell.empty{background:#fff !important;color:transparent !important}
+        /* Hide soon ribbon, etc. on print */
+        .ribbon,.pin-btn{display:none !important}
+        @page{size:landscape;margin:.5in}
+      }
+    </style>
+
+    <div class="sched-toolbar">
+      <button class="btn ghost sm" id="print">Print / PDF</button>
+      <button class="btn ghost sm" id="reset">Reset</button>
+      <div class="spacer"></div>
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.1em">CLICK ANY CELL TO ASSIGN</span>
+    </div>
+    <div class="sched-wrap">
+      <div id="grid" class="sched-grid"></div>
+      <div id="side" class="sched-side"></div>
+    </div>
+  `;
+
+  // ---- Renderers ----
+  const findClass = (id) => state.classes.find(c => c.id === id);
+
+  const renderGrid = () => {
+    const grid = $('#grid', root);
+    const cols = state.days.length;
+    // Column template: period label + N days
+    const tmpl = `100px repeat(${cols}, 1fr)`;
+
+    // Header row
+    let html = `<div class="sched-row" style="grid-template-columns:${tmpl}">
+      <div class="sched-hcell"></div>
+      ${state.days.map(d => `<div class="sched-hcell">${escape(d)}</div>`).join('')}
+    </div>`;
+
+    // Period rows
+    state.periods.forEach((p, pi) => {
+      html += `<div class="sched-row" style="grid-template-columns:${tmpl}">
+        <div class="sched-pcell">${escape(p)}</div>
+        ${state.days.map((_, di) => {
+          const cid = state.grid[pi]?.[di];
+          const c = cid ? findClass(cid) : null;
+          if (c) {
+            return `<div class="sched-cell filled" data-pi="${pi}" data-di="${di}" style="background:${c.color}">
+              <div class="nm">${escape(c.name)}</div>
+              ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
+            </div>`;
+          }
+          return `<div class="sched-cell empty" data-pi="${pi}" data-di="${di}">+</div>`;
+        }).join('')}
+      </div>`;
+    });
+
+    grid.innerHTML = html;
+  };
+
+  const renderSide = () => {
+    const side = $('#side', root);
+    let html = `<h4>Classes</h4>`;
+    state.classes.forEach(c => {
+      html += `<div class="cls" data-cid="${c.id}">
+        <div class="sw" style="background:${c.color}"></div>
+        <div class="nm">${escape(c.name)}</div>
+        ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
+        <span class="x" data-delete="${c.id}" title="Delete class">×</span>
+      </div>`;
+    });
+    html += `
+      <div class="sched-add">
+        <h4 style="margin-bottom:4px">Add class</h4>
+        <input class="input" id="new-name" placeholder="Class name" maxlength="32">
+        <input class="input" id="new-room" placeholder="Room (optional)" maxlength="12">
+        <div class="sched-swatches" id="new-sw"></div>
+        <button class="btn sm" id="new-add" style="margin-top:4px">+ Add</button>
+      </div>
+    `;
+    side.innerHTML = html;
+
+    // Swatch picker for new-class color
+    const swEl = $('#new-sw', side);
+    let chosenColor = PALETTE[state.classes.length % PALETTE.length];
+    PALETTE.forEach(p => {
+      const s = document.createElement('span');
+      s.className = 'sw' + (p === chosenColor ? ' active' : '');
+      s.style.background = p;
+      s.dataset.color = p;
+      s.addEventListener('click', () => {
+        chosenColor = p;
+        $$('.sw', swEl).forEach(x => x.classList.toggle('active', x.dataset.color === p));
+      });
+      swEl.appendChild(s);
+    });
+
+    $('#new-add', side).addEventListener('click', () => {
+      const name = $('#new-name', side).value.trim();
+      const room = $('#new-room', side).value.trim();
+      if (!name) { showToast('Enter a class name.'); return; }
+      const id = 'c' + Date.now().toString(36);
+      state.classes.push({ id, name, room, color: chosenColor });
+      save();
+      renderSide();
+    });
+  };
+
+  // ---- Cell picker (popover) ----
+  const closePicker = () => {
+    const p = $('#sched-picker-pop', root);
+    if (p) p.remove();
+  };
+
+  const openPicker = (cell, pi, di) => {
+    closePicker();
+    const popover = document.createElement('div');
+    popover.id = 'sched-picker-pop';
+    popover.className = 'sched-picker';
+
+    let html = '';
+    state.classes.forEach(c => {
+      html += `<div class="pick" data-cid="${c.id}">
+        <div class="sw" style="background:${c.color}"></div>
+        <div class="nm">${escape(c.name)}</div>
+      </div>`;
+    });
+    html += `<div class="pick clear" data-cid="">— Clear cell —</div>`;
+    popover.innerHTML = html;
+
+    // Position relative to grid
+    const cellRect = cell.getBoundingClientRect();
+    const gridEl = $('#grid', root);
+    const gridRect = gridEl.getBoundingClientRect();
+    gridEl.style.position = 'relative';
+    popover.style.top = (cellRect.bottom - gridRect.top + 2) + 'px';
+    popover.style.left = Math.max(0, cellRect.left - gridRect.left) + 'px';
+
+    popover.addEventListener('click', (e) => {
+      const pick = e.target.closest('.pick');
+      if (!pick) return;
+      e.stopPropagation();
+      const cid = pick.dataset.cid || null;
+      state.grid[pi][di] = cid;
+      save();
+      renderGrid();
+      closePicker();
+    });
+    // Stop the cell's click from re-opening this popover
+    popover.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    gridEl.appendChild(popover);
+  };
+
+  // ---- Wire interactions ----
+  // Cell click → open picker
+  root.addEventListener('click', (e) => {
+    const cell = e.target.closest('.sched-cell');
+    if (cell && root.contains(cell)) {
+      e.stopPropagation();
+      const pi = parseInt(cell.dataset.pi);
+      const di = parseInt(cell.dataset.di);
+      openPicker(cell, pi, di);
+      return;
+    }
+    // Delete class from sidebar
+    const del = e.target.closest('[data-delete]');
+    if (del) {
+      e.stopPropagation();
+      const cid = del.dataset.delete;
+      if (!confirm(`Delete this class? Cells using it will be cleared.`)) return;
+      state.classes = state.classes.filter(c => c.id !== cid);
+      // Clear any grid cells referencing it
+      for (let pi = 0; pi < state.grid.length; pi++) {
+        for (let di = 0; di < state.grid[pi].length; di++) {
+          if (state.grid[pi][di] === cid) state.grid[pi][di] = null;
+        }
+      }
+      save();
+      renderSide();
+      renderGrid();
+      return;
+    }
+    // Anywhere else → close popover
+    closePicker();
+  });
+
+  // Print
+  $('#print', root).addEventListener('click', () => {
+    window.print();
+  });
+
+  // Reset
+  $('#reset', root).addEventListener('click', () => {
+    if (!confirm('Reset the whole schedule? This clears every cell and every class.')) return;
+    Storage.remove('schedule:v1');
+    state = {
+      periods: DEFAULT_PERIODS.slice(),
+      days: DEFAULT_DAYS.slice(),
+      classes: [],
+      grid: DEFAULT_PERIODS.map(() => DEFAULT_DAYS.map(() => null)),
+    };
+    save();
+    renderSide();
+    renderGrid();
+  });
+
+  // Initial render
+  renderSide();
+  renderGrid();
+
+  return {
+    unmount() {
+      closePicker();
+    }
+  };
 }
 
 registerTools();
