@@ -1564,8 +1564,134 @@ footer.site-foot a:hover{color:var(--accent);border-bottom-color:var(--accent)}
 .pt-quiz-bar .btn.sm{margin-left:auto}
 
 /* =========================================================
-   FORMULA REFERENCE TOOL
+   GRAPHING CALCULATOR TOOL
    ========================================================= */
+.gc-shell{display:flex;flex-direction:column;height:100%;min-height:520px;gap:0}
+.gc-top{display:flex;flex-direction:column;gap:0;flex-shrink:0}
+.gc-fn-bar{
+  display:flex;flex-direction:column;gap:0;
+  border-bottom:1px solid var(--rule);
+  background:var(--paper-2);
+}
+.gc-fn-row{
+  display:flex;align-items:center;gap:0;
+  border-bottom:1px solid var(--rule-2);
+  min-height:38px;
+}
+.gc-fn-row:last-child{border-bottom:0}
+.gc-fn-color{
+  width:4px;flex-shrink:0;align-self:stretch;border-radius:0;
+}
+.gc-fn-label{
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  color:var(--muted);padding:0 10px;flex-shrink:0;
+  user-select:none;
+}
+.gc-fn-eq{
+  font-family:var(--mono);font-size:13px;
+  color:var(--muted);padding:0 4px;flex-shrink:0;
+  user-select:none;
+}
+.gc-fn-input{
+  flex:1;background:transparent;border:none;outline:none;
+  font-family:var(--mono);font-size:14px;color:var(--ink);
+  padding:9px 8px;min-width:0;
+  caret-color:var(--accent);
+}
+.gc-fn-input::placeholder{color:var(--muted-2)}
+.gc-fn-del{
+  width:32px;height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted-2);border-radius:2px;margin:0 4px;
+  transition:color .12s,background .12s;cursor:pointer;font-size:16px;
+}
+.gc-fn-del:hover{color:var(--accent);background:var(--accent-soft)}
+.gc-fn-add{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 14px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);cursor:pointer;
+  transition:color .12s;
+  border-top:1px solid var(--rule-2);
+}
+.gc-fn-add:hover{color:var(--ink)}
+.gc-fn-add::before{content:'+';font-size:16px;font-family:var(--serif);font-style:italic;color:var(--accent);line-height:1}
+
+.gc-controls{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;
+  border-bottom:1px solid var(--rule);
+  background:var(--paper-2);
+  flex-wrap:wrap;
+}
+.gc-mode-btn{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:5px 10px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--rule);background:transparent;
+  transition:color .12s,border-color .12s,background .12s;
+  white-space:nowrap;
+}
+.gc-mode-btn.active{color:var(--ink);border-color:var(--ink-2);background:var(--paper-3)}
+.gc-mode-btn:hover{color:var(--ink);border-color:var(--ink-2)}
+.gc-spacer{flex:1}
+.gc-view-input{
+  font-family:var(--mono);font-size:11px;background:var(--paper-3);
+  border:1px solid var(--rule);padding:4px 7px;border-radius:2px;color:var(--ink-2);
+  width:60px;text-align:center;
+}
+.gc-view-input:focus{border-color:var(--accent);outline:none}
+.gc-view-label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+.gc-canvas-wrap{
+  flex:1;position:relative;overflow:hidden;
+  background:var(--paper);min-height:280px;
+  cursor:crosshair;
+}
+.gc-canvas{display:block;width:100%;height:100%}
+
+.gc-info-bar{
+  display:flex;align-items:center;gap:0;
+  border-top:1px solid var(--rule);
+  background:var(--paper-2);
+  flex-shrink:0;flex-wrap:wrap;
+}
+.gc-info-item{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 14px;border-right:1px solid var(--rule);
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  color:var(--muted);white-space:nowrap;
+}
+.gc-info-item:last-child{border-right:0}
+.gc-info-item b{color:var(--ink);font-weight:600;font-family:var(--sans);font-size:12px}
+.gc-info-item .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.gc-cursor-pos{margin-left:auto;border-right:0;color:var(--muted-2)}
+
+.gc-results-panel{
+  border-top:1px solid var(--rule);background:var(--paper-2);
+  padding:8px 14px;flex-shrink:0;
+  font-family:var(--mono);font-size:11px;color:var(--muted);
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  min-height:36px;
+}
+.gc-result-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--paper-3);border:1px solid var(--rule);
+  padding:3px 9px;border-radius:2px;
+  font-size:11px;letter-spacing:.06em;color:var(--ink-2);
+}
+.gc-result-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* Shortcut helper bar */
+.gc-help{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted-2);
+  padding:5px 14px 6px;border-top:1px solid var(--rule-2);
+  background:var(--paper-2);display:flex;gap:14px;flex-wrap:wrap;flex-shrink:0;
+}
+.gc-help kbd{
+  font-family:var(--mono);font-size:10px;color:var(--ink-2);
+  border:1px solid var(--rule);padding:1px 5px;border-radius:2px;margin-right:2px;
+}
+
+
 .fref-shell{
   display:flex;flex-direction:column;height:100%;overflow:hidden;
 }
@@ -3844,11 +3970,11 @@ function registerTools() {
     desc:'Scientific, with history & ANS.', tag:'upgraded',
     keywords:['math','calc','scientific','sum','add'], mount: mountCalculator });
   TOOLS.push({ id:'graphing', shelf:'numbers', icon:'📈', name:'Graphing Calculator',
-    desc:'Plot y=f(x), find roots, intersections.', tag:'new', status:'soon',
-    keywords:['plot','graph','function','curve'] });
+    desc:'Plot y=f(x), find roots, intersections.', tag:'new',
+    keywords:['plot','graph','function','curve','roots','intersection','derivative'], mount: mountGraphing });
   TOOLS.push({ id:'stats', shelf:'numbers', icon:'📊', name:'Statistics Sheet',
-    desc:'Mean→t-tests, paste from sheets.', tag:'upgraded', status:'soon',
-    keywords:['mean','median','stddev','variance'] });
+    desc:'Mean→t-tests, paste from sheets.', tag:'upgraded',
+    keywords:['mean','median','stddev','variance','ttest','confidence','regression','histogram','distribution'], mount: mountStats });
   TOOLS.push({ id:'percentage', shelf:'numbers', icon:'%', name:'Percentage',
     desc:'% of, what %, % change.',
     keywords:['percent','pct','off','discount'], mount: mountPercentage });
@@ -3896,7 +4022,7 @@ function registerTools() {
   TOOLS.push({ id:'essay', shelf:'words', icon:'📑', name:'Essay Planner',
     desc:'Thesis, outline, sources, word goal.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist'], mount: mountEssay });
   TOOLS.push({ id:'vocab', shelf:'words', icon:'🗂️', name:'Vocabulary Builder',
-    desc:'Build word lists, quiz with SRS.', tag:'new', status:'soon', keywords:['vocab','sat','words'] });
+    desc:'Build word lists, quiz with SRS.', tag:'new', keywords:['vocab','sat','act','ap','words','definitions','quiz','srs','spelling'], mount: mountVocab });
   TOOLS.push({ id:'lang', shelf:'words', icon:'🗣️', name:'Language Drill',
     desc:'Conjugation & vocab trainer.', tag:'new', status:'soon', keywords:['language','spanish','french','conjugate'] });
   TOOLS.push({ id:'textcase', shelf:'words', icon:'🔤', name:'Text Case',
@@ -4090,7 +4216,7 @@ function openTool(id) {
   oldBody.parentNode.replaceChild(body, oldBody);
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -5531,6 +5657,760 @@ function mountCitation(root) {
   $('#cp', root).addEventListener('click', () => copy($('#out', root).textContent, $('#cp', root)));
   renderFields();
 }
+
+/* ========== VOCABULARY BUILDER ========== */
+function mountVocab(root) {
+
+  /* ── Storage ── */
+  const SKEY = 'vocab:v1';
+  function loadState() {
+    const def = { lists: [], activeList: null };
+    try {
+      const s = Storage.get(SKEY, null);
+      if (!s || !Array.isArray(s.lists)) return def;
+      return s;
+    } catch { return def; }
+  }
+  function save() { Storage.set(SKEY, S); }
+
+  /* ── SM-2 lite (same as flashcards) ── */
+  function sm2(card, rating) {
+    let { interval = 0, ef = 2.5, reps = 0 } = card;
+    if (rating === 0) { reps = 0; interval = 1; }
+    else {
+      reps += 1;
+      if (reps === 1)      interval = 1;
+      else if (reps === 2) interval = 6;
+      else                 interval = Math.round(interval * ef);
+      ef = Math.max(1.3, ef + 0.1 - (3 - rating) * (0.08 + (3 - rating) * 0.02));
+    }
+    interval = Math.min(interval, 365);
+    const due = Date.now() + interval * 86400000;
+    return { interval, ef, reps, due };
+  }
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  /* ── State ── */
+  let S = loadState();
+  let view = 'manage'; // 'manage' | 'quiz'
+  let quizMode = 'show-def'; // 'show-def' | 'show-word' | 'spell'
+  let quizQueue = [];
+  let quizCard = null;
+  let quizFlipped = false;
+  let quizStats = { easy: 0, good: 0, hard: 0, again: 0 };
+  let spellingInput = '';
+  let spellingRevealed = false;
+
+  function activeList() {
+    return S.lists.find(l => l.id === S.activeList) || S.lists[0] || null;
+  }
+
+  /* ── Build quiz queue: due or new words, max 25 ── */
+  function buildQueue(list) {
+    if (!list || !list.words.length) return [];
+    const now = Date.now();
+    const due    = list.words.filter(w => !w.due || w.due <= now);
+    const notDue = list.words.filter(w =>  w.due && w.due > now);
+    return [...due.sort(() => Math.random() - .5), ...notDue].slice(0, 25);
+  }
+
+  function startQuiz() {
+    const list = activeList();
+    quizQueue = buildQueue(list);
+    quizStats = { easy: 0, good: 0, hard: 0, again: 0 };
+    nextCard();
+  }
+
+  function nextCard() {
+    if (!quizQueue.length) { renderQuizDone(); return; }
+    quizCard = quizQueue.shift();
+    quizFlipped = false;
+    spellingInput = '';
+    spellingRevealed = false;
+    renderQuiz();
+  }
+
+  /* ── Apply rating to word in active list ── */
+  function rateCard(rating) {
+    const list = activeList();
+    if (!list || !quizCard) return;
+    const w = list.words.find(x => x.id === quizCard.id);
+    if (w) {
+      const upd = sm2(w, rating);
+      Object.assign(w, upd);
+      save();
+    }
+    const labels = ['again', 'hard', 'good', 'easy'];
+    quizStats[labels[rating]]++;
+    nextCard();
+  }
+
+  /* ── SRS badge ── */
+  function srsLabel(w) {
+    if (!w.reps) return '<span class="vb-badge vb-new">New</span>';
+    if (w.interval <= 1) return '<span class="vb-badge vb-learn">Learning</span>';
+    if (w.interval < 21) return '<span class="vb-badge vb-review">Review</span>';
+    return '<span class="vb-badge vb-mature">Mature</span>';
+  }
+
+  /* ── Parse bulk paste: "word — definition" or "word: definition" or tab-sep ── */
+  function parsePaste(text) {
+    return text.split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const m = line.match(/^(.+?)(?:\s*[—–\-:]\s*|\t)(.+)$/);
+        if (m) return { word: m[1].trim(), def: m[2].trim() };
+        return { word: line.trim(), def: '' };
+      })
+      .filter(x => x.word);
+  }
+
+  /* ══════════════════════════════════════════
+     MAIN SHELL
+  ══════════════════════════════════════════ */
+  root.innerHTML = `
+<style>
+/* ── Vocab scoped styles ── */
+.vb-shell { display:flex; flex-direction:column; gap:0; min-height:0; }
+
+/* toolbar */
+.vb-toolbar {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding-bottom:14px; border-bottom:1px solid var(--rule); margin-bottom:18px;
+}
+.vb-toolbar .vb-list-select {
+  flex:1; min-width:140px; max-width:220px;
+}
+.vb-toolbar .vb-spacer { flex:1; }
+
+/* word table */
+.vb-table-wrap { overflow-x:auto; margin:0 -4px; }
+.vb-table {
+  width:100%; border-collapse:collapse; font-size:14px;
+}
+.vb-table th {
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted);
+  padding:7px 10px; text-align:left;
+  border-bottom:1px solid var(--rule); white-space:nowrap;
+}
+.vb-table td {
+  padding:9px 10px; border-bottom:1px solid var(--rule-2);
+  vertical-align:top;
+}
+.vb-table tr:last-child td { border-bottom:0; }
+.vb-table tr:hover td { background:var(--paper-3); }
+.vb-word-cell { font-family:var(--serif); font-size:16px; font-weight:500; min-width:120px; }
+.vb-def-cell  { color:var(--ink-2); line-height:1.4; min-width:180px; }
+.vb-word-cell input, .vb-def-cell input {
+  background:transparent; border:none; outline:none;
+  font:inherit; color:inherit; width:100%; padding:0;
+}
+.vb-word-cell input:focus, .vb-def-cell input:focus {
+  border-bottom:1px solid var(--accent); outline:none;
+}
+.vb-del-btn {
+  color:var(--muted); font-size:16px; line-height:1;
+  padding:0 4px; opacity:.4; transition:opacity .12s, color .12s;
+}
+.vb-del-btn:hover { opacity:1; color:var(--accent); }
+
+/* add-row */
+.vb-add-row {
+  display:grid; grid-template-columns:1fr 2fr auto;
+  gap:10px; align-items:end; margin-top:14px;
+}
+@media(max-width:520px){ .vb-add-row{ grid-template-columns:1fr 1fr; } .vb-add-row .btn{ grid-column:span 2; } }
+
+/* paste modal */
+.vb-paste-area { margin-top:10px; display:none; }
+.vb-paste-area.open { display:block; }
+
+/* badge styles */
+.vb-badge {
+  display:inline-block; font-family:var(--mono); font-size:9px;
+  letter-spacing:.1em; text-transform:uppercase;
+  padding:2px 6px; border-radius:2px; white-space:nowrap;
+}
+.vb-new    { background:var(--paper-3); color:var(--muted); border:1px solid var(--rule); }
+.vb-learn  { background:var(--accent-2); color:var(--paper); }
+.vb-review { background:var(--accent-4); color:#fff; }
+.vb-mature { background:var(--accent-3); color:#fff; }
+
+/* quiz panel */
+.vb-quiz {
+  display:flex; flex-direction:column; align-items:center;
+  padding:8px 0; min-height:320px;
+}
+.vb-quiz-top {
+  width:100%; display:flex; align-items:center;
+  justify-content:space-between; margin-bottom:18px;
+}
+.vb-quiz-progress {
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted);
+}
+.vb-quiz-mode-tabs {
+  display:flex; gap:0; border:1px solid var(--rule); border-radius:3px; overflow:hidden;
+}
+.vb-quiz-mode-tabs button {
+  font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted);
+  padding:5px 10px; cursor:pointer;
+  border-right:1px solid var(--rule); transition:background .12s, color .12s;
+}
+.vb-quiz-mode-tabs button:last-child { border-right:0; }
+.vb-quiz-mode-tabs button.active { background:var(--accent); color:#fff; }
+
+/* flash card */
+.vb-card-wrap {
+  width:100%; perspective:900px;
+}
+.vb-card {
+  width:100%; min-height:200px;
+  background:var(--paper-2); border:1px solid var(--rule);
+  border-radius:4px; padding:36px 32px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; cursor:pointer; position:relative;
+  transition:box-shadow .12s;
+  user-select:none;
+}
+.vb-card:hover { box-shadow:3px 3px 0 0 var(--ink); }
+.vb-card.flipped { border-color:var(--accent); background:var(--paper-3); cursor:default; }
+.vb-card-prompt {
+  font-family:var(--mono); font-size:10px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:14px;
+}
+.vb-card-word {
+  font-family:var(--serif); font-weight:500;
+  font-variation-settings:"opsz" 72,"SOFT" 50,"WONK" 1;
+  font-size:clamp(28px,5vw,46px); letter-spacing:-.02em;
+  line-height:1.1; color:var(--ink);
+}
+.vb-card-word em { font-style:italic; color:var(--accent); }
+.vb-card-def {
+  font-size:17px; line-height:1.5; color:var(--ink-2);
+  max-width:44ch; margin-top:10px;
+}
+.vb-card-hint {
+  position:absolute; bottom:12px; right:14px;
+  font-family:var(--mono); font-size:10px; color:var(--muted-2);
+  letter-spacing:.1em;
+}
+.vb-card.flipped .vb-card-hint { display:none; }
+
+/* spelling input */
+.vb-spell-wrap { width:100%; max-width:360px; margin-top:10px; text-align:left; }
+.vb-spell-input {
+  width:100%; background:var(--paper-2); border:1px solid var(--rule);
+  padding:12px 14px; border-radius:2px; color:var(--ink);
+  font-family:var(--serif); font-size:22px; letter-spacing:.02em;
+  transition:border-color .12s;
+}
+.vb-spell-input:focus { border-color:var(--accent); outline:none; }
+.vb-spell-input.correct { border-color:var(--accent-3); background:#2E7D3220; }
+.vb-spell-input.wrong   { border-color:var(--accent);   background:#FF5A3D20; animation:vb-shake .25s ease; }
+@keyframes vb-shake {
+  0%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} 100%{transform:translateX(0)}
+}
+.vb-spell-reveal { font-size:13px; color:var(--muted); margin-top:8px; }
+.vb-spell-reveal strong { color:var(--accent); font-family:var(--serif); font-size:15px; }
+
+/* rating buttons */
+.vb-ratings {
+  display:flex; gap:10px; margin-top:22px; flex-wrap:wrap; justify-content:center;
+}
+.vb-ratings button {
+  font-family:var(--sans); font-weight:600; font-size:13px;
+  padding:10px 18px; border-radius:2px; cursor:pointer;
+  border:1px solid var(--rule);
+  transition:transform .1s, box-shadow .1s;
+}
+.vb-ratings button:hover { transform:translate(-1px,-1px); }
+.vb-ratings button:active { transform:translate(1px,1px); }
+.vb-btn-again { background:var(--paper-3); color:var(--ink-2); }
+.vb-btn-again:hover  { box-shadow:3px 3px 0 0 var(--muted-2); }
+.vb-btn-hard  { background:#FF5A3D22; color:var(--accent); border-color:var(--accent); }
+.vb-btn-hard:hover   { box-shadow:3px 3px 0 0 var(--accent); }
+.vb-btn-good  { background:#6A95FF22; color:var(--accent-4); border-color:var(--accent-4); }
+.vb-btn-good:hover   { box-shadow:3px 3px 0 0 var(--accent-4); }
+.vb-btn-easy  { background:#4EAE5322; color:var(--accent-3); border-color:var(--accent-3); }
+.vb-btn-easy:hover   { box-shadow:3px 3px 0 0 var(--accent-3); }
+
+/* done screen */
+.vb-done {
+  text-align:center; padding:40px 20px;
+  display:flex; flex-direction:column; align-items:center; gap:16px;
+}
+.vb-done-title {
+  font-family:var(--serif); font-weight:500;
+  font-size:32px; letter-spacing:-.02em;
+}
+.vb-done-title em { font-style:italic; color:var(--accent); }
+.vb-done-stats {
+  display:flex; gap:20px; justify-content:center; flex-wrap:wrap;
+  font-family:var(--mono); font-size:12px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted);
+}
+.vb-done-stats b { display:block; font-family:var(--serif); font-size:28px; letter-spacing:-.02em; font-weight:500; }
+.vb-done-stats .ds-again b { color:var(--muted); }
+.vb-done-stats .ds-hard  b { color:var(--accent); }
+.vb-done-stats .ds-good  b { color:var(--accent-4); }
+.vb-done-stats .ds-easy  b { color:var(--accent-3); }
+
+/* empty states */
+.vb-empty {
+  padding:48px 24px; text-align:center;
+  font-family:var(--serif); font-style:italic; font-size:19px; color:var(--muted);
+}
+
+/* new list dialog */
+.vb-new-list-row {
+  display:flex; gap:10px; align-items:center; margin-bottom:14px;
+}
+.vb-stats-bar {
+  display:flex; gap:18px; flex-wrap:wrap;
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted);
+  margin-bottom:12px;
+}
+.vb-stats-bar b { color:var(--ink); font-family:var(--sans); }
+
+/* due indicator dot */
+.vb-due-dot {
+  width:7px; height:7px; border-radius:50%; background:var(--accent);
+  display:inline-block; margin-left:6px; vertical-align:middle;
+}
+</style>
+
+<div class="vb-shell" id="vb-root">
+  <!-- rendered by JS -->
+</div>
+`;
+
+  /* ── render dispatcher ── */
+  function render() {
+    if (view === 'quiz') renderQuizView();
+    else renderManageView();
+  }
+
+  /* ══════════════════════════════════════════
+     MANAGE VIEW
+  ══════════════════════════════════════════ */
+  function renderManageView() {
+    const list = activeList();
+    const lists = S.lists;
+    const shell = $('#vb-root', root);
+
+    /* Due count for active list */
+    const dueCount = list
+      ? list.words.filter(w => !w.due || w.due <= Date.now()).length
+      : 0;
+
+    shell.innerHTML = `
+      <!-- toolbar -->
+      <div class="vb-toolbar">
+        <select class="input vb-list-select" id="vb-list-sel">
+          ${lists.length
+            ? lists.map(l => `<option value="${l.id}" ${l.id === S.activeList ? 'selected' : ''}>${escHtml(l.name)} (${l.words.length})</option>`).join('')
+            : '<option value="">— no lists yet —</option>'}
+        </select>
+        <button class="btn ghost sm" id="vb-new-list-btn">+ New list</button>
+        ${list ? `<button class="btn ghost sm" id="vb-rename-btn">Rename</button>` : ''}
+        ${list ? `<button class="btn ghost sm" id="vb-delete-list-btn" style="color:var(--accent)">Delete list</button>` : ''}
+        <span class="vb-spacer"></span>
+        ${list && list.words.length
+          ? `<button class="btn accent" id="vb-quiz-btn">
+               Quiz ${dueCount > 0 ? `<span class="vb-due-dot"></span>` : ''}
+             </button>`
+          : ''}
+      </div>
+
+      <!-- new list form (hidden initially) -->
+      <div id="vb-new-list-form" style="display:none;margin-bottom:14px">
+        <div class="vb-new-list-row">
+          <input class="input" id="vb-new-list-name" placeholder="List name (e.g. SAT Vocab, Chapter 5)" style="flex:1">
+          <button class="btn sm" id="vb-new-list-save">Create</button>
+          <button class="btn ghost sm" id="vb-new-list-cancel">Cancel</button>
+        </div>
+      </div>
+
+      ${list ? `
+      <!-- stats bar -->
+      <div class="vb-stats-bar">
+        <span><b>${list.words.length}</b> words</span>
+        <span><b style="color:var(--accent)">${dueCount}</b> due now</span>
+        <span><b>${list.words.filter(w => w.reps > 0).length}</b> seen</span>
+        <span><b style="color:var(--accent-3)">${list.words.filter(w => w.interval >= 21).length}</b> mature</span>
+      </div>
+
+      <!-- word table -->
+      <div class="vb-table-wrap">
+        <table class="vb-table">
+          <thead>
+            <tr>
+              <th>Word</th>
+              <th>Definition / Meaning</th>
+              <th>SRS</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="vb-tbody">
+            ${list.words.length
+              ? list.words.map(w => `
+              <tr data-id="${w.id}">
+                <td class="vb-word-cell">
+                  <input class="vb-word-input" data-field="word" value="${escHtml(w.word)}" placeholder="word" spellcheck="false">
+                </td>
+                <td class="vb-def-cell">
+                  <input class="vb-def-input" data-field="def" value="${escHtml(w.def)}" placeholder="definition">
+                </td>
+                <td style="white-space:nowrap">${srsLabel(w)}</td>
+                <td><button class="vb-del-btn" data-del="${w.id}" title="Remove word">×</button></td>
+              </tr>`).join('')
+              : `<tr><td colspan="4" style="padding:28px 0">
+                   <div class="vb-empty" style="padding:16px 0">No words yet — add some below.</div>
+                 </td></tr>`
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- add row -->
+      <div class="vb-add-row" style="margin-top:16px">
+        <div class="field" style="margin:0">
+          <label>Word</label>
+          <input class="input" id="vb-new-word" placeholder="e.g. ephemeral" spellcheck="false">
+        </div>
+        <div class="field" style="margin:0">
+          <label>Definition</label>
+          <input class="input" id="vb-new-def" placeholder="e.g. lasting for a very short time">
+        </div>
+        <button class="btn sm" id="vb-add-word-btn" style="align-self:flex-end">Add</button>
+      </div>
+
+      <!-- paste area toggle -->
+      <div style="margin-top:10px">
+        <button class="btn ghost sm" id="vb-paste-toggle">⇩ Paste a word list</button>
+        <div class="vb-paste-area" id="vb-paste-area">
+          <div class="field" style="margin-top:10px">
+            <label>One word per line. Separate word from definition with — dash, colon, or tab.</label>
+            <textarea class="input mono" id="vb-paste-text" rows="7"
+              placeholder="ephemeral — lasting a very short time&#10;ubiquitous — present everywhere&#10;loquacious: tending to talk too much&#10;serendipity"></textarea>
+          </div>
+          <div class="btn-row">
+            <button class="btn sm" id="vb-paste-import">Import</button>
+            <button class="btn ghost sm" id="vb-paste-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+      ` : `<div class="vb-empty">Create a list to get started.</div>`}
+    `;
+
+    /* — events — */
+
+    /* List select */
+    $('#vb-list-sel', root)?.addEventListener('change', e => {
+      S.activeList = e.target.value;
+      save(); renderManageView();
+    });
+
+    /* New list toggle */
+    $('#vb-new-list-btn', root).addEventListener('click', () => {
+      const f = $('#vb-new-list-form', root);
+      f.style.display = f.style.display === 'none' ? 'block' : 'none';
+      $('#vb-new-list-name', root)?.focus();
+    });
+    $('#vb-new-list-save', root)?.addEventListener('click', () => {
+      const name = $('#vb-new-list-name', root).value.trim();
+      if (!name) return;
+      const nl = { id: uid(), name, words: [] };
+      S.lists.push(nl);
+      S.activeList = nl.id;
+      save(); renderManageView();
+    });
+    $('#vb-new-list-cancel', root)?.addEventListener('click', () => {
+      $('#vb-new-list-form', root).style.display = 'none';
+    });
+    $('#vb-new-list-name', root)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') $('#vb-new-list-save', root).click();
+    });
+
+    /* Rename */
+    $('#vb-rename-btn', root)?.addEventListener('click', () => {
+      const l = activeList();
+      if (!l) return;
+      const name = prompt('Rename list:', l.name);
+      if (name && name.trim()) { l.name = name.trim(); save(); renderManageView(); }
+    });
+
+    /* Delete list */
+    $('#vb-delete-list-btn', root)?.addEventListener('click', () => {
+      const l = activeList();
+      if (!l) return;
+      if (!confirm(`Delete "${l.name}" and all its words?`)) return;
+      S.lists = S.lists.filter(x => x.id !== l.id);
+      S.activeList = S.lists[0]?.id || null;
+      save(); renderManageView();
+    });
+
+    /* Quiz */
+    $('#vb-quiz-btn', root)?.addEventListener('click', () => {
+      view = 'quiz'; startQuiz();
+    });
+
+    /* Inline edit word/def */
+    $$('.vb-word-input, .vb-def-input', root).forEach(inp => {
+      inp.addEventListener('change', () => {
+        const l = activeList(); if (!l) return;
+        const id = inp.closest('tr').dataset.id;
+        const w = l.words.find(x => x.id === id);
+        if (w) { w[inp.dataset.field] = inp.value.trim(); save(); }
+      });
+    });
+
+    /* Delete word */
+    $$('.vb-del-btn', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        const l = activeList(); if (!l) return;
+        l.words = l.words.filter(w => w.id !== btn.dataset.del);
+        save(); renderManageView();
+      });
+    });
+
+    /* Add word */
+    const doAdd = () => {
+      const l = activeList(); if (!l) return;
+      const word = $('#vb-new-word', root).value.trim();
+      const def  = $('#vb-new-def',  root).value.trim();
+      if (!word) { $('#vb-new-word', root).focus(); return; }
+      l.words.push({ id: uid(), word, def, reps: 0, interval: 0, ef: 2.5, due: null });
+      save();
+      $('#vb-new-word', root).value = '';
+      $('#vb-new-def',  root).value = '';
+      $('#vb-new-word', root).focus();
+      renderManageView();
+    };
+    $('#vb-add-word-btn', root)?.addEventListener('click', doAdd);
+    $('#vb-new-def', root)?.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
+    $('#vb-new-word', root)?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#vb-new-def', root).focus(); });
+
+    /* Paste toggle */
+    $('#vb-paste-toggle', root)?.addEventListener('click', () => {
+      $('#vb-paste-area', root).classList.toggle('open');
+      if ($('#vb-paste-area', root).classList.contains('open'))
+        $('#vb-paste-text', root).focus();
+    });
+    $('#vb-paste-cancel', root)?.addEventListener('click', () => {
+      $('#vb-paste-area', root).classList.remove('open');
+    });
+    $('#vb-paste-import', root)?.addEventListener('click', () => {
+      const l = activeList(); if (!l) return;
+      const lines = $('#vb-paste-text', root).value;
+      const parsed = parsePaste(lines);
+      if (!parsed.length) { showToast('Nothing to import — check your formatting.'); return; }
+      parsed.forEach(p => {
+        if (!l.words.find(w => w.word.toLowerCase() === p.word.toLowerCase()))
+          l.words.push({ id: uid(), word: p.word, def: p.def, reps: 0, interval: 0, ef: 2.5, due: null });
+      });
+      save();
+      showToast(`Imported ${parsed.length} word${parsed.length !== 1 ? 's' : ''}.`);
+      $('#vb-paste-text', root).value = '';
+      $('#vb-paste-area', root).classList.remove('open');
+      renderManageView();
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     QUIZ VIEW
+  ══════════════════════════════════════════ */
+  function renderQuizView() {
+    const shell = $('#vb-root', root);
+    shell.innerHTML = `
+      <div class="vb-quiz" id="vb-quiz">
+        <div class="vb-quiz-top">
+          <span class="vb-quiz-progress" id="vb-q-prog">—</span>
+          <div class="vb-quiz-mode-tabs" id="vb-mode-tabs">
+            <button class="${quizMode === 'show-def'  ? 'active' : ''}" data-mode="show-def">Word→Def</button>
+            <button class="${quizMode === 'show-word' ? 'active' : ''}" data-mode="show-word">Def→Word</button>
+            <button class="${quizMode === 'spell'     ? 'active' : ''}" data-mode="spell">Spell it</button>
+          </div>
+          <button class="btn ghost sm" id="vb-exit-quiz">← Back</button>
+        </div>
+        <div id="vb-q-content" style="width:100%;display:flex;flex-direction:column;align-items:center"></div>
+      </div>
+    `;
+
+    $('#vb-exit-quiz', root).addEventListener('click', () => {
+      view = 'manage'; renderManageView();
+    });
+
+    $$('#vb-mode-tabs button', root).forEach(btn => {
+      btn.addEventListener('click', () => {
+        quizMode = btn.dataset.mode;
+        $$('#vb-mode-tabs button', root).forEach(b => b.classList.toggle('active', b === btn));
+        /* restart quiz with new mode */
+        startQuiz();
+      });
+    });
+
+    renderQuiz();
+  }
+
+  function renderQuiz() {
+    if (!quizCard) { renderQuizDone(); return; }
+    const list = activeList();
+    const total = buildQueue(list).length + (quizStats.easy + quizStats.good + quizStats.hard + quizStats.again);
+    const done  = quizStats.easy + quizStats.good + quizStats.hard + quizStats.again;
+    const qLeft = quizQueue.length + 1;
+
+    $('#vb-q-prog', root).textContent = `${done + 1} / ${done + qLeft}`;
+
+    const content = $('#vb-q-content', root);
+
+    if (quizMode === 'spell') {
+      renderSpellCard(content);
+      return;
+    }
+
+    /* flip card mode */
+    const showWord = quizMode === 'show-def'; // true: show word, reveal def
+    const front    = showWord ? quizCard.word : quizCard.def;
+    const back     = showWord ? quizCard.def  : quizCard.word;
+    const frontLbl = showWord ? 'Word' : 'Definition';
+    const backLbl  = showWord ? 'Definition' : 'Word';
+
+    content.innerHTML = `
+      <div class="vb-card-wrap">
+        <div class="vb-card${quizFlipped ? ' flipped' : ''}" id="vb-card">
+          <div class="vb-card-prompt">${quizFlipped ? backLbl : frontLbl}</div>
+          <div class="vb-card-word">${quizFlipped
+            ? (showWord
+                ? `<span style="color:var(--ink-2);font-size:0.9em">${escHtml(back || '—')}</span>`
+                : `<em>${escHtml(back)}</em>`)
+            : (showWord ? `<em>${escHtml(front)}</em>` : escHtml(front || '—'))
+          }</div>
+          ${quizFlipped ? '' : '<div class="vb-card-hint">tap to reveal</div>'}
+        </div>
+      </div>
+      ${quizFlipped ? `
+      <div class="vb-ratings">
+        <button class="vb-btn-again" data-r="0">Again</button>
+        <button class="vb-btn-hard"  data-r="1">Hard</button>
+        <button class="vb-btn-good"  data-r="2">Good</button>
+        <button class="vb-btn-easy"  data-r="3">Easy</button>
+      </div>
+      <p style="font-family:var(--mono);font-size:10px;color:var(--muted-2);text-transform:uppercase;letter-spacing:.1em;margin-top:10px;text-align:center">
+        Again = retry soon · Hard = short interval · Good · Easy = long interval
+      </p>` : ''}
+    `;
+
+    if (!quizFlipped) {
+      $('#vb-card', root).addEventListener('click', () => {
+        quizFlipped = true;
+        renderQuiz();
+      });
+    } else {
+      $$('[data-r]', root).forEach(btn => {
+        btn.addEventListener('click', () => rateCard(Number(btn.dataset.r)));
+      });
+    }
+  }
+
+  function renderSpellCard(content) {
+    /* Show definition, student types the word */
+    content.innerHTML = `
+      <div class="vb-card" style="cursor:default;margin-bottom:12px">
+        <div class="vb-card-prompt">Spell the word</div>
+        <div class="vb-card-def" style="font-size:19px;color:var(--ink)">
+          ${escHtml(quizCard.def || '(no definition — just recall the word)')}
+        </div>
+      </div>
+      <div class="vb-spell-wrap">
+        <input class="vb-spell-input" id="vb-spell-inp"
+          value="${escHtml(spellingInput)}"
+          placeholder="type the word…" spellcheck="false" autocomplete="off"
+          ${spellingRevealed ? 'disabled' : ''}>
+        ${spellingRevealed
+          ? `<div class="vb-spell-reveal">Answer: <strong>${escHtml(quizCard.word)}</strong></div>`
+          : `<div class="vb-spell-reveal" style="color:var(--muted-2)">
+               Press Enter to check · <button class="btn ghost sm" id="vb-spell-reveal-btn" style="font-size:11px;padding:4px 8px">Reveal</button>
+             </div>`
+        }
+      </div>
+      ${spellingRevealed ? `
+      <div class="vb-ratings" style="margin-top:16px">
+        <button class="vb-btn-again" data-r="0">Got it wrong</button>
+        <button class="vb-btn-good"  data-r="2">Got it right</button>
+        <button class="vb-btn-easy"  data-r="3">Easy</button>
+      </div>` : ''}
+    `;
+
+    const inp = $('#vb-spell-inp', root);
+    if (inp && !spellingRevealed) {
+      inp.focus();
+      inp.addEventListener('input', e => { spellingInput = e.target.value; });
+      inp.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const answer = spellingInput.trim().toLowerCase();
+        const correct = quizCard.word.trim().toLowerCase();
+        if (answer === correct) {
+          inp.classList.add('correct');
+          setTimeout(() => rateCard(2), 700);
+        } else {
+          inp.classList.add('wrong');
+          setTimeout(() => { inp.classList.remove('wrong'); inp.value = ''; spellingInput = ''; }, 400);
+        }
+      });
+      $('#vb-spell-reveal-btn', root)?.addEventListener('click', () => {
+        spellingRevealed = true;
+        renderQuiz();
+      });
+    }
+    if (spellingRevealed) {
+      $$('[data-r]', root).forEach(btn => {
+        btn.addEventListener('click', () => rateCard(Number(btn.dataset.r)));
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     QUIZ DONE SCREEN
+  ══════════════════════════════════════════ */
+  function renderQuizDone() {
+    const shell = $('#vb-root', root);
+    const total = quizStats.easy + quizStats.good + quizStats.hard + quizStats.again;
+    shell.innerHTML = `
+      <div class="vb-done">
+        <div class="vb-done-title">Session <em>done.</em></div>
+        <div class="vb-done-stats">
+          <div class="ds-again"><b>${quizStats.again}</b>Again</div>
+          <div class="ds-hard" ><b>${quizStats.hard}</b>Hard</div>
+          <div class="ds-good" ><b>${quizStats.good}</b>Good</div>
+          <div class="ds-easy" ><b>${quizStats.easy}</b>Easy</div>
+        </div>
+        ${total === 0 ? '<p style="color:var(--muted);font-style:italic">No words were due — you\'re all caught up.</p>' : ''}
+        <div class="btn-row" style="justify-content:center">
+          <button class="btn" id="vb-again-btn">Study again</button>
+          <button class="btn ghost" id="vb-back-btn">Back to list</button>
+        </div>
+      </div>
+    `;
+    $('#vb-again-btn', root).addEventListener('click', startQuiz);
+    $('#vb-back-btn',  root).addEventListener('click', () => { view = 'manage'; renderManageView(); });
+  }
+
+  /* ── Tiny escape helper ── */
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Boot ── */
+  render();
+}
+
 
 /* ========== TEXT CASE ========== */
 function mountTextCase(root) {
@@ -8623,6 +9503,739 @@ function mountSchedule(root) {
   };
 }
 
+/* ========== GRAPHING CALCULATOR ========== */
+function mountGraphing(root) {
+
+  /* ── Palette for up to 6 functions ── */
+  const FN_COLORS = ['#FF5A3D','#6A95FF','#4EAE53','#FFD23F','#B58BFF','#FF7AA8'];
+
+  /* ── State ── */
+  let fns = [{ expr: 'sin(x)', color: FN_COLORS[0] }];
+  let view = { xMin: -10, xMax: 10, yMin: -7, yMax: 7 };
+  let mode = 'zoom'; // 'zoom' | 'trace' | 'roots' | 'intersect'
+  let traceIdx = 0;
+  let traceT = 0.5; // 0..1 across xMin..xMax
+  let rootMarkers = []; // [{x,y,color}]
+  let intersectMarkers = [];
+  let cursorPos = null;
+  let isPanning = false;
+  let panStart = null;
+  let panView = null;
+  let isPinching = false;
+  let pinchStart = null;
+  let rafId = null;
+
+  /* ── Tokenizer / evaluator ── */
+  const CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI, inf: Infinity };
+  const FUNS = {
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
+    sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+    sqrt: Math.sqrt, cbrt: Math.cbrt, abs: Math.abs,
+    exp: Math.exp, log: Math.log, log2: Math.log2, log10: Math.log10,
+    floor: Math.floor, ceil: Math.ceil, round: Math.round,
+    sign: Math.sign, min: Math.min, max: Math.max, pow: Math.pow,
+    sec: x => 1/Math.cos(x), csc: x => 1/Math.sin(x), cot: x => 1/Math.tan(x),
+  };
+
+  function makeEval(expr) {
+    // Preprocess: implicit multiplication, ^ to **, common shorthands
+    let s = expr.trim()
+      .replace(/\^/g, '**')
+      .replace(/(\d)(x)/g, '$1*$2')
+      .replace(/(x)(\d)/g, '$1*$2')
+      .replace(/(\d)\s*\(/g, '$1*(')
+      .replace(/\)\s*\(/g, ')*(')
+      .replace(/\)\s*(x)/g, ')*$1')
+      .replace(/(x)\s*\(/g, '$1*(');
+
+    // Build the function body
+    const constDefs = Object.entries(CONSTS).map(([k,v]) => `const ${k}=${v};`).join('');
+    const funDefs = Object.entries(FUNS).map(([k]) => `const ${k}=_F.${k};`).join('');
+    const body = `${constDefs}${funDefs}return (${s});`;
+    try {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function('x', '_F', body);
+      return x => { try { const r = fn(x, FUNS); return (isFinite(r) ? r : NaN); } catch { return NaN; } };
+    } catch {
+      return null;
+    }
+  }
+
+  /* ── Canvas setup ── */
+  root.innerHTML = `
+    <div class="gc-shell">
+      <div class="gc-top">
+        <div class="gc-fn-bar" id="gc-fn-bar"></div>
+        <div class="gc-controls">
+          <button class="gc-mode-btn active" data-mode="zoom">Zoom / Pan</button>
+          <button class="gc-mode-btn" data-mode="trace">Trace</button>
+          <button class="gc-mode-btn" data-mode="roots">Roots</button>
+          <button class="gc-mode-btn" data-mode="intersect">Intersections</button>
+          <div class="gc-spacer"></div>
+          <span class="gc-view-label">x:</span>
+          <input class="gc-view-input" id="gc-xmin" value="-10" title="x min">
+          <input class="gc-view-input" id="gc-xmax" value="10" title="x max">
+          <span class="gc-view-label">y:</span>
+          <input class="gc-view-input" id="gc-ymin" value="-7" title="y min">
+          <input class="gc-view-input" id="gc-ymax" value="7" title="y max">
+          <button class="btn ghost sm" id="gc-reset-view" title="Reset view">Reset</button>
+        </div>
+      </div>
+      <div class="gc-canvas-wrap" id="gc-wrap">
+        <canvas class="gc-canvas" id="gc-canvas"></canvas>
+      </div>
+      <div class="gc-results-panel" id="gc-results">
+        <span style="color:var(--muted-2);font-style:italic">Enter a function above to plot it.</span>
+      </div>
+      <div class="gc-info-bar" id="gc-info-bar">
+        <div class="gc-info-item" id="gc-status">Ready</div>
+        <div class="gc-info-item gc-cursor-pos" id="gc-cursor-display"></div>
+      </div>
+      <div class="gc-help">
+        <span><kbd>scroll</kbd> zoom</span>
+        <span><kbd>drag</kbd> pan</span>
+        <span><kbd>R</kbd> roots</span>
+        <span><kbd>T</kbd> trace</span>
+        <span><kbd>0</kbd> reset view</span>
+        <span>Supports: sin, cos, tan, log, sqrt, abs, ^, π</span>
+      </div>
+    </div>`;
+
+  const wrap    = root.querySelector('#gc-wrap');
+  const canvas  = root.querySelector('#gc-canvas');
+  const ctx     = canvas.getContext('2d');
+  const fnBar   = root.querySelector('#gc-fn-bar');
+  const results = root.querySelector('#gc-results');
+  const statusEl = root.querySelector('#gc-status');
+  const cursorEl = root.querySelector('#gc-cursor-display');
+
+  /* ── Resize observer ── */
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.scale(dpr, dpr);
+    schedDraw();
+  }
+  const ro = new ResizeObserver(resize);
+  ro.observe(wrap);
+
+  /* ── Coordinate transforms ── */
+  function toCanvas(wx, wy) {
+    const W = canvas.width  / (window.devicePixelRatio||1);
+    const H = canvas.height / (window.devicePixelRatio||1);
+    return {
+      x: (wx - view.xMin) / (view.xMax - view.xMin) * W,
+      y: H - (wy - view.yMin) / (view.yMax - view.yMin) * H
+    };
+  }
+  function toWorld(cx, cy) {
+    const W = canvas.width  / (window.devicePixelRatio||1);
+    const H = canvas.height / (window.devicePixelRatio||1);
+    return {
+      x: view.xMin + cx / W * (view.xMax - view.xMin),
+      y: view.yMin + (H - cy) / H * (view.yMax - view.yMin)
+    };
+  }
+
+  /* ── Draw ── */
+  function draw() {
+    rafId = null;
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+
+    const bgColor  = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#0F0D0C';
+    const ruleColor = getComputedStyle(document.documentElement).getPropertyValue('--rule').trim() || 'rgba(240,233,218,0.1)';
+    const inkColor = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#F0E9DA';
+    const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#837C70';
+    const paper3 = getComputedStyle(document.documentElement).getPropertyValue('--paper-3').trim() || '#232020';
+
+    // Background
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    function niceStep(range, targetLines) {
+      const rough = range / targetLines;
+      const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+      const norm = rough / mag;
+      let step;
+      if (norm < 1.5) step = 1;
+      else if (norm < 3) step = 2;
+      else if (norm < 7) step = 5;
+      else step = 10;
+      return step * mag;
+    }
+
+    const xRange = view.xMax - view.xMin;
+    const yRange = view.yMax - view.yMin;
+    const xStep = niceStep(xRange, Math.max(4, Math.min(12, W / 60)));
+    const yStep = niceStep(yRange, Math.max(4, Math.min(10, H / 60)));
+
+    ctx.save();
+    ctx.strokeStyle = ruleColor;
+    ctx.lineWidth = 1;
+    // Vertical gridlines
+    const xStart = Math.ceil(view.xMin / xStep) * xStep;
+    for (let gx = xStart; gx <= view.xMax + xStep * 0.01; gx += xStep) {
+      const c = toCanvas(gx, 0);
+      ctx.beginPath(); ctx.moveTo(c.x, 0); ctx.lineTo(c.x, H);
+      ctx.stroke();
+    }
+    // Horizontal gridlines
+    const yStart = Math.ceil(view.yMin / yStep) * yStep;
+    for (let gy = yStart; gy <= view.yMax + yStep * 0.01; gy += yStep) {
+      const c = toCanvas(0, gy);
+      ctx.beginPath(); ctx.moveTo(0, c.y); ctx.lineTo(W, c.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Axes
+    ctx.save();
+    const origin = toCanvas(0, 0);
+    ctx.strokeStyle = mutedColor;
+    ctx.lineWidth = 1.5;
+    // X axis
+    if (origin.y >= 0 && origin.y <= H) {
+      ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(W, origin.y); ctx.stroke();
+    }
+    // Y axis
+    if (origin.x >= 0 && origin.x <= W) {
+      ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, H); ctx.stroke();
+    }
+    ctx.restore();
+
+    // Axis labels
+    ctx.save();
+    ctx.fillStyle = mutedColor;
+    ctx.font = `10px ${getComputedStyle(document.documentElement).getPropertyValue('--mono').split(',')[0] || 'monospace'}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const labelY = Math.min(H - 14, Math.max(2, origin.y + 4));
+    for (let gx = xStart; gx <= view.xMax + xStep * 0.01; gx += xStep) {
+      if (Math.abs(gx) < xStep * 0.001) continue;
+      const c = toCanvas(gx, 0);
+      if (c.x < 8 || c.x > W - 8) continue;
+      const lbl = Math.abs(gx) >= 1000 ? gx.toExponential(0) :
+                  (gx % 1 === 0 ? gx.toString() : parseFloat(gx.toPrecision(4)).toString());
+      ctx.fillText(lbl, c.x, labelY);
+    }
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const labelX = Math.min(W - 4, Math.max(28, origin.x - 4));
+    for (let gy = yStart; gy <= view.yMax + yStep * 0.01; gy += yStep) {
+      if (Math.abs(gy) < yStep * 0.001) continue;
+      const c = toCanvas(0, gy);
+      if (c.y < 8 || c.y > H - 8) continue;
+      const lbl = Math.abs(gy) >= 1000 ? gy.toExponential(0) :
+                  (gy % 1 === 0 ? gy.toString() : parseFloat(gy.toPrecision(4)).toString());
+      ctx.fillText(lbl, labelX, c.y);
+    }
+    ctx.restore();
+
+    // Plot functions
+    const STEPS = Math.min(1200, Math.max(600, W * 2));
+    const dx = (view.xMax - view.xMin) / STEPS;
+
+    fns.forEach((fn, fi) => {
+      if (!fn.expr.trim()) return;
+      const f = makeEval(fn.expr);
+      if (!f) return;
+
+      ctx.save();
+      ctx.strokeStyle = fn.color;
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.shadowColor = fn.color + '40';
+      ctx.shadowBlur = 6;
+
+      let started = false;
+      let prevY = NaN;
+      ctx.beginPath();
+      for (let i = 0; i <= STEPS; i++) {
+        const wx = view.xMin + i * dx;
+        const wy = f(wx);
+        if (!isFinite(wy)) { started = false; prevY = NaN; continue; }
+        const c = toCanvas(wx, wy);
+        // Discontinuity guard: if y jumps too far, start new segment
+        if (started && isFinite(prevY) && Math.abs(c.y - prevY) > H * 3) {
+          started = false;
+        }
+        if (!started) { ctx.moveTo(c.x, c.y); started = true; }
+        else ctx.lineTo(c.x, c.y);
+        prevY = c.y;
+      }
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Root markers
+    rootMarkers.forEach(m => {
+      const c = toCanvas(m.x, 0);
+      if (c.x < -10 || c.x > W + 10) return;
+      ctx.save();
+      ctx.strokeStyle = m.color;
+      ctx.fillStyle = m.color;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = m.color + '60';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(c.x, toCanvas(0, 0).y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = `bold 10px monospace`;
+      ctx.fillStyle = inkColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(formatN(m.x), c.x, toCanvas(0, 0).y - 8);
+      ctx.restore();
+    });
+
+    // Intersection markers
+    intersectMarkers.forEach(m => {
+      const c = toCanvas(m.x, m.y);
+      if (c.x < -10 || c.x > W + 10 || c.y < -10 || c.y > H + 10) return;
+      ctx.save();
+      ctx.strokeStyle = '#FFD23F';
+      ctx.fillStyle = '#FFD23F';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#FFD23F60';
+      ctx.shadowBlur = 8;
+      // Diamond shape
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y - 7);
+      ctx.lineTo(c.x + 7, c.y);
+      ctx.lineTo(c.x, c.y + 7);
+      ctx.lineTo(c.x - 7, c.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // Trace mode
+    if (mode === 'trace' && fns.length > 0) {
+      const fn = fns[traceIdx];
+      if (fn && fn.expr.trim()) {
+        const f = makeEval(fn.expr);
+        if (f) {
+          const wx = view.xMin + traceT * (view.xMax - view.xMin);
+          const wy = f(wx);
+          if (isFinite(wy)) {
+            const c = toCanvas(wx, wy);
+            ctx.save();
+            ctx.strokeStyle = fn.color;
+            ctx.fillStyle = fn.color;
+            ctx.shadowColor = fn.color + '80';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 2;
+            // Crosshair
+            ctx.beginPath();
+            ctx.moveTo(c.x - 10, c.y); ctx.lineTo(c.x + 10, c.y);
+            ctx.moveTo(c.x, c.y - 10); ctx.lineTo(c.x, c.y + 10);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            // Label
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = paper3;
+            ctx.strokeStyle = fn.color;
+            ctx.lineWidth = 1;
+            const label = `(${formatN(wx)}, ${formatN(wy)})`;
+            ctx.font = `bold 11px monospace`;
+            const tw = ctx.measureText(label).width;
+            const lx = Math.min(W - tw - 12, Math.max(6, c.x + 10));
+            const ly = Math.max(20, Math.min(H - 24, c.y - 18));
+            ctx.fillRect(lx - 4, ly - 11, tw + 10, 20);
+            ctx.strokeRect(lx - 4, ly - 11, tw + 10, 20);
+            ctx.fillStyle = fn.color;
+            ctx.fillText(label, lx + 1, ly + 3);
+            ctx.restore();
+          }
+        }
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function schedDraw() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(draw);
+  }
+
+  /* ── Number formatter ── */
+  function formatN(n) {
+    if (!isFinite(n)) return '∞';
+    if (Math.abs(n) < 1e-10) return '0';
+    if (Math.abs(n) >= 1e6 || (Math.abs(n) < 0.001 && n !== 0)) return n.toExponential(4);
+    const s = parseFloat(n.toPrecision(7)).toString();
+    return s;
+  }
+
+  /* ── Root finder: bisection + Newton's on each sign-change interval ── */
+  function findRoots(f, xMin, xMax, tolerance=1e-9, maxIter=80) {
+    const SCAN = 800;
+    const step = (xMax - xMin) / SCAN;
+    const roots = [];
+    let prev = f(xMin);
+    for (let i = 1; i <= SCAN; i++) {
+      const x = xMin + i * step;
+      const cur = f(x);
+      if (!isFinite(prev) || !isFinite(cur)) { prev = cur; continue; }
+      if (prev * cur <= 0) {
+        // Bisection
+        let lo = x - step, hi = x, flo = prev, fhi = cur;
+        for (let it = 0; it < maxIter; it++) {
+          const mid = (lo + hi) / 2;
+          const fmid = f(mid);
+          if (!isFinite(fmid)) break;
+          if (Math.abs(fmid) < tolerance || (hi - lo) < tolerance) { lo = mid; break; }
+          if (flo * fmid <= 0) { hi = mid; fhi = fmid; } else { lo = mid; flo = fmid; }
+        }
+        const root = lo;
+        if (roots.every(r => Math.abs(r - root) > 1e-6)) roots.push(root);
+      }
+      prev = cur;
+    }
+    return roots;
+  }
+
+  /* ── Intersection finder ── */
+  function findIntersections(f1, f2, xMin, xMax) {
+    const diff = x => f1(x) - f2(x);
+    const xs = findRoots(diff, xMin, xMax);
+    return xs.map(x => ({ x, y: f1(x) }));
+  }
+
+  /* ── Run analysis ── */
+  function runAnalysis() {
+    if (mode === 'roots') {
+      rootMarkers = [];
+      const chipHtml = [];
+      fns.forEach((fn, fi) => {
+        if (!fn.expr.trim()) return;
+        const f = makeEval(fn.expr);
+        if (!f) return;
+        const rs = findRoots(f, view.xMin, view.xMax);
+        rs.forEach(rx => {
+          rootMarkers.push({ x: rx, color: fn.color });
+          chipHtml.push(`<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>x = ${formatN(rx)}</span>`);
+        });
+      });
+      results.innerHTML = chipHtml.length
+        ? `<span class="gc-view-label" style="margin-right:4px">Roots:</span>` + chipHtml.join('')
+        : `<span style="color:var(--muted-2);font-style:italic">No roots found in the visible window.</span>`;
+      schedDraw();
+    } else if (mode === 'intersect') {
+      intersectMarkers = [];
+      const chipHtml = [];
+      const active = fns.filter(fn => fn.expr.trim() && makeEval(fn.expr));
+      for (let a = 0; a < active.length; a++) {
+        for (let b = a + 1; b < active.length; b++) {
+          const fa = makeEval(active[a].expr);
+          const fb = makeEval(active[b].expr);
+          const pts = findIntersections(fa, fb, view.xMin, view.xMax);
+          pts.forEach(pt => {
+            intersectMarkers.push(pt);
+            chipHtml.push(`<span class="gc-result-chip"><span class="dot" style="background:#FFD23F"></span>(${formatN(pt.x)}, ${formatN(pt.y)})</span>`);
+          });
+        }
+      }
+      results.innerHTML = chipHtml.length
+        ? `<span class="gc-view-label" style="margin-right:4px">Intersections:</span>` + chipHtml.join('')
+        : (active.length < 2
+          ? `<span style="color:var(--muted-2);font-style:italic">Add at least 2 functions to find intersections.</span>`
+          : `<span style="color:var(--muted-2);font-style:italic">No intersections found in the visible window.</span>`);
+      schedDraw();
+    } else {
+      rootMarkers = [];
+      intersectMarkers = [];
+      const activeFns = fns.filter(fn => fn.expr.trim() && makeEval(fn.expr));
+      results.innerHTML = activeFns.length
+        ? activeFns.map(fn => `<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>${fn.expr}</span>`).join('')
+        : `<span style="color:var(--muted-2);font-style:italic">Enter a function above to plot it.</span>`;
+      schedDraw();
+    }
+  }
+
+  /* ── Function bar ── */
+  function renderFnBar() {
+    fnBar.innerHTML = '';
+    fns.forEach((fn, i) => {
+      const row = document.createElement('div');
+      row.className = 'gc-fn-row';
+      row.innerHTML = `
+        <span class="gc-fn-color" style="background:${fn.color}"></span>
+        <span class="gc-fn-label">y${i > 0 ? i+1 : ''} =</span>
+        <span class="gc-fn-eq" style="color:${fn.color}"></span>
+        <input class="gc-fn-input" id="gc-fn-${i}" value="${fn.expr.replace(/"/g,'&quot;')}"
+          placeholder="${i===0?'e.g. sin(x), x^2, abs(x-1)':i===1?'e.g. cos(x)':'f(x) = …'}"
+          spellcheck="false" autocomplete="off" autocorrect="off">
+        ${fns.length > 1 ? `<button class="gc-fn-del" data-del="${i}" title="Remove">×</button>` : ''}
+      `;
+      fnBar.appendChild(row);
+    });
+
+    // Add function button
+    if (fns.length < 6) {
+      const addBtn = document.createElement('div');
+      addBtn.className = 'gc-fn-add';
+      addBtn.textContent = 'Add function';
+      addBtn.addEventListener('click', () => {
+        fns.push({ expr: '', color: FN_COLORS[fns.length % FN_COLORS.length] });
+        renderFnBar();
+        fnBar.querySelectorAll('.gc-fn-input').forEach((inp, i2) => {
+          wireInput(inp, i2);
+          if (i2 === fns.length - 1) inp.focus();
+        });
+        runAnalysis();
+      });
+      fnBar.appendChild(addBtn);
+    }
+
+    fnBar.querySelectorAll('.gc-fn-input').forEach((inp, i2) => wireInput(inp, i2));
+    fnBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-del]');
+      if (!btn) return;
+      const idx = +btn.dataset.del;
+      fns.splice(idx, 1);
+      renderFnBar();
+      runAnalysis();
+    });
+  }
+
+  function wireInput(inp, i) {
+    inp.addEventListener('input', () => {
+      fns[i].expr = inp.value;
+      runAnalysis();
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { runAnalysis(); inp.blur(); }
+    });
+  }
+
+  /* ── View inputs ── */
+  function syncViewInputs() {
+    root.querySelector('#gc-xmin').value = parseFloat(view.xMin.toPrecision(6));
+    root.querySelector('#gc-xmax').value = parseFloat(view.xMax.toPrecision(6));
+    root.querySelector('#gc-ymin').value = parseFloat(view.yMin.toPrecision(6));
+    root.querySelector('#gc-ymax').value = parseFloat(view.yMax.toPrecision(6));
+  }
+  function readViewInputs() {
+    const xMin = parseFloat(root.querySelector('#gc-xmin').value);
+    const xMax = parseFloat(root.querySelector('#gc-xmax').value);
+    const yMin = parseFloat(root.querySelector('#gc-ymin').value);
+    const yMax = parseFloat(root.querySelector('#gc-ymax').value);
+    if (isFinite(xMin) && isFinite(xMax) && xMin < xMax &&
+        isFinite(yMin) && isFinite(yMax) && yMin < yMax) {
+      view = { xMin, xMax, yMin, yMax };
+      runAnalysis();
+    }
+  }
+  ['#gc-xmin','#gc-xmax','#gc-ymin','#gc-ymax'].forEach(sel => {
+    root.querySelector(sel).addEventListener('change', readViewInputs);
+    root.querySelector(sel).addEventListener('keydown', e => { if (e.key==='Enter') readViewInputs(); });
+  });
+  root.querySelector('#gc-reset-view').addEventListener('click', () => {
+    view = { xMin:-10, xMax:10, yMin:-7, yMax:7 };
+    syncViewInputs();
+    runAnalysis();
+  });
+
+  /* ── Mode buttons ── */
+  function setMode(m) {
+    mode = m;
+    root.querySelectorAll('.gc-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    rootMarkers = [];
+    intersectMarkers = [];
+    if (mode === 'trace') {
+      statusEl.textContent = 'Trace: drag or ← → to move along curve.';
+    } else if (mode === 'roots') {
+      statusEl.textContent = 'Finding roots in the visible x-range…';
+    } else if (mode === 'intersect') {
+      statusEl.textContent = 'Finding intersections in the visible x-range…';
+    } else {
+      statusEl.textContent = 'Scroll to zoom · Drag to pan.';
+    }
+    runAnalysis();
+  }
+  root.querySelectorAll('.gc-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+  });
+
+  /* ── Mouse / touch events ── */
+  function getCanvasXY(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  // Scroll to zoom
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const pt = getCanvasXY(e);
+    const wx = toWorld(pt.x, pt.y).x;
+    const wy = toWorld(pt.x, pt.y).y;
+    const factor = e.deltaY > 0 ? 1.12 : 0.89;
+    const cx = (pt.x / (canvas.width / (window.devicePixelRatio||1)));
+    const cy = (pt.y / (canvas.height / (window.devicePixelRatio||1)));
+    const xRange = (view.xMax - view.xMin) * factor;
+    const yRange = (view.yMax - view.yMin) * factor;
+    view.xMin = wx - cx * xRange;
+    view.xMax = wx + (1-cx) * xRange;
+    view.yMin = wy - (1-cy) * yRange;
+    view.yMax = wy + cy * yRange;
+    syncViewInputs();
+    runAnalysis();
+  }, { passive: false });
+
+  // Mouse pan / trace
+  canvas.addEventListener('mousedown', (e) => {
+    if (mode === 'trace') {
+      const pt = getCanvasXY(e);
+      const wx = toWorld(pt.x, pt.y).x;
+      const xRange = view.xMax - view.xMin;
+      traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
+      schedDraw();
+      return;
+    }
+    isPanning = true;
+    panStart = getCanvasXY(e);
+    panView = { ...view };
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    const pt = getCanvasXY(e);
+    const wx = toWorld(pt.x, pt.y);
+    cursorEl.textContent = `x=${formatN(wx.x)}  y=${formatN(wx.y)}`;
+    if (mode === 'trace' && e.buttons === 1) {
+      const xRange = view.xMax - view.xMin;
+      traceT = Math.max(0, Math.min(1, (wx.x - view.xMin) / xRange));
+      schedDraw();
+      return;
+    }
+    if (!isPanning || !panStart) return;
+    const dxW = (pt.x - panStart.x) / (canvas.width / (window.devicePixelRatio||1)) * (panView.xMax - panView.xMin);
+    const dyW = (pt.y - panStart.y) / (canvas.height / (window.devicePixelRatio||1)) * (panView.yMax - panView.yMin);
+    view.xMin = panView.xMin - dxW;
+    view.xMax = panView.xMax - dxW;
+    view.yMin = panView.yMin + dyW;
+    view.yMax = panView.yMax + dyW;
+    syncViewInputs();
+    schedDraw();
+  });
+  canvas.addEventListener('mouseup', () => { isPanning = false; panStart = null; if (mode === 'zoom') runAnalysis(); });
+  canvas.addEventListener('mouseleave', () => { cursorEl.textContent = ''; isPanning = false; });
+
+  // Keyboard trace
+  document.addEventListener('keydown', onKey);
+  function onKey(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight' && mode === 'trace') { traceT = Math.min(1, traceT + 0.005); schedDraw(); }
+    if (e.key === 'ArrowLeft'  && mode === 'trace') { traceT = Math.max(0, traceT - 0.005); schedDraw(); }
+    if (e.key === 'r' || e.key === 'R') setMode('roots');
+    if (e.key === 't' || e.key === 'T') setMode('trace');
+    if (e.key === '0') { view = { xMin:-10, xMax:10, yMin:-7, yMax:7 }; syncViewInputs(); runAnalysis(); }
+  }
+
+  // Touch pan & pinch-zoom
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const r = canvas.getBoundingClientRect();
+      if (mode === 'trace') {
+        const cx = t.clientX - r.left;
+        const xRange = view.xMax - view.xMin;
+        const wx = toWorld(cx, 0).x;
+        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
+        schedDraw();
+      } else {
+        isPanning = true;
+        panStart = { x: t.clientX - r.left, y: t.clientY - r.top };
+        panView = { ...view };
+      }
+    } else if (e.touches.length === 2) {
+      isPanning = false;
+      isPinching = true;
+      const r = canvas.getBoundingClientRect();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dx = (t0.clientX - t1.clientX), dy = (t0.clientY - t1.clientY);
+      pinchStart = { dist: Math.sqrt(dx*dx+dy*dy), view: { ...view } };
+    }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    if (isPinching && e.touches.length === 2 && pinchStart) {
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const factor = pinchStart.dist / dist;
+      const pv = pinchStart.view;
+      const cx = ((t0.clientX + t1.clientX)/2 - r.left) / (canvas.width / (window.devicePixelRatio||1));
+      const cy = ((t0.clientY + t1.clientY)/2 - r.top)  / (canvas.height / (window.devicePixelRatio||1));
+      const mx = pv.xMin + cx * (pv.xMax - pv.xMin);
+      const my = pv.yMin + (1-cy) * (pv.yMax - pv.yMin);
+      const xRange = (pv.xMax - pv.xMin) * factor;
+      const yRange = (pv.yMax - pv.yMin) * factor;
+      view.xMin = mx - cx * xRange;
+      view.xMax = mx + (1-cx) * xRange;
+      view.yMin = my - (1-cy) * yRange;
+      view.yMax = my + cy * yRange;
+      syncViewInputs(); schedDraw();
+    } else if (isPanning && e.touches.length === 1 && panStart) {
+      const t = e.touches[0];
+      const cx = t.clientX - r.left, cy = t.clientY - r.top;
+      if (mode === 'trace') {
+        const xRange = view.xMax - view.xMin;
+        const wx = toWorld(cx, 0).x;
+        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
+        schedDraw();
+      } else {
+        const dxW = (cx - panStart.x) / (canvas.width / (window.devicePixelRatio||1)) * (panView.xMax - panView.xMin);
+        const dyW = (cy - panStart.y) / (canvas.height / (window.devicePixelRatio||1)) * (panView.yMax - panView.yMin);
+        view.xMin = panView.xMin - dxW;
+        view.xMax = panView.xMax - dxW;
+        view.yMin = panView.yMin + dyW;
+        view.yMax = panView.yMax + dyW;
+        syncViewInputs(); schedDraw();
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => {
+    isPanning = false; isPinching = false; panStart = null;
+    if (mode !== 'trace') runAnalysis();
+  });
+
+  /* ── Init ── */
+  renderFnBar();
+  syncViewInputs();
+  setMode('zoom');
+  resize();
+
+  setTimeout(() => {
+    // Focus first input
+    const firstInp = fnBar.querySelector('.gc-fn-input');
+    if (firstInp) firstInp.focus();
+    runAnalysis();
+  }, 50);
+
+  return {
+    unmount() {
+      ro.disconnect();
+      document.removeEventListener('keydown', onKey);
+      if (rafId) cancelAnimationFrame(rafId);
+    }
+  };
+}
+
 registerTools();
 
 /* ========== FORMULA REFERENCE ========== */
@@ -9585,6 +11198,650 @@ function mountMathPractice(root) {
     }
   };
 }
+
+
+/* ========== STATISTICS SHEET ========== */
+function mountStats(root) {
+
+  /* ── State ── */
+  let datasets = Storage.get('stats:datasets', [{ name:'Dataset A', raw:'' }]);
+  let activeIdx = 0;
+  let activeTab = 'descriptive';
+
+  /* ── Math helpers ── */
+  function parseData(raw) {
+    return raw.split(/[\s,;\t\n]+/).map(s=>s.trim()).filter(s=>s!=='').map(Number).filter(n=>!isNaN(n));
+  }
+  function sorted(arr){ return [...arr].sort((a,b)=>a-b); }
+  function mean(arr){ return arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : NaN; }
+  function median(arr){ const s=sorted(arr),m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+  function mode(arr){
+    const freq={}; arr.forEach(x=>freq[x]=(freq[x]||0)+1);
+    const maxF=Math.max(...Object.values(freq));
+    return {values:Object.keys(freq).filter(k=>freq[k]===maxF).map(Number),freq:maxF};
+  }
+  function variance(arr,sample=true){
+    const m=mean(arr),n=sample?arr.length-1:arr.length;
+    if(n<=0)return NaN;
+    return arr.reduce((s,x)=>s+(x-m)**2,0)/n;
+  }
+  function stddev(arr,sample=true){ return Math.sqrt(variance(arr,sample)); }
+  function sem(arr){ return stddev(arr)/Math.sqrt(arr.length); }
+  function quartiles(arr){
+    const s=sorted(arr),n=s.length;
+    const q1=median(s.slice(0,Math.floor(n/2)));
+    const q3=median(s.slice(Math.ceil(n/2)));
+    return {q1,q3,iqr:q3-q1};
+  }
+  function skewness(arr){
+    const m=mean(arr),s=stddev(arr),n=arr.length;
+    if(s===0||n<3)return NaN;
+    return arr.reduce((acc,x)=>acc+((x-m)/s)**3,0)*n/((n-1)*(n-2));
+  }
+  function kurtosis(arr){
+    const m=mean(arr),s=stddev(arr),n=arr.length;
+    if(s===0||n<4)return NaN;
+    const k4=arr.reduce((acc,x)=>acc+((x-m)/s)**4,0);
+    return (n*(n+1))/((n-1)*(n-2)*(n-3))*k4-3*(n-1)**2/((n-2)*(n-3));
+  }
+
+  /* t-distribution p-value (two-tailed) via regularized incomplete beta */
+  function tDist(t,df){
+    const x=df/(df+t*t);
+    function lgamma(z){
+      const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];
+      let y=z,tmp=z+5.5; tmp-=(z+0.5)*Math.log(tmp); let ser=1.000000000190015;
+      for(let j=0;j<6;j++)ser+=c[j]/++y;
+      return -tmp+Math.log(2.5066282746310005*ser/z);
+    }
+    function betacf(a,b,x){
+      const MAXIT=200,EPS=3e-7,qab=a+b,qap=a+1,qam=a-1;
+      let c=1,d=1-qab*x/qap;
+      if(Math.abs(d)<1e-30)d=1e-30; d=1/d; let h=d;
+      for(let m=1;m<=MAXIT;m++){
+        let m2=2*m,aa=m*(b-m)*x/((qam+m2)*(a+m2));
+        d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
+        c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
+        d=1/d; h*=d*c;
+        aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+        d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
+        c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
+        d=1/d; const del=d*c; h*=del;
+        if(Math.abs(del-1)<EPS)break;
+      }
+      return h;
+    }
+    function betai(a,b,x){
+      if(x<0||x>1)return NaN; if(x===0)return 0; if(x===1)return 1;
+      const lb=lgamma(a)+lgamma(b)-lgamma(a+b);
+      return Math.exp(Math.log(x)*a+Math.log(1-x)*b-lb)*betacf(a,b,x)/a;
+    }
+    return betai(df/2,0.5,x);
+  }
+
+  /* t-critical via bisection */
+  function tCrit(df,conf){
+    const alpha=1-conf; let lo=0,hi=10;
+    for(let i=0;i<60;i++){const mid=(lo+hi)/2; if(tDist(mid,df)>alpha)lo=mid;else hi=mid;}
+    return (lo+hi)/2;
+  }
+
+  function oneSampleT(arr,mu0){
+    const n=arr.length,m=mean(arr),s=stddev(arr),t=(m-mu0)/(s/Math.sqrt(n)),df=n-1;
+    return {t,df,p:tDist(Math.abs(t),df),m,s,n};
+  }
+  function twoSampleT(a,b,equalVar=false){
+    const n1=a.length,n2=b.length,m1=mean(a),m2=mean(b),v1=variance(a),v2=variance(b);
+    let t,df;
+    if(equalVar){
+      const sp2=((n1-1)*v1+(n2-1)*v2)/(n1+n2-2);
+      t=(m1-m2)/Math.sqrt(sp2*(1/n1+1/n2)); df=n1+n2-2;
+    } else {
+      const se2=v1/n1+v2/n2;
+      t=(m1-m2)/Math.sqrt(se2);
+      df=se2**2/((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1));
+    }
+    return {t,df,p:tDist(Math.abs(t),df),m1,m2,n1,n2};
+  }
+  function pairedT(a,b){
+    if(a.length!==b.length)return null;
+    return oneSampleT(a.map((x,i)=>x-b[i]),0);
+  }
+  function ciMean(arr,conf=0.95){
+    const n=arr.length,m=mean(arr),s=stddev(arr),se=s/Math.sqrt(n),df=n-1;
+    const tc=tCrit(df,conf);
+    return {lower:m-tc*se,upper:m+tc*se,tc,se,m,n};
+  }
+  function linreg(xs,ys){
+    const n=xs.length; if(n<2)return null;
+    const mx=mean(xs),my=mean(ys);
+    let ssxy=0,ssx=0,ssy=0;
+    for(let i=0;i<n;i++){ssxy+=(xs[i]-mx)*(ys[i]-my);ssx+=(xs[i]-mx)**2;ssy+=(ys[i]-my)**2;}
+    if(ssx===0)return null;
+    const b=ssxy/ssx,a=my-b*mx,r=ssxy/Math.sqrt(ssx*ssy),r2=r**2;
+    const sse=ys.reduce((acc,y,i)=>acc+(y-(a+b*xs[i]))**2,0);
+    const se_b=Math.sqrt(sse/(n-2)/ssx);
+    return {a,b,r,r2,se_b,n};
+  }
+
+  function fmt(n,dp=4){
+    if(!isFinite(n))return '—';
+    if(Math.abs(n)>=1e6||(Math.abs(n)<0.0001&&n!==0))return n.toExponential(3);
+    return parseFloat(n.toPrecision(dp)).toString();
+  }
+  function fmtP(p){ if(!isFinite(p))return '—'; if(p<0.001)return '< 0.001'; return p.toFixed(3); }
+  function sigCode(p){ return p<0.001?'***':p<0.01?'**':p<0.05?'*':'ns'; }
+
+  /* ── Render ── */
+  function render(){
+    Storage.set('stats:datasets',datasets);
+    const ds=datasets[activeIdx];
+    const data=parseData(ds.raw);
+    const valid=data.length>=2;
+
+    root.innerHTML = `
+<style>
+.st-wrap{display:flex;flex-direction:column;gap:0}
+.st-top{display:flex;align-items:stretch;border-bottom:1px solid var(--rule)}
+.st-datasets{display:flex;align-items:center;overflow-x:auto;padding:10px 14px;flex:1;gap:0}
+.st-ds-tab{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:6px 14px;border:1px solid var(--muted-2);border-radius:2px;cursor:pointer;white-space:nowrap;color:var(--ink-2);background:var(--paper-2);margin-right:6px;transition:all .12s}
+.st-ds-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.st-ds-tab:hover:not(.active){border-color:var(--ink-2)}
+.st-ds-add{font-family:var(--mono);font-size:13px;padding:6px 12px;border:1px dashed var(--muted-2);border-radius:2px;cursor:pointer;color:var(--muted);transition:all .12s}
+.st-ds-add:hover{border-color:var(--ink-2);color:var(--ink)}
+.st-main{display:grid;grid-template-columns:250px 1fr;min-height:420px}
+@media(max-width:680px){.st-main{grid-template-columns:1fr}}
+.st-left{border-right:1px solid var(--rule);padding:16px;display:flex;flex-direction:column;gap:12px}
+.st-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.st-name-row{display:flex;align-items:center;gap:8px}
+.st-name{flex:1;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;padding:7px 10px;font-family:var(--sans);font-size:14px;color:var(--ink)}
+.st-name:focus{border-color:var(--accent-2);outline:none}
+.st-del{font-size:16px;opacity:.5;cursor:pointer;padding:4px;background:none;border:0;color:var(--ink)}
+.st-del:hover{opacity:1}
+.st-textarea{width:100%;min-height:180px;flex:1;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;padding:10px;font-family:var(--mono);font-size:12.5px;color:var(--ink);resize:none;line-height:1.6}
+.st-textarea:focus{border-color:var(--accent-2);outline:none}
+.st-paste-hint{font-size:11.5px;color:var(--muted);line-height:1.4}
+.st-count{font-family:var(--mono);font-size:11px;color:var(--accent)}
+.st-right{padding:16px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.st-tabs{display:flex;border-bottom:1px solid var(--rule);margin-bottom:14px}
+.st-tab{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:9px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .12s,border-color .12s;background:none;border-left:0;border-right:0;border-top:0}
+.st-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.st-tab:hover:not(.active){color:var(--ink-2)}
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.st-stat{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.st-stat .sl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.st-stat .sv{font-family:var(--mono);font-size:17px;color:var(--ink);font-weight:600}
+.st-stat .sv.acc{color:var(--accent)}
+.st-stat .ss{font-size:11px;color:var(--muted)}
+.st-sh{font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;color:var(--ink-2);border-bottom:1px solid var(--rule);padding-bottom:6px;margin-bottom:10px;margin-top:14px}
+.st-sh:first-child{margin-top:0}
+.st-box-bar{height:32px;background:var(--paper-3);border:1px solid var(--rule);border-radius:3px;position:relative;overflow:hidden;margin:8px 0 4px}
+.st-box-inner{position:absolute;top:0;bottom:0;background:var(--accent-soft);border-left:2px solid var(--accent);border-right:2px solid var(--accent)}
+.st-box-med{position:absolute;top:0;bottom:0;width:2px;background:var(--accent-2)}
+.st-box-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);padding:0 2px;margin-bottom:10px}
+.st-hist-wrap{height:130px;display:flex;align-items:flex-end;gap:2px;padding:0 0 24px;position:relative}
+.st-hist-bar{flex:1;background:var(--accent-soft);border-top:2px solid var(--accent);border-radius:1px 1px 0 0;position:relative;min-height:3px;cursor:default;transition:background .12s}
+.st-hist-bar:hover{background:rgba(255,90,61,.5)}
+.st-hist-axis{position:absolute;bottom:24px;left:0;right:0;height:1px;background:var(--rule)}
+.st-hist-lbl{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;color:var(--muted);white-space:nowrap}
+.st-trow{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:center;font-size:14px;margin-bottom:8px}
+.st-trow label{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.st-trow select,.st-trow input[type=number]{background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;padding:7px 10px;font-family:var(--mono);font-size:13px;color:var(--ink);width:100%}
+.st-trow select:focus,.st-trow input[type=number]:focus{border-color:var(--accent-2);outline:none}
+.st-run-btn{font-family:var(--sans);font-weight:600;font-size:14px;background:var(--accent);color:#fff;padding:10px 22px;border-radius:2px;cursor:pointer;border:0;transition:opacity .12s}
+.st-run-btn:hover{opacity:.85}
+.st-run-btn.ghost{background:var(--paper-3);color:var(--ink);border:1px solid var(--rule)}
+.st-rbox{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;margin-top:10px}
+.st-rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.st-rs{display:flex;flex-direction:column;gap:2px}
+.st-rs .rsl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.st-rs .rsv{font-family:var(--mono);font-size:16px;color:var(--ink)}
+.st-sig{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;padding:4px 10px;border-radius:2px;font-weight:600}
+.st-sig.sig{background:var(--accent-3);color:#fff}
+.st-sig.ns{background:var(--muted-2);color:var(--ink-2)}
+.st-interp{font-size:13px;color:var(--ink-2);line-height:1.5;margin-top:8px}
+.st-ci-bar{height:28px;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;position:relative;overflow:hidden;margin:8px 0}
+.st-ci-in{position:absolute;top:4px;bottom:4px;background:var(--accent-soft);border-left:2px solid var(--accent);border-right:2px solid var(--accent);border-radius:2px}
+.st-ci-pt{position:absolute;top:0;bottom:0;width:3px;background:var(--accent-2);border-radius:1px}
+.st-ci-lbl{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.st-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:48px 24px;color:var(--muted);text-align:center}
+.st-empty .ei{font-size:36px}
+.st-empty p{max-width:30ch;font-size:14px;line-height:1.5}
+</style>
+<div class="st-wrap">
+  <div class="st-top">
+    <div class="st-datasets" id="st-ds-tabs">
+      ${datasets.map((d,i)=>`<button class="st-ds-tab${i===activeIdx?' active':''}" data-ds="${i}">${d.name||'Dataset '+(i+1)}</button>`).join('')}
+      <button class="st-ds-add" id="st-ds-add">+ Add</button>
+    </div>
+  </div>
+  <div class="st-main">
+    <div class="st-left">
+      <div>
+        <div class="st-lbl">Dataset name</div>
+        <div class="st-name-row">
+          <input class="st-name" id="st-name" value="${ds.name||''}" placeholder="Dataset name…" maxlength="30">
+          ${datasets.length>1?`<button class="st-del" id="st-del" title="Delete">🗑</button>`:''}
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="st-lbl">Data values <span class="st-count" id="st-count">${valid?data.length+' values':'paste or type below'}</span></div>
+        <textarea class="st-textarea" id="st-input" placeholder="Paste numbers — spaces, commas, tabs, or newlines. Works directly from Excel / Google Sheets.">${ds.raw}</textarea>
+        <div class="st-paste-hint">Tip: copy a column from Excel or Sheets and paste here.</div>
+      </div>
+    </div>
+    <div class="st-right">
+      <div class="st-tabs">
+        <button class="st-tab${activeTab==='descriptive'?' active':''}" data-tab="descriptive">Descriptive</button>
+        <button class="st-tab${activeTab==='compare'?' active':''}" data-tab="compare">Compare / T-Test</button>
+        <button class="st-tab${activeTab==='regression'?' active':''}" data-tab="regression">Regression</button>
+      </div>
+      <div id="st-content">${valid?buildTab(data):buildEmpty()}</div>
+    </div>
+  </div>
+</div>`;
+
+    wire(data, valid);
+    if(valid) setTimeout(()=>{ postRender(data); }, 10);
+  }
+
+  function buildEmpty(){
+    return `<div class="st-empty"><div class="ei">📊</div><p>Enter at least 2 numbers to see analysis.</p></div>`;
+  }
+
+  function buildTab(data){
+    if(activeTab==='descriptive') return buildDescriptive(data);
+    if(activeTab==='compare') return buildCompare(data);
+    if(activeTab==='regression') return buildRegression();
+    return '';
+  }
+
+  function buildDescriptive(data){
+    const n=data.length, m=mean(data), med=median(data);
+    const {values:mv,freq:mf}=mode(data);
+    const s=sorted(data), sd=stddev(data), psd=stddev(data,false), se=sem(data);
+    const {q1,q3,iqr}=quartiles(data);
+    const sk=skewness(data), ku=kurtosis(data);
+    const ci=ciMean(data,0.95);
+    const sum=data.reduce((a,x)=>a+x,0);
+    const cv=sd/Math.abs(m)*100;
+    const skDesc=Math.abs(sk)<0.5?'approx. symmetric':sk>0?'right-skewed':'left-skewed';
+    const kuDesc=Math.abs(ku)<0.5?'mesokurtic':ku>0?'leptokurtic':'platykurtic';
+    return `
+      <div class="st-sh st-sh--first">Central Tendency</div>
+      <div class="st-grid">
+        <div class="st-stat"><div class="sl">N</div><div class="sv acc">${n}</div></div>
+        <div class="st-stat"><div class="sl">Mean</div><div class="sv">${fmt(m)}</div><div class="ss">arithmetic</div></div>
+        <div class="st-stat"><div class="sl">Median</div><div class="sv">${fmt(med)}</div></div>
+        <div class="st-stat"><div class="sl">Mode</div><div class="sv" style="font-size:13px">${mv.slice(0,3).map(fmt).join(', ')}${mv.length>3?'…':''}</div><div class="ss">freq: ${mf}</div></div>
+      </div>
+      <div class="st-sh">Spread</div>
+      <div class="st-grid">
+        <div class="st-stat"><div class="sl">Std Dev (s)</div><div class="sv">${fmt(sd)}</div><div class="ss">sample</div></div>
+        <div class="st-stat"><div class="sl">Std Dev (σ)</div><div class="sv">${fmt(psd)}</div><div class="ss">population</div></div>
+        <div class="st-stat"><div class="sl">Variance s²</div><div class="sv">${fmt(sd*sd)}</div></div>
+        <div class="st-stat"><div class="sl">Std Error</div><div class="sv">${fmt(se)}</div></div>
+        <div class="st-stat"><div class="sl">Range</div><div class="sv">${fmt(s[n-1]-s[0])}</div></div>
+        <div class="st-stat"><div class="sl">IQR</div><div class="sv">${fmt(iqr)}</div></div>
+        <div class="st-stat"><div class="sl">CV</div><div class="sv">${fmt(cv,3)}%</div><div class="ss">coeff. of variation</div></div>
+        <div class="st-stat"><div class="sl">Sum</div><div class="sv">${fmt(sum)}</div></div>
+      </div>
+      <div class="st-sh">Five-Number Summary</div>
+      <div class="st-box-bar" id="st-box"></div>
+      <div class="st-box-labels">
+        <span>Min: ${fmt(s[0])}</span><span>Q1: ${fmt(q1)}</span><span>Med: ${fmt(med)}</span><span>Q3: ${fmt(q3)}</span><span>Max: ${fmt(s[n-1])}</span>
+      </div>
+      <div class="st-sh">Distribution Shape</div>
+      <div class="st-grid">
+        <div class="st-stat"><div class="sl">Skewness</div><div class="sv">${fmt(sk,3)}</div><div class="ss">${skDesc}</div></div>
+        <div class="st-stat"><div class="sl">Ex. Kurtosis</div><div class="sv">${fmt(ku,3)}</div><div class="ss">${kuDesc}</div></div>
+        <div class="st-stat"><div class="sl">Min</div><div class="sv">${fmt(s[0])}</div></div>
+        <div class="st-stat"><div class="sl">Max</div><div class="sv">${fmt(s[n-1])}</div></div>
+      </div>
+      <div class="st-sh">95% Confidence Interval for Mean</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">t-based · df=${n-1} · t*≈${fmt(ci.tc,3)}</div>
+      <div class="st-ci-bar" id="st-ci-bar"></div>
+      <div class="st-ci-lbl"><span>${fmt(ci.lower)}</span><span style="color:var(--accent-2)">x̄=${fmt(m)}</span><span>${fmt(ci.upper)}</span></div>
+      <div class="st-sh">Histogram</div>
+      <div class="st-hist-wrap" id="st-hist"><div class="st-hist-axis"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="st-run-btn ghost" id="st-copy-desc">📋 Copy Summary</button>
+        <button class="st-run-btn ghost" id="st-export-csv">⬇ Export CSV</button>
+      </div>`;
+  }
+
+  function buildCompare(data){
+    const otherOpts=datasets.map((d,i)=>`<option value="${i}"${i===activeIdx?' selected':''}>${d.name||'Dataset '+(i+1)} (n=${parseData(d.raw).length})</option>`).join('');
+    const saved=Storage.get('stats:tconfig',{type:'one',mu0:0,conf:'0.95',varEq:false});
+    const ci=ciMean(data,parseFloat(saved.conf)||0.95);
+    return `
+      <div class="st-sh st-sh--first">T-Test</div>
+      <div class="st-trow"><label>Test type</label>
+        <select id="st-ttype">
+          <option value="one"${saved.type==='one'?' selected':''}>One-sample</option>
+          <option value="two"${saved.type==='two'?' selected':''}>Independent two-sample</option>
+          <option value="paired"${saved.type==='paired'?' selected':''}>Paired</option>
+        </select>
+      </div>
+      <div id="st-one-opts" style="${saved.type!=='one'?'display:none':''}">
+        <div class="st-trow"><label>Null mean μ₀</label><input type="number" id="st-mu0" value="${saved.mu0||0}" step="any"></div>
+      </div>
+      <div id="st-two-opts" style="${saved.type==='one'?'display:none':''}">
+        <div class="st-trow"><label>Compare with</label><select id="st-b-ds">${otherOpts}</select></div>
+        <div id="st-eqv-row" style="${saved.type!=='two'?'display:none':''}">
+          <div class="st-trow"><label>Variance</label>
+            <select id="st-var-eq">
+              <option value="unequal"${!saved.varEq?' selected':''}>Unequal — Welch</option>
+              <option value="equal"${saved.varEq?' selected':''}>Equal — pooled</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="st-trow"><label>Significance</label>
+        <select id="st-conf">
+          <option value="0.90"${saved.conf==='0.90'?' selected':''}>α = 0.10 (90%)</option>
+          <option value="0.95"${saved.conf!=='0.90'&&saved.conf!=='0.99'?' selected':''}>α = 0.05 (95%)</option>
+          <option value="0.99"${saved.conf==='0.99'?' selected':''}>α = 0.01 (99%)</option>
+        </select>
+      </div>
+      <button class="st-run-btn" id="st-run-t">Run T-Test</button>
+      <div id="st-t-result"></div>
+      <div class="st-sh" style="margin-top:20px">Confidence Interval for Mean</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+        ${Math.round((parseFloat(saved.conf)||0.95)*100)}% CI · n=${ci.n} · df=${ci.n-1} · t*≈${fmt(ci.tc,3)}
+      </div>
+      <div class="st-ci-bar" id="st-ci-bar2"></div>
+      <div class="st-ci-lbl"><span>${fmt(ci.lower)}</span><span style="color:var(--accent-2)">x̄=${fmt(ci.m)}</span><span>${fmt(ci.upper)}</span></div>
+      <div class="st-grid" style="margin-top:10px">
+        <div class="st-stat"><div class="sl">Lower</div><div class="sv">${fmt(ci.lower)}</div></div>
+        <div class="st-stat"><div class="sl">Upper</div><div class="sv">${fmt(ci.upper)}</div></div>
+        <div class="st-stat"><div class="sl">Width</div><div class="sv">${fmt(ci.upper-ci.lower)}</div></div>
+        <div class="st-stat"><div class="sl">Std Error</div><div class="sv">${fmt(ci.se)}</div></div>
+      </div>`;
+  }
+
+  function buildRegression(){
+    const opts=datasets.map((d,i)=>`<option value="${i}">${d.name||'Dataset '+(i+1)} (n=${parseData(d.raw).length})</option>`).join('');
+    return `
+      <div class="st-sh st-sh--first">Linear Regression</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px;max-width:52ch">Use two datasets as x (predictor) and y (outcome). Both must have values; mismatched lengths are trimmed to the shorter.</p>
+      <div class="st-trow"><label>X (predictor)</label><select id="st-reg-x">${opts}</select></div>
+      <div class="st-trow"><label>Y (outcome)</label><select id="st-reg-y">${opts}</select></div>
+      <button class="st-run-btn" id="st-run-reg">Run Regression</button>
+      <div id="st-reg-result"></div>`;
+  }
+
+  function postRender(data){
+    // Box plot
+    const box=document.getElementById('st-box');
+    if(box){
+      const s=sorted(data), min=s[0], max=s[s.length-1], rng=max-min||1;
+      const {q1,q3}=quartiles(data), med=median(data);
+      const q1p=((q1-min)/rng*100).toFixed(1), q3p=((q3-min)/rng*100).toFixed(1), medp=((med-min)/rng*100).toFixed(1);
+      box.innerHTML=`<div class="st-box-inner" style="left:${q1p}%;right:${(100-parseFloat(q3p)).toFixed(1)}%"></div><div class="st-box-med" style="left:${medp}%"></div>`;
+    }
+    // CI bar (descriptive tab)
+    renderCIBar('st-ci-bar', data, ciMean(data,0.95));
+    // CI bar (compare tab)
+    const conf2=parseFloat(document.getElementById('st-conf')?.value||'0.95')||0.95;
+    renderCIBar('st-ci-bar2', data, ciMean(data,conf2));
+    // Histogram
+    const hist=document.getElementById('st-hist');
+    if(hist){
+      const bins=Math.min(20,Math.max(5,Math.round(1+3.322*Math.log10(data.length))));
+      const min=Math.min(...data), max=Math.max(...data), bw=(max-min)/bins||1;
+      const counts=Array(bins).fill(0);
+      data.forEach(x=>{const bi=Math.min(bins-1,Math.floor((x-min)/bw));counts[bi]++;});
+      const maxC=Math.max(...counts);
+      hist.innerHTML='<div class="st-hist-axis"></div>'+counts.map((c,i)=>{
+        const h=maxC>0?(c/maxC*100):0;
+        const lbl=fmt(min+i*bw,3);
+        return `<div class="st-hist-bar" style="height:${h}%" title="${c} values"><span class="st-hist-lbl">${lbl}</span></div>`;
+      }).join('');
+    }
+  }
+
+  function renderCIBar(id, data, ci){
+    const el=document.getElementById(id);
+    if(!el||!ci)return;
+    const s=sorted(data), min=s[0], max=s[s.length-1], rng=max-min||1;
+    const lo=Math.max(min,ci.lower), hi=Math.min(max,ci.upper);
+    const lop=((lo-min)/rng*100).toFixed(1), hip=((hi-min)/rng*100).toFixed(1);
+    const mp=((ci.m-min)/rng*100).toFixed(1);
+    el.innerHTML=`<div class="st-ci-in" style="left:${lop}%;right:${(100-parseFloat(hip)).toFixed(1)}%"></div><div class="st-ci-pt" style="left:${mp}%"></div>`;
+  }
+
+  function runTTest(data){
+    const type=document.getElementById('st-ttype').value;
+    const conf=parseFloat(document.getElementById('st-conf').value)||0.95;
+    const mu0=parseFloat(document.getElementById('st-mu0')?.value||'0')||0;
+    const bIdx=parseInt(document.getElementById('st-b-ds')?.value||'0');
+    const varEq=document.getElementById('st-var-eq')?.value==='equal';
+    Storage.set('stats:tconfig',{type,mu0,conf:String(conf),varEq});
+    const resultEl=document.getElementById('st-t-result');
+    const alpha=1-conf;
+
+    function showResult(res, extra, interp){
+      const sig=res.p<alpha;
+      resultEl.innerHTML=`<div class="st-rbox">
+        <div class="st-rgrid">${extra}</div>
+        <div><span class="st-sig ${sig?'sig':'ns'}">${sigCode(res.p)} · p = ${fmtP(res.p)}</span></div>
+        <div class="st-interp">${interp}</div>
+      </div>`;
+    }
+
+    if(type==='one'){
+      const r=oneSampleT(data,mu0);
+      const sig=r.p<alpha;
+      showResult(r,`
+        <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
+        <div class="st-rs"><div class="rsl">df</div><div class="rsv">${r.df}</div></div>
+        <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+        <div class="st-rs"><div class="rsl">Sample mean</div><div class="rsv">${fmt(r.m)}</div></div>
+        <div class="st-rs"><div class="rsl">n</div><div class="rsv">${r.n}</div></div>
+        <div class="st-rs"><div class="rsl">Std Dev</div><div class="rsv">${fmt(r.s)}</div></div>`,
+        `Mean (${fmt(r.m)}) is <b>${sig?'significantly different from':'not significantly different from'}</b> μ₀ = ${mu0} at α = ${alpha.toFixed(2)}. ${sig?'Reject H₀.':'Fail to reject H₀.'}`);
+    } else {
+      const bData=parseData(datasets[bIdx].raw);
+      if(bData.length<2){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Second dataset needs ≥ 2 values.</p></div>`;return;}
+      if(type==='two'){
+        const r=twoSampleT(data,bData,varEq);
+        const sig=r.p<alpha;
+        showResult(r,`
+          <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
+          <div class="st-rs"><div class="rsl">df</div><div class="rsv">${fmt(r.df,3)}</div></div>
+          <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+          <div class="st-rs"><div class="rsl">Mean A</div><div class="rsv">${fmt(r.m1)}</div></div>
+          <div class="st-rs"><div class="rsl">Mean B</div><div class="rsv">${fmt(r.m2)}</div></div>
+          <div class="st-rs"><div class="rsl">Difference</div><div class="rsv">${fmt(r.m1-r.m2)}</div></div>`,
+          `${varEq?'Pooled':'Welch'} t-test: <b>${datasets[activeIdx].name||'A'}</b> (x̄=${fmt(r.m1)}) vs <b>${datasets[bIdx].name||'B'}</b> (x̄=${fmt(r.m2)}) — means are <b>${sig?'significantly different':'not significantly different'}</b> at α=${alpha.toFixed(2)}.`);
+      } else {
+        if(data.length!==bData.length){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Paired test requires equal-length datasets (A has ${data.length}, B has ${bData.length}).</p></div>`;return;}
+        const r=pairedT(data,bData);
+        const sig=r.p<alpha;
+        showResult(r,`
+          <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
+          <div class="st-rs"><div class="rsl">df</div><div class="rsv">${r.df}</div></div>
+          <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+          <div class="st-rs"><div class="rsl">n pairs</div><div class="rsv">${r.n}</div></div>
+          <div class="st-rs"><div class="rsl">Mean diff</div><div class="rsv">${fmt(r.m)}</div></div>
+          <div class="st-rs"><div class="rsl">SD diff</div><div class="rsv">${fmt(r.s)}</div></div>`,
+          `Paired t-test on ${r.n} pairs: mean difference is ${fmt(r.m)}. <b>${sig?'Significant difference found':'No significant difference'}</b> at α=${alpha.toFixed(2)}.`);
+      }
+    }
+  }
+
+  function runRegression(){
+    const xi=parseInt(document.getElementById('st-reg-x').value);
+    const yi=parseInt(document.getElementById('st-reg-y').value);
+    const xs=parseData(datasets[xi].raw), ys=parseData(datasets[yi].raw);
+    const resultEl=document.getElementById('st-reg-result');
+    if(xs.length<2||ys.length<2){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Need ≥ 2 values in each dataset.</p></div>`;return;}
+    const n=Math.min(xs.length,ys.length), xd=xs.slice(0,n), yd=ys.slice(0,n);
+    const reg=linreg(xd,yd);
+    if(!reg){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Cannot compute (zero variance in x?).</p></div>`;return;}
+    const rStr=Math.abs(reg.r)>0.8?'Strong':Math.abs(reg.r)>0.5?'Moderate':'Weak';
+    const rDir=reg.r>0?'positive':'negative';
+    resultEl.innerHTML=`<div class="st-rbox" style="margin-top:12px">
+      <div class="st-rgrid">
+        <div class="st-rs"><div class="rsl">Slope b</div><div class="rsv">${fmt(reg.b)}</div></div>
+        <div class="st-rs"><div class="rsl">Intercept a</div><div class="rsv">${fmt(reg.a)}</div></div>
+        <div class="st-rs"><div class="rsl">r (Pearson)</div><div class="rsv">${fmt(reg.r,4)}</div></div>
+        <div class="st-rs"><div class="rsl">R²</div><div class="rsv">${fmt(reg.r2,4)}</div></div>
+        <div class="st-rs"><div class="rsl">SE of slope</div><div class="rsv">${fmt(reg.se_b)}</div></div>
+        <div class="st-rs"><div class="rsl">n</div><div class="rsv">${reg.n}</div></div>
+      </div>
+      <div class="st-interp">
+        <b>ŷ = ${fmt(reg.a)} + ${fmt(reg.b)}x</b><br>
+        ${rStr} ${rDir} relationship (r = ${fmt(reg.r,3)}). R² = ${(reg.r2*100).toFixed(1)}% variance explained.
+      </div>
+      <canvas id="st-scatter" height="180" style="width:100%;max-height:180px;margin-top:14px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>
+    </div>`;
+    // Draw scatter
+    const canvas=document.getElementById('st-scatter');
+    if(!canvas)return;
+    const dpr=window.devicePixelRatio||1;
+    canvas.width=canvas.offsetWidth*dpr; canvas.height=180*dpr;
+    const ctx2=canvas.getContext('2d'); ctx2.scale(dpr,dpr);
+    const W=canvas.offsetWidth,H=180,pad=30;
+    const xMin=Math.min(...xd),xMax=Math.max(...xd),yMin=Math.min(...yd),yMax=Math.max(...yd);
+    const xR=xMax-xMin||1,yR=yMax-yMin||1;
+    const px=x=>pad+(x-xMin)/xR*(W-2*pad);
+    const py=y=>H-pad-(y-yMin)/yR*(H-2*pad);
+    ctx2.strokeStyle='rgba(240,233,218,0.15)';ctx2.lineWidth=1;
+    ctx2.beginPath();ctx2.moveTo(pad,pad);ctx2.lineTo(pad,H-pad);ctx2.lineTo(W-pad,H-pad);ctx2.stroke();
+    // Regression line
+    ctx2.strokeStyle='#FF5A3D';ctx2.lineWidth=2;
+    ctx2.beginPath();ctx2.moveTo(px(xMin),py(reg.a+reg.b*xMin));ctx2.lineTo(px(xMax),py(reg.a+reg.b*xMax));ctx2.stroke();
+    // Points
+    ctx2.fillStyle='rgba(255,90,61,0.7)';
+    xd.forEach((x,i)=>{ctx2.beginPath();ctx2.arc(px(x),py(yd[i]),4,0,Math.PI*2);ctx2.fill();});
+    // Labels
+    ctx2.fillStyle='rgba(131,124,112,0.9)';ctx2.font=`${9*dpr}px monospace`;ctx2.scale(1/dpr,1/dpr);
+    ctx2.fillText(fmt(xMin,3),pad*dpr,(H-14)*dpr);
+    ctx2.fillText(fmt(xMax,3),(W-pad-20)*dpr,(H-14)*dpr);
+  }
+
+  function wire(data, valid){
+    // Dataset switching
+    document.getElementById('st-ds-tabs')?.addEventListener('click',e=>{
+      const tab=e.target.closest('[data-ds]');
+      if(tab){activeIdx=parseInt(tab.dataset.ds);render();}
+      if(e.target.id==='st-ds-add'){
+        datasets.push({name:'Dataset '+(datasets.length+1),raw:''});
+        activeIdx=datasets.length-1;
+        Storage.set('stats:datasets',datasets);
+        render();
+      }
+    });
+    // Name
+    document.getElementById('st-name')?.addEventListener('input',e=>{
+      datasets[activeIdx].name=e.target.value;
+      Storage.set('stats:datasets',datasets);
+      const tab=document.querySelector(`.st-ds-tab[data-ds="${activeIdx}"]`);
+      if(tab)tab.textContent=e.target.value||'Dataset '+(activeIdx+1);
+    });
+    // Delete
+    document.getElementById('st-del')?.addEventListener('click',()=>{
+      if(datasets.length<=1)return;
+      datasets.splice(activeIdx,1);
+      activeIdx=Math.min(activeIdx,datasets.length-1);
+      Storage.set('stats:datasets',datasets);
+      render();
+    });
+    // Data input
+    let debounce;
+    document.getElementById('st-input')?.addEventListener('input',e=>{
+      datasets[activeIdx].raw=e.target.value;
+      Storage.set('stats:datasets',datasets);
+      clearTimeout(debounce);
+      debounce=setTimeout(()=>{
+        const d=parseData(e.target.value);
+        const ok=d.length>=2;
+        const countEl=document.getElementById('st-count');
+        if(countEl)countEl.textContent=ok?d.length+' values':'paste or type below';
+        const contentEl=document.getElementById('st-content');
+        if(contentEl){
+          contentEl.innerHTML=ok?buildTab(d):buildEmpty();
+          if(ok) setTimeout(()=>{ postRender(d); wireInner(d,ok); },10);
+        }
+      },350);
+    });
+    // Tabs
+    root.querySelectorAll('.st-tab').forEach(t=>{
+      t.addEventListener('click',()=>{
+        activeTab=t.dataset.tab;
+        root.querySelectorAll('.st-tab').forEach(x=>x.classList.toggle('active',x===t));
+        const contentEl=document.getElementById('st-content');
+        if(contentEl){
+          contentEl.innerHTML=valid?buildTab(data):buildEmpty();
+          if(valid) setTimeout(()=>{ postRender(data); wireInner(data,valid); },10);
+        }
+      });
+    });
+    if(valid) wireInner(data,valid);
+  }
+
+  function wireInner(data,valid){
+    // T-type
+    document.getElementById('st-ttype')?.addEventListener('change',e=>{
+      const v=e.target.value;
+      const oneOpts=document.getElementById('st-one-opts');
+      const twoOpts=document.getElementById('st-two-opts');
+      const eqvRow=document.getElementById('st-eqv-row');
+      if(oneOpts)oneOpts.style.display=v==='one'?'':'none';
+      if(twoOpts)twoOpts.style.display=v!=='one'?'':'none';
+      if(eqvRow)eqvRow.style.display=v==='two'?'':'none';
+    });
+    // Conf change → rebuild CI section
+    document.getElementById('st-conf')?.addEventListener('change',e=>{
+      const conf=parseFloat(e.target.value)||0.95;
+      renderCIBar('st-ci-bar2',data,ciMean(data,conf));
+    });
+    // Run t-test
+    document.getElementById('st-run-t')?.addEventListener('click',()=>runTTest(data));
+    // Run regression
+    document.getElementById('st-run-reg')?.addEventListener('click',runRegression);
+    // Copy summary
+    document.getElementById('st-copy-desc')?.addEventListener('click',e=>{
+      if(!valid)return;
+      const m=mean(data),s=sorted(data),sd=stddev(data),{q1,q3}=quartiles(data);
+      const txt=[
+        `Statistics — ${datasets[activeIdx].name||'Dataset'}`,
+        `n = ${data.length}`,`Mean = ${fmt(m)}`,`Median = ${fmt(median(data))}`,
+        `Std Dev (s) = ${fmt(sd)}`,`Std Error = ${fmt(sem(data))}`,
+        `Min = ${fmt(s[0])}  Max = ${fmt(s[s.length-1])}`,
+        `Q1 = ${fmt(q1)}  Q3 = ${fmt(q3)}  IQR = ${fmt(q3-q1)}`,
+        `Skewness = ${fmt(skewness(data),3)}  Kurtosis = ${fmt(kurtosis(data),3)}`,
+      ].join('\n');
+      navigator.clipboard.writeText(txt).catch(()=>{});
+      e.target.textContent='✓ Copied!';
+      setTimeout(()=>{e.target.textContent='📋 Copy Summary';},1800);
+    });
+    // Export CSV
+    document.getElementById('st-export-csv')?.addEventListener('click',()=>{
+      if(!valid)return;
+      const m=mean(data),s=sorted(data),sd=stddev(data),{q1,q3}=quartiles(data);
+      const rows=[
+        ['Statistic','Value'],['n',data.length],['Mean',fmt(m)],
+        ['Median',fmt(median(data))],['Std Dev (s)',fmt(sd)],
+        ['Std Dev (σ)',fmt(stddev(data,false))],['Std Error',fmt(sem(data))],
+        ['Min',fmt(s[0])],['Max',fmt(s[s.length-1])],
+        ['Q1',fmt(q1)],['Q3',fmt(q3)],['IQR',fmt(q3-q1)],
+        ['Skewness',fmt(skewness(data),3)],['Kurtosis',fmt(kurtosis(data),3)],
+        [],['Raw Data'],...data.map(x=>[x]),
+      ];
+      const csv=rows.map(r=>r.join(',')).join('\n');
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+      a.download=(datasets[activeIdx].name||'dataset')+'_stats.csv';
+      a.click();
+    });
+  }
+
+  render();
+}
+
 
 boot();
 
