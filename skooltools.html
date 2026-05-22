@@ -4031,6 +4031,9 @@ function registerTools() {
   TOOLS.push({ id:'typing', shelf:'words', icon:'⌨️', name:'Typing Test',
     desc:'Classroom passages, WPM, accuracy.', tag:'upgraded',
     keywords:['typing','wpm','speed'], mount: mountTyping });
+  TOOLS.push({ id:'grammar', shelf:'words', icon:'✍️', name:'Grammar & Spellcheck',
+    desc:'Spelling, grammar, style — all checked offline.', tag:'new',
+    keywords:['grammar','spell','spellcheck','passive','voice','punctuation','writing','proofread','check'], mount: mountGrammar });
 
   /* ============== STUDY ============== */
   TOOLS.push({ id:'flashcards', shelf:'study', icon:'🃏', name:'Flashcards',
@@ -11840,6 +11843,611 @@ function mountStats(root) {
   }
 
   render();
+}
+
+
+/* ========== GRAMMAR & SPELLCHECK ========== */
+function mountGrammar(root) {
+
+  // ─── Colour legend ───────────────────────────────────────────────
+  // red   = spelling
+  // amber = grammar / confused words
+  // blue  = style (passive, length, repetition)
+  // green = punctuation
+
+  // ─── Commonly-confused word pairs ────────────────────────────────
+  const CONFUSED = [
+    { a:'their', b:'there',    hint:'their = belonging to them · there = a place or filler · they\'re = they are' },
+    { a:'their', b:"they're",  hint:'their = belonging to them · they\'re = they are' },
+    { a:'there', b:"they're",  hint:'there = a place · they\'re = they are' },
+    { a:'its',   b:"it's",     hint:'its = belonging to it · it\'s = it is / it has' },
+    { a:'your',  b:"you're",   hint:'your = belonging to you · you\'re = you are' },
+    { a:'whose', b:"who's",    hint:'whose = belonging to whom · who\'s = who is / who has' },
+    { a:'then',  b:'than',     hint:'then = time or sequence · than = comparison' },
+    { a:'affect', b:'effect',  hint:'affect = verb (to influence) · effect = noun (a result)' },
+    { a:'accept', b:'except',  hint:'accept = to receive / agree · except = excluding' },
+    { a:'principle', b:'principal', hint:'principle = a rule or belief · principal = head of school, or primary' },
+    { a:'complement', b:'compliment', hint:'complement = to complete · compliment = praise' },
+    { a:'elicit', b:'illicit', hint:'elicit = to draw out · illicit = illegal' },
+    { a:'further', b:'farther', hint:'farther = physical distance · further = degree or extent' },
+    { a:'fewer', b:'less',     hint:'fewer = countable things · less = uncountable amounts' },
+    { a:'who',   b:'whom',     hint:'who = subject (he/she) · whom = object (him/her)' },
+    { a:'lay',   b:'lie',      hint:'lay = to place something (transitive) · lie = to recline (intransitive)' },
+    { a:'loose', b:'lose',     hint:'loose = not tight · lose = to misplace or be defeated' },
+    { a:'ensure', b:'insure',  hint:'ensure = to make certain · insure = to obtain insurance' },
+    { a:'imply', b:'infer',    hint:'imply = to hint at (speaker) · infer = to deduce (listener)' },
+    { a:'advice', b:'advise',  hint:'advice = noun (a recommendation) · advise = verb (to recommend)' },
+    { a:'breath', b:'breathe', hint:'breath = noun · breathe = verb' },
+    { a:'passed', b:'past',    hint:'passed = verb (moved by) · past = time gone or preposition' },
+    { a:'led',   b:'lead',     hint:'led = past tense of "lead" · lead = present tense or the metal' },
+    { a:'site',  b:'sight',    hint:'site = location · sight = vision' },
+    { a:'cite',  b:'site',     hint:'cite = to reference · site = location' },
+    { a:'stationary', b:'stationery', hint:'stationary = not moving · stationery = paper and pens' },
+    { a:'awhile', b:'a while', hint:'awhile = adverb (for a time) · a while = noun phrase (a period of time)' },
+  ];
+
+  // ─── Grammar rules (regex-based) ─────────────────────────────────
+  const GRAMMAR_RULES = [
+    { id:'dbl-neg',  re:/\b(can't|cannot|won't|don't|doesn't|didn't|isn't|aren't|wasn't|weren't|never)\s+(no|nothing|nobody|nowhere|none|neither)\b/gi,
+      label:'Double negative', why:'Double negatives cancel out and create a positive meaning unintentionally. Use one negative word.', cat:'grammar' },
+    { id:'a-an',     re:/\ba\s+([aeiou])/gi,
+      label:'a/an agreement', why:'Use "an" before words that begin with a vowel sound (an apple, an hour).', cat:'grammar' },
+    { id:'subj-verb-plural', re:/\b(everyone|everyone|anybody|nobody|somebody|someone|no one|nothing|everything|either|neither)\s+(are|were|have|do)\b/gi,
+      label:'Subject–verb agreement', why:'Indefinite pronouns (everyone, nobody, someone…) take singular verbs: is, was, has.', cat:'grammar' },
+    { id:'sentence-frag', re:/^[A-Z][^.!?]{0,30}[,;]\s*$/gm,
+      label:'Possible sentence fragment', why:'This looks like a clause without a main verb or ending punctuation. Make sure it\'s a complete sentence.', cat:'grammar' },
+    { id:'comma-splice', re:/[a-z,]{4,},\s+[A-Z][a-z]{2,}\s+(?:is|are|was|were|has|have|had|will|would|can|could|should|did|does|do)\b/g,
+      label:'Possible comma splice', why:'Two independent clauses joined only by a comma is a comma splice. Use a semicolon, a period, or a coordinating conjunction (for, and, nor, but, or, yet, so).', cat:'grammar' },
+  ];
+
+  // ─── Style rules ─────────────────────────────────────────────────
+  const CLICHÉS = [
+    'at the end of the day','at this point in time','due to the fact that',
+    'in order to','in the event that','it goes without saying',
+    'needless to say','as a matter of fact','for all intents and purposes',
+    'the bottom line','thinking outside the box','touch base',
+    'going forward','paradigm shift','synergy','circle back',
+    'low-hanging fruit','move the needle','take it to the next level',
+    'at the end of the day','first and foremost','last but not least',
+    'without further ado','in conclusion','in summary',
+  ];
+  const WORDY = [
+    { match:/\bin order to\b/gi, suggest:'to' },
+    { match:/\bdue to the fact that\b/gi, suggest:'because' },
+    { match:/\bat this point in time\b/gi, suggest:'now' },
+    { match:/\bin the event that\b/gi, suggest:'if' },
+    { match:/\bthe reason why is that\b/gi, suggest:'because' },
+    { match:/\ba large number of\b/gi, suggest:'many' },
+    { match:/\bhas the ability to\b/gi, suggest:'can' },
+    { match:/\bin spite of the fact that\b/gi, suggest:'although' },
+    { match:/\bprior to\b/gi, suggest:'before' },
+    { match:/\bsubsequent to\b/gi, suggest:'after' },
+  ];
+
+  // ─── Passive voice detection ──────────────────────────────────────
+  const BE_FORMS = 'is|are|was|were|been|being|be|am';
+  const PAST_PARTICIPLES = /\b(is|are|was|were|been|being|be|am)\s+((?:not\s+)?(?:\w+ed|built|found|given|known|made|said|seen|taken|told|written|broken|chosen|done|drawn|driven|eaten|fallen|flown|forgotten|frozen|given|grown|held|hidden|known|laid|left|led|lent|lost|meant|met|paid|proven|put|read|ridden|risen|run|set|shown|shut|spoken|spent|stood|stolen|sung|sunk|swum|swung|taught|thought|thrown|understood|upset|won|worn|woken|woven))\b/gi;
+
+  // ─── Punctuation rules ────────────────────────────────────────────
+  const PUNCT_RULES = [
+    { re:/,\s*and\s+,/gi, label:'Stray comma', why:'Remove the comma before the second "and."', cat:'punct' },
+    { re:/\s,/g,          label:'Space before comma', why:'Commas go directly after the word, with no space before.', cat:'punct' },
+    { re:/\s\./g,         label:'Space before period', why:'Periods go directly after the word, with no space before.', cat:'punct' },
+    { re:/[.!?]{2,}/g,    label:'Multiple end marks', why:'Use a single punctuation mark to end a sentence.', cat:'punct' },
+    { re:/,{2,}/g,        label:'Double comma', why:'Only one comma is needed here.', cat:'punct' },
+    { re:/\bi\.e\.\s+/gi, label:'i.e. missing comma', why:'Use a comma after "i.e." — e.g., "i.e., like this."', cat:'punct', suggest:'i.e., ' },
+    { re:/\be\.g\.\s+/gi, label:'e.g. missing comma', why:'Use a comma after "e.g." — e.g., like this.', cat:'punct', suggest:'e.g., ' },
+  ];
+
+  // ─── Simple spell-checker (known common misspellings) ────────────
+  const MISSPELLINGS = {
+    'accomodate':'accommodate','accidentaly':'accidentally','acheive':'achieve',
+    'acknowlege':'acknowledge','acquaintence':'acquaintance','aquire':'acquire',
+    'arguement':'argument','athelete':'athlete','begining':'beginning',
+    'beleive':'believe','calender':'calendar','catagory':'category',
+    'charachter':'character','collegue':'colleague','commited':'committed',
+    'comittee':'committee','concious':'conscious','controversal':'controversial',
+    'convienience':'convenience','copywrite':'copyright','definate':'definite',
+    'dependant':'dependent','desparate':'desperate','dictionairy':'dictionary',
+    'dissapear':'disappear','dissapoint':'disappoint','enviroment':'environment',
+    'equiptment':'equipment','exagerate':'exaggerate','existance':'existence',
+    'experiance':'experience','Febuary':'February','firey':'fiery',
+    'fourty':'forty','freind':'friend','foriegn':'foreign',
+    'goverment':'government','grammer':'grammar','gaurd':'guard',
+    'happend':'happened','harass':'harass','hieght':'height',
+    'humourous':'humorous','ignorence':'ignorance','imediate':'immediate',
+    'independant':'independent','indispensible':'indispensable','innoculate':'inoculate',
+    'intellegent':'intelligent','intresting':'interesting','irresistable':'irresistible',
+    'knowlege':'knowledge','liesure':'leisure','liason':'liaison',
+    'lisence':'license','maintainance':'maintenance','mischievious':'mischievous',
+    'misspell':'misspell','neccessary':'necessary','noticable':'noticeable',
+    'occurance':'occurrence','occured':'occurred','offence':'offense',
+    'ommission':'omission','oppurtunity':'opportunity','paralell':'parallel',
+    'parliment':'parliament','peculier':'peculiar','percieve':'perceive',
+    'persistance':'persistence','pharoah':'pharaoh','posession':'possession',
+    'predjudice':'prejudice','privelege':'privilege','proably':'probably',
+    'professionaly':'professionally','pronounciation':'pronunciation',
+    'publically':'publicly','questionaire':'questionnaire','recieve':'receive',
+    'reccomend':'recommend','refered':'referred','relevent':'relevant',
+    'religous':'religious','rember':'remember','repitition':'repetition',
+    'resistence':'resistance','responsability':'responsibility','seperate':'separate',
+    'sieze':'seize','similiar':'similar','speach':'speech','succesful':'successful',
+    'supercede':'supersede','suprise':'surprise','tendancy':'tendency',
+    'therefor':'therefore','transfered':'transferred','truely':'truly',
+    'unforseen':'unforeseen','untill':'until','vaccum':'vacuum',
+    'visable':'visible','wierd':'weird','writting':'writing',
+    'writen':'written','yesturday':'yesterday',
+    // contractions
+    'cant':'can\'t','dont':'don\'t','doesnt':'doesn\'t','didnt':'didn\'t',
+    'isnt':'isn\'t','arent':'aren\'t','wasnt':'wasn\'t','werent':'weren\'t',
+    'wont':'won\'t','havent':'haven\'t','hasnt':'hasn\'t','hadnt':'hadn\'t',
+    'wouldnt':'wouldn\'t','couldnt':'couldn\'t','shouldnt':'shouldn\'t',
+    'im':'I\'m','ive':'I\'ve','id':'I\'d','ill':'I\'ll',
+  };
+
+  // ─── UI HTML ──────────────────────────────────────────────────────
+  root.innerHTML = `
+    <style>
+      .gc-wrap{display:grid;grid-template-columns:1fr 320px;gap:18px;min-height:480px}
+      @media(max-width:820px){.gc-wrap{grid-template-columns:1fr;grid-template-rows:auto auto}}
+      .gc-editor-col{display:flex;flex-direction:column;gap:0}
+      .gc-editor-box{
+        position:relative;flex:1;
+        border:1px solid var(--rule);border-radius:3px;
+        background:var(--paper-2);
+        overflow:hidden;
+      }
+      #gc-ta{
+        width:100%;min-height:300px;padding:18px;resize:vertical;
+        background:transparent;border:none;outline:none;
+        font-family:var(--sans);font-size:15px;line-height:1.65;color:var(--ink);
+        position:relative;z-index:2;
+      }
+      .gc-highlight-layer{
+        position:absolute;inset:0;padding:18px;
+        font-family:var(--sans);font-size:15px;line-height:1.65;
+        pointer-events:none;z-index:1;white-space:pre-wrap;word-break:break-word;
+        color:transparent;
+      }
+      .gc-highlight-layer mark{
+        border-radius:2px;padding:1px 0;
+        background:transparent;
+        border-bottom:2px solid;
+      }
+      .gc-highlight-layer mark.spell {border-bottom-color:#FF5A3D;background:#FF5A3D18}
+      .gc-highlight-layer mark.grammar{border-bottom-color:#FFD23F;background:#FFD23F12}
+      .gc-highlight-layer mark.style  {border-bottom-color:#6A95FF;background:#6A95FF12}
+      .gc-highlight-layer mark.punct  {border-bottom-color:#4EAE53;background:#4EAE5318}
+      .gc-toolbar{
+        display:flex;align-items:center;gap:10px;
+        padding:8px 0 12px;flex-wrap:wrap;
+      }
+      .gc-check-btn{
+        font-family:var(--sans);font-weight:600;font-size:13px;
+        background:var(--ink);color:var(--paper);
+        padding:8px 16px;border-radius:2px;cursor:pointer;
+        transition:transform .12s,box-shadow .12s;
+        box-shadow:2px 2px 0 0 var(--accent);
+        letter-spacing:.01em;
+      }
+      .gc-check-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 0 var(--accent)}
+      .gc-check-btn:active{transform:translate(1px,1px);box-shadow:none}
+      .gc-clear-btn{
+        font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--muted);padding:6px 10px;border:1px solid var(--rule);border-radius:2px;cursor:pointer;
+        transition:color .12s,border-color .12s;
+      }
+      .gc-clear-btn:hover{color:var(--ink-2);border-color:var(--ink-2)}
+      .gc-copy-btn{
+        margin-left:auto;
+        font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+        color:var(--muted);text-transform:uppercase;
+        padding:4px 8px;border:1px solid var(--rule);border-radius:2px;
+        transition:color .12s,border-color .12s;cursor:pointer;
+      }
+      .gc-copy-btn:hover{color:var(--ink);border-color:var(--ink-2)}
+      .gc-copy-btn.copied{color:var(--accent-3);border-color:var(--accent-3)}
+
+      /* Sidebar */
+      .gc-panel{
+        background:var(--paper-2);border:1px solid var(--rule);
+        border-radius:3px;display:flex;flex-direction:column;overflow:hidden;
+      }
+      .gc-summary{
+        display:grid;grid-template-columns:repeat(4,1fr);
+        border-bottom:1px solid var(--rule);
+      }
+      .gc-stat{
+        padding:12px 10px;text-align:center;border-right:1px solid var(--rule);
+      }
+      .gc-stat:last-child{border-right:none}
+      .gc-stat-n{
+        font-family:var(--serif);font-weight:500;font-size:26px;
+        line-height:1;letter-spacing:-.02em;color:var(--ink);
+      }
+      .gc-stat-n.spell {color:#FF5A3D}
+      .gc-stat-n.grammar{color:#FFD23F}
+      .gc-stat-n.style  {color:#6A95FF}
+      .gc-stat-n.punct  {color:#4EAE53}
+      .gc-stat-l{
+        font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--muted);margin-top:3px;
+      }
+      .gc-issues{flex:1;overflow-y:auto;max-height:480px}
+      .gc-empty{
+        padding:32px 18px;text-align:center;
+        font-family:var(--serif);font-style:italic;font-size:15px;color:var(--muted);
+      }
+      .gc-issue{
+        border-bottom:1px solid var(--rule-2);padding:12px 14px;
+        cursor:pointer;transition:background .1s;
+      }
+      .gc-issue:hover{background:var(--paper-3)}
+      .gc-issue:last-child{border-bottom:none}
+      .gc-issue-top{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+      .gc-issue-dot{
+        width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:3px;
+      }
+      .gc-issue-dot.spell {background:#FF5A3D}
+      .gc-issue-dot.grammar{background:#FFD23F}
+      .gc-issue-dot.style  {background:#6A95FF}
+      .gc-issue-dot.punct  {background:#4EAE53}
+      .gc-issue-label{
+        font-family:var(--sans);font-weight:600;font-size:12px;color:var(--ink);
+        flex:1;
+      }
+      .gc-issue-cat{
+        font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--muted);
+      }
+      .gc-issue-phrase{
+        font-family:var(--mono);font-size:11px;color:var(--accent);
+        margin-bottom:4px;word-break:break-all;
+      }
+      .gc-issue-why{
+        font-size:12px;line-height:1.45;color:var(--ink-2);
+      }
+      .gc-issue-fix{
+        margin-top:6px;
+        font-family:var(--mono);font-size:11px;color:var(--accent-3);
+      }
+      .gc-legend{
+        display:flex;gap:12px;flex-wrap:wrap;padding:2px 0 12px;
+      }
+      .gc-leg{
+        display:flex;align-items:center;gap:5px;
+        font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+        text-transform:uppercase;color:var(--muted);
+      }
+      .gc-leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+      .gc-leg-dot.spell {background:#FF5A3D}
+      .gc-leg-dot.grammar{background:#FFD23F}
+      .gc-leg-dot.style  {background:#6A95FF}
+      .gc-leg-dot.punct  {background:#4EAE53}
+      .gc-score-bar{
+        display:flex;align-items:center;gap:10px;padding:10px 14px;
+        border-top:1px solid var(--rule);background:var(--paper-3);
+      }
+      .gc-score-label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+      .gc-score-track{flex:1;height:5px;background:var(--rule);border-radius:3px;overflow:hidden}
+      .gc-score-fill{height:100%;border-radius:3px;transition:width .4s ease,background .4s ease}
+      .gc-score-val{font-family:var(--mono);font-size:12px;color:var(--ink);min-width:36px;text-align:right}
+    </style>
+
+    <div class="gc-legend">
+      <span class="gc-leg"><span class="gc-leg-dot spell"></span>Spelling</span>
+      <span class="gc-leg"><span class="gc-leg-dot grammar"></span>Grammar</span>
+      <span class="gc-leg"><span class="gc-leg-dot style"></span>Style</span>
+      <span class="gc-leg"><span class="gc-leg-dot punct"></span>Punctuation</span>
+    </div>
+
+    <div class="gc-wrap">
+      <div class="gc-editor-col">
+        <div class="gc-editor-box">
+          <div class="gc-highlight-layer" id="gc-hl" aria-hidden="true"></div>
+          <textarea id="gc-ta" spellcheck="false"
+            placeholder="Type or paste your text here — an essay, paragraph, or email. Press Check or just keep typing and the tool runs automatically."
+            rows="14" aria-label="Text to check"></textarea>
+        </div>
+        <div class="gc-toolbar">
+          <button class="gc-check-btn" id="gc-run">Check now</button>
+          <button class="gc-clear-btn" id="gc-clear">Clear</button>
+          <button class="gc-copy-btn" id="gc-copy">Copy text</button>
+        </div>
+      </div>
+
+      <div class="gc-panel">
+        <div class="gc-summary">
+          <div class="gc-stat"><div class="gc-stat-n spell" id="gs-spell">0</div><div class="gc-stat-l">Spell</div></div>
+          <div class="gc-stat"><div class="gc-stat-n grammar" id="gs-gram">0</div><div class="gc-stat-l">Grammar</div></div>
+          <div class="gc-stat"><div class="gc-stat-n style" id="gs-style">0</div><div class="gc-stat-l">Style</div></div>
+          <div class="gc-stat"><div class="gc-stat-n punct" id="gs-punct">0</div><div class="gc-stat-l">Punct</div></div>
+        </div>
+        <div class="gc-issues" id="gc-issues">
+          <div class="gc-empty">Paste or type some text, then press <strong>Check now</strong>.</div>
+        </div>
+        <div class="gc-score-bar">
+          <span class="gc-score-label">Score</span>
+          <div class="gc-score-track"><div class="gc-score-fill" id="gc-score-fill" style="width:0%;background:var(--accent-3)"></div></div>
+          <span class="gc-score-val" id="gc-score-val">—</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="help">All checks run in your browser — nothing leaves your device. Results are suggestions, not rulings; use your judgment, especially for style.</p>
+  `;
+
+  // ─── Utility: escape HTML ─────────────────────────────────────────
+  const esc  = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const q    = (sel) => root.querySelector(sel);
+
+  // ─── Core analysis function ───────────────────────────────────────
+  function analyse(text) {
+    const issues = []; // { cat, label, why, fix, phrase, start, end }
+
+    // 1. SPELLING ─────────────────────────────────────────────────
+    const tokenRe = /\b([a-zA-Z'-]+)\b/g;
+    let m;
+    while ((m = tokenRe.exec(text)) !== null) {
+      const raw = m[1];
+      const lower = raw.toLowerCase();
+      if (MISSPELLINGS[lower] || (MISSPELLINGS[raw])) {
+        const fix = MISSPELLINGS[lower] || MISSPELLINGS[raw];
+        // Don't double-count overlapping matches
+        if (!issues.some(i => i.start === m.index)) {
+          issues.push({ cat:'spell', label:'Misspelling', phrase:raw,
+            why:`"${raw}" is commonly misspelled.`,
+            fix:`Did you mean: ${fix}`,
+            start:m.index, end:m.index + raw.length });
+        }
+      }
+    }
+
+    // 2. COMMONLY CONFUSED WORDS ──────────────────────────────────
+    CONFUSED.forEach(pair => {
+      // find each word in text and flag it alongside its pair if both are nearby
+      [pair.a, pair.b].forEach(word => {
+        const re = new RegExp(`\\b${word.replace(/'/g,"\\'")}\\b`, 'gi');
+        let cm;
+        while ((cm = re.exec(text)) !== null) {
+          // Only flag if no spelling error already on this spot
+          if (!issues.some(i => i.start === cm.index && i.cat === 'spell')) {
+            issues.push({ cat:'grammar', label:'Commonly confused', phrase:cm[0],
+              why: pair.hint,
+              fix:'Check which word fits the meaning here.',
+              start:cm.index, end:cm.index + cm[0].length, _confused:true });
+          }
+        }
+      });
+    });
+    // Deduplicate confused pairs that are flagged only if not clearly wrong
+    // (keep only one entry per position)
+    const seen = new Set();
+    const deduped = [];
+    issues.forEach(i => {
+      const key = `${i.start}-${i.end}`;
+      if (!seen.has(key)) { seen.add(key); deduped.push(i); }
+    });
+    issues.length = 0; issues.push(...deduped);
+
+    // 3. GRAMMAR RULES ────────────────────────────────────────────
+    GRAMMAR_RULES.forEach(rule => {
+      let gr;
+      rule.re.lastIndex = 0;
+      while ((gr = rule.re.exec(text)) !== null) {
+        issues.push({ cat:'grammar', label:rule.label, phrase:gr[0],
+          why:rule.why, fix:'Revise this construction.',
+          start:gr.index, end:gr.index + gr[0].length });
+      }
+    });
+
+    // 4. PASSIVE VOICE ────────────────────────────────────────────
+    PAST_PARTICIPLES.lastIndex = 0;
+    let pv;
+    while ((pv = PAST_PARTICIPLES.exec(text)) !== null) {
+      issues.push({ cat:'style', label:'Passive voice', phrase:pv[0],
+        why:`Passive voice ("${pv[0]}") makes writing weaker and less direct. Rewrite with an active subject performing the action.`,
+        fix:'Rewrite: who or what does the action?',
+        start:pv.index, end:pv.index + pv[0].length });
+    }
+
+    // 5. PUNCTUATION ──────────────────────────────────────────────
+    PUNCT_RULES.forEach(rule => {
+      let pr;
+      rule.re.lastIndex = 0;
+      while ((pr = rule.re.exec(text)) !== null) {
+        issues.push({ cat:'punct', label:rule.label, phrase:pr[0],
+          why:rule.why,
+          fix: rule.suggest ? `Suggestion: "${rule.suggest}"` : 'Fix punctuation here.',
+          start:pr.index, end:pr.index + pr[0].length });
+      }
+    });
+
+    // 6. REPEATED WORDS ───────────────────────────────────────────
+    const rptRe = /\b(\w{2,})\s+\1\b/gi;
+    let rp;
+    while ((rp = rptRe.exec(text)) !== null) {
+      issues.push({ cat:'spell', label:'Repeated word', phrase:rp[0],
+        why:`The word "${rp[1]}" appears twice in a row.`,
+        fix:`Remove one "${rp[1]}".`,
+        start:rp.index, end:rp.index + rp[0].length });
+    }
+
+    // 7. VERY LONG SENTENCES ─────────────────────────────────────
+    const sentRe = /[^.!?\n]+[.!?]/g;
+    let sr;
+    while ((sr = sentRe.exec(text)) !== null) {
+      const words = sr[0].trim().split(/\s+/).length;
+      if (words > 45) {
+        issues.push({ cat:'style', label:'Very long sentence', phrase: sr[0].trim().slice(0,60) + (sr[0].length > 60 ? '…' : ''),
+          why:`This sentence is ${words} words long. Sentences over 40 words are hard to follow. Consider splitting it.`,
+          fix:'Split into two or more shorter sentences.',
+          start:sr.index, end:sr.index + sr[0].length });
+      }
+    }
+
+    // 8. CLICHÉS ─────────────────────────────────────────────────
+    CLICHÉS.forEach(phrase => {
+      const re = new RegExp(`\\b${phrase.replace(/\s+/g,'\\s+')}\\b`, 'gi');
+      let cl;
+      while ((cl = re.exec(text)) !== null) {
+        issues.push({ cat:'style', label:'Cliché / wordy phrase', phrase:cl[0],
+          why:`"${cl[0]}" is a cliché or filler phrase that weakens your writing.`,
+          fix:'Replace with plain, direct language.',
+          start:cl.index, end:cl.index + cl[0].length });
+      }
+    });
+
+    // 9. WORDY PHRASES ────────────────────────────────────────────
+    WORDY.forEach(({match, suggest}) => {
+      match.lastIndex = 0;
+      let wp;
+      while ((wp = match.exec(text)) !== null) {
+        issues.push({ cat:'style', label:'Wordy phrase', phrase:wp[0],
+          why:`"${wp[0]}" can almost always be shortened.`,
+          fix:`Suggestion: "${suggest}"`,
+          start:wp.index, end:wp.index + wp[0].length });
+      }
+    });
+
+    // 10. CAPITALIZATION AFTER PERIOD ────────────────────────────
+    const capRe = /[.!?]\s+([a-z])/g;
+    let cap;
+    while ((cap = capRe.exec(text)) !== null) {
+      // Skip abbreviations / bullet-list context
+      const before = text.slice(Math.max(0, cap.index - 4), cap.index);
+      if (/[A-Z]\.$/.test(before.trim())) continue; // initials
+      const pos = cap.index + (cap[0].length - 1);
+      issues.push({ cat:'punct', label:'Lowercase after sentence end', phrase: text.slice(cap.index, cap.index + cap[0].length),
+        why:'The first word of a sentence should be capitalised.',
+        fix:`Capitalise "${cap[1]}" → "${cap[1].toUpperCase()}"`,
+        start:pos, end:pos + 1 });
+    }
+
+    // sort by position
+    issues.sort((a,b) => a.start - b.start);
+    return issues;
+  }
+
+  // ─── Build highlighted HTML overlay ──────────────────────────────
+  function buildHighlight(text, issues) {
+    // Build a list of non-overlapping ranges
+    const ranges = [];
+    issues.forEach(iss => {
+      if (!ranges.some(r => r.start < iss.end && r.end > iss.start)) {
+        ranges.push({ start:iss.start, end:iss.end, cat:iss.cat });
+      }
+    });
+    ranges.sort((a,b) => a.start - b.start);
+    let html = '';
+    let cursor = 0;
+    ranges.forEach(r => {
+      if (r.start > cursor) html += esc(text.slice(cursor, r.start));
+      html += `<mark class="${r.cat}">${esc(text.slice(r.start, r.end))}</mark>`;
+      cursor = r.end;
+    });
+    if (cursor < text.length) html += esc(text.slice(cursor));
+    return html.replace(/\n/g, '<br>');
+  }
+
+  // ─── Render sidebar issues ────────────────────────────────────────
+  function renderIssues(issues) {
+    const spell  = issues.filter(i => i.cat === 'spell').length;
+    const gram   = issues.filter(i => i.cat === 'grammar').length;
+    const style  = issues.filter(i => i.cat === 'style').length;
+    const punct  = issues.filter(i => i.cat === 'punct').length;
+    q('#gs-spell').textContent = spell;
+    q('#gs-gram').textContent  = gram;
+    q('#gs-style').textContent = style;
+    q('#gs-punct').textContent = punct;
+
+    const total = issues.length;
+    // Score: start at 100, penalise per issue (spell -6, gram -4, style -2, punct -3), floor 0
+    const deduct = spell*6 + gram*4 + style*2 + punct*3;
+    const score  = Math.max(0, Math.min(100, 100 - deduct));
+    const scoreColor = score >= 80 ? 'var(--accent-3)' : score >= 55 ? 'var(--accent-2)' : 'var(--accent)';
+    q('#gc-score-fill').style.width = score + '%';
+    q('#gc-score-fill').style.background = scoreColor;
+    q('#gc-score-val').textContent = total === 0 ? '100' : score + '/100';
+
+    const box = q('#gc-issues');
+    if (total === 0) {
+      box.innerHTML = `<div class="gc-empty">✓ No issues found. Looks good.</div>`;
+      return;
+    }
+    const CAT_LABEL = { spell:'Spelling', grammar:'Grammar', style:'Style', punct:'Punctuation' };
+    box.innerHTML = issues.map((iss,i) => `
+      <div class="gc-issue" data-idx="${i}">
+        <div class="gc-issue-top">
+          <span class="gc-issue-dot ${iss.cat}"></span>
+          <span class="gc-issue-label">${esc(iss.label)}</span>
+          <span class="gc-issue-cat">${CAT_LABEL[iss.cat]||iss.cat}</span>
+        </div>
+        <div class="gc-issue-phrase">"${esc(iss.phrase)}"</div>
+        <div class="gc-issue-why">${esc(iss.why)}</div>
+        ${iss.fix ? `<div class="gc-issue-fix">→ ${esc(iss.fix)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  // ─── Run check ───────────────────────────────────────────────────
+  let lastIssues = [];
+  function runCheck() {
+    const text = q('#gc-ta').value;
+    if (!text.trim()) {
+      q('#gc-issues').innerHTML = '<div class="gc-empty">Nothing to check yet.</div>';
+      ['#gs-spell','#gs-gram','#gs-style','#gs-punct'].forEach(s => q(s).textContent = '0');
+      q('#gc-score-fill').style.width = '0%';
+      q('#gc-score-val').textContent = '—';
+      q('#gc-hl').innerHTML = '';
+      return;
+    }
+    lastIssues = analyse(text);
+    q('#gc-hl').innerHTML = buildHighlight(text, lastIssues);
+    renderIssues(lastIssues);
+  }
+
+  // ─── Sync highlight layer scroll with textarea ────────────────────
+  const ta = q('#gc-ta');
+  const hl = q('#gc-hl');
+  ta.addEventListener('scroll', () => {
+    hl.scrollTop  = ta.scrollTop;
+    hl.scrollLeft = ta.scrollLeft;
+  });
+
+  // ─── Auto-run on input (debounced 600ms) ─────────────────────────
+  let debTimer;
+  ta.addEventListener('input', () => {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(runCheck, 600);
+  });
+
+  // ─── Button wiring ────────────────────────────────────────────────
+  q('#gc-run').addEventListener('click', runCheck);
+
+  q('#gc-clear').addEventListener('click', () => {
+    ta.value = '';
+    hl.innerHTML = '';
+    q('#gc-issues').innerHTML = '<div class="gc-empty">Paste or type some text, then press <strong>Check now</strong>.</div>';
+    ['#gs-spell','#gs-gram','#gs-style','#gs-punct'].forEach(s => q(s).textContent = '0');
+    q('#gc-score-fill').style.width = '0%';
+    q('#gc-score-val').textContent = '—';
+    ta.focus();
+  });
+
+  q('#gc-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(ta.value).then(() => {
+      const btn = q('#gc-copy');
+      btn.textContent = '✓ Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy text'; btn.classList.remove('copied'); }, 1800);
+    }).catch(() => {});
+  });
+
+  // ─── Restore from localStorage ────────────────────────────────────
+  const saved = Storage.get('grammar:text', '');
+  if (saved) { ta.value = saved; runCheck(); }
+  ta.addEventListener('input', () => Storage.set('grammar:text', ta.value));
 }
 
 
