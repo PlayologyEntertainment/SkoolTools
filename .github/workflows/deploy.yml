@@ -1,11 +1,11 @@
-name: Deploy SkoolTools to Hostinger
+name: Deploy SkoolToolz to Hostinger
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'SkoolTools.html'
+      - 'SkoolToolz.html'
   workflow_dispatch:
 
 jobs:
@@ -15,10 +15,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Upload SkoolTools.html via FTP
+      - name: Upload SkoolToolz.html via FTP
         run: |
-          curl -T SkoolTools.html \
+          curl -T SkoolToolz.html \
             --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
             --max-time 60 \
             --connect-timeout 20 \
-            "ftp://ftp.playologyentertainment.com/SkoolTools/SkoolTools.html"
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/SkoolToolz.html"
