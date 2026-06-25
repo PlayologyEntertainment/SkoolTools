@@ -1,0 +1,24 @@
+name: Deploy SkoolTools to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'SkoolTools.html'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload SkoolTools.html via FTP
+        run: |
+          curl -T SkoolTools.html \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolTools/SkoolTools.html"
