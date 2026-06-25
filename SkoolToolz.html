@@ -355,10 +355,20 @@ main{padding:28px 28px 80px}
   display:flex;flex-direction:column;gap:4px;
   min-height:96px;
 }
+/* Per-category accent — drives the subtle hover tint.
+   Set on every card (in shelves and in the Pinned/Recent rail) so a
+   card keeps its original category color wherever it appears. */
+.tool[data-shelf="plan"]    {--cat-color:var(--purple)}
+.tool[data-shelf="study"]   {--cat-color:var(--accent-2)}
+.tool[data-shelf="numbers"] {--cat-color:var(--accent)}
+.tool[data-shelf="words"]   {--cat-color:var(--accent-3)}
+.tool[data-shelf="lab"]     {--cat-color:var(--accent-4)}
+.tool[data-shelf="toolbox"] {--cat-color:var(--pink)}
+
 .tool:hover{
   transform:translate(-2px,-2px);
   border-color:var(--ink-2);
-  background:var(--paper-3);
+  background:color-mix(in srgb, var(--cat-color, var(--accent-2)) 9%, var(--paper-2));
   box-shadow:4px 4px 0 0 var(--ink);
 }
 .tool:active{transform:translate(0,0);box-shadow:none}
@@ -399,7 +409,8 @@ main{padding:28px 28px 80px}
   font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--muted);
   border:1px solid var(--muted-2);padding:2px 5px;border-radius:2px;background:#000;
 }
-.tool.soon:hover{transform:none;box-shadow:none;border-color:#000;background:#000}
+.tool.soon:hover{transform:none;box-shadow:none;border-color:#000;
+  background:color-mix(in srgb, var(--cat-color, var(--accent-2)) 9%, #000)}
 
 .no-results{
   padding:60px 20px;text-align:center;color:var(--muted);
@@ -4180,7 +4191,7 @@ function toolCard(t) {
   const card = el('button', {
     class: `tool${isSoon ? ' soon' : ''}${isPinned ? ' pinned' : ''}`,
     attrs: { 'data-id': t.id, 'data-name': t.name.toLowerCase(),
-             'aria-label': `Open ${t.name}` }
+             'data-shelf': t.shelf, 'aria-label': `Open ${t.name}` }
   });
   card.appendChild(el('span', { class:'ico', text: t.icon }));
   card.appendChild(el('div', { class:'nm', text: t.name }));
