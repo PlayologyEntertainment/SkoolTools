@@ -2234,6 +2234,23 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
 }
 .calc-soon h4{font-family:var(--serif);font-size:24px;font-weight:500;margin:0 0 8px;color:var(--ink)}
 .calc-soon p{max-width:46ch;margin:0 auto 8px}
+.calc-subtabs{display:inline-flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:14px}
+.calc-subtab{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:8px 16px;cursor:pointer;background:transparent;
+  transition:color .12s,background .12s;
+}
+.calc-subtab:hover{color:var(--ink-2)}
+.calc-subtab.active{color:var(--paper);background:var(--accent)}
+.calc-dir{display:inline-flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden;flex-wrap:wrap}
+.calc-dirbtn{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  color:var(--muted);padding:9px 12px;cursor:pointer;background:transparent;
+  border-right:1px solid var(--rule);transition:color .12s,background .12s;
+}
+.calc-dirbtn:last-child{border-right:none}
+.calc-dirbtn:hover{color:var(--ink-2)}
+.calc-dirbtn.active{color:var(--paper);background:var(--accent)}
 
 </style>
 </head>
@@ -4309,13 +4326,62 @@ function mountCalculus(root) {
     });
   };
 
-  const upcoming = (title, blurb) => `
-    <div class="calc-soon">
-      <div class="calc-soon-badge">On the roadmap</div>
-      <h4>${title}</h4>
-      <p>${blurb}</p>
-      <p class="help">Derivatives ship first (Phase 1.1). ${escape('Integrals & limits follow in the same tool.')}</p>
+  /* ── shared building blocks across the three modes ── */
+  const PAL = {
+    'x':'x', '+':'+', '−':'-', '^':'^', '( )':'()', '√':'sqrt()', 'π':'pi',
+    'sin( )':'sin()', 'cos( )':'cos()', 'tan( )':'tan()', 'ln( )':'ln()', 'e^( )':'e^()'
+  };
+  const palHTML = () => `
+    <div class="calc-pal" aria-label="Insert symbol">
+      ${['x','+','−','^','( )','√','π','sin( )','cos( )','tan( )','ln( )','e^( )'].map(s =>
+        `<button type="button" data-ins="${escape(s)}">${escape(s)}</button>`).join('')}
     </div>`;
+  const wirePalette = (getInput) => {
+    const pal = $('.calc-pal');
+    if (!pal) return;
+    pal.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-ins]');
+      if (!b) return;
+      const input = getInput();
+      if (!input) return;
+      const ins = PAL[b.dataset.ins] ?? b.dataset.ins;
+      const caretInside = ins.endsWith('()');
+      const s = input.selectionStart ?? input.value.length, en = input.selectionEnd ?? input.value.length;
+      input.value = input.value.slice(0, s) + ins + input.value.slice(en);
+      const pos = s + ins.length - (caretInside ? 1 : 0);
+      input.focus(); input.setSelectionRange(pos, pos);
+    });
+  };
+  const renderStepsInto = (stepsEl, steps) => {
+    stepsEl.innerHTML = '';
+    steps.forEach((s, i) => {
+      const li = el('li', { class:'calc-step' });
+      li.appendChild(el('div', { class:'calc-step-head' }, [
+        el('span', { class:'calc-step-num', text: String(i + 1) }),
+        el('span', { class:'calc-step-rule', text: s.rule })
+      ]));
+      const math = el('div', { class:'calc-step-math' });
+      li.appendChild(math);
+      if (s.note) li.appendChild(el('div', { class:'calc-step-note', text: s.note }));
+      stepsEl.appendChild(li);
+      renderMath(math, s.latex, false);
+    });
+  };
+  const wireToggle = (btn, stepsEl) => {
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const hidden = stepsEl.hasAttribute('hidden');
+      if (hidden) { stepsEl.removeAttribute('hidden'); btn.textContent = 'Hide steps'; }
+      else { stepsEl.setAttribute('hidden', ''); btn.textContent = 'Show steps'; }
+    });
+  };
+  const wireCopy = (getResult) => {
+    $$('[data-copy]', body).forEach(btn => btn.addEventListener('click', () => {
+      const r = getResult();
+      if (!r) return;
+      copy(btn.dataset.copy === 'tex' ? r.resultLatex : r.resultText, btn);
+    }));
+  };
 
   const renderDeriv = () => {
     body.innerHTML = `
@@ -4350,8 +4416,8 @@ function mountCalculus(root) {
 
       <div id="calc-out" hidden>
         <div class="result" id="calc-result">
-          <button class="copy-btn" id="calc-copy-tex" title="Copy as LaTeX">LaTeX</button>
-          <button class="copy-btn" id="calc-copy-txt" style="right:64px" title="Copy as plain text">Copy</button>
+          <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+          <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
           <div class="result-label">Derivative</div>
           <div class="calc-result-math" id="calc-answer"></div>
         </div>
@@ -4408,19 +4474,7 @@ function mountCalculus(root) {
       errBox.hidden = true;
       outBox.hidden = false;
       renderMath(ansEl, r.resultLatex, true);
-      stepsEl.innerHTML = '';
-      r.steps.forEach((s, i) => {
-        const li = el('li', { class:'calc-step' });
-        li.appendChild(el('div', { class:'calc-step-head' }, [
-          el('span', { class:'calc-step-num', text: String(i + 1) }),
-          el('span', { class:'calc-step-rule', text: s.rule })
-        ]));
-        const math = el('div', { class:'calc-step-math' });
-        li.appendChild(math);
-        if (s.note) li.appendChild(el('div', { class:'calc-step-note', text: s.note }));
-        stepsEl.appendChild(li);
-        renderMath(math, s.latex, false);
-      });
+      renderStepsInto(stepsEl, r.steps);
       evalAt();
     };
 
@@ -4441,23 +4495,9 @@ function mountCalculus(root) {
       renderResult(r);
     };
 
-    // palette inserts (label -> text inserted)
-    const PAL = {
-      'x':'x', '+':'+', '−':'-', '^':'^', '( )':'()', '√':'sqrt()', 'π':'pi',
-      'sin( )':'sin()', 'cos( )':'cos()', 'tan( )':'tan()', 'ln( )':'ln()', 'e^( )':'e^()'
-    };
-    $('.calc-pal').addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-ins]');
-      if (!b) return;
-      const ins = PAL[b.dataset.ins] ?? b.dataset.ins;
-      const caretInside = ins.endsWith('()');     // drop the caret between the parens
-      const start = fx.selectionStart ?? fx.value.length;
-      const end   = fx.selectionEnd ?? fx.value.length;
-      fx.value = fx.value.slice(0, start) + ins + fx.value.slice(end);
-      const pos = start + ins.length - (caretInside ? 1 : 0);
-      fx.focus();
-      fx.setSelectionRange(pos, pos);
-    });
+    wirePalette(() => fx);
+    wireCopy(() => lastResult);
+    wireToggle($('#calc-toggle'), stepsEl);
 
     $('#calc-go').addEventListener('click', compute);
     $('#calc-clear').addEventListener('click', () => {
@@ -4466,12 +4506,6 @@ function mountCalculus(root) {
     fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
     vEl.addEventListener('input', syncVarLabels);
     body.addEventListener('input', (e) => { if (e.target && e.target.id === 'calc-at') evalAt(); });
-
-    $('#calc-toggle').addEventListener('click', (e) => {
-      const hidden = stepsEl.hasAttribute('hidden');
-      if (hidden) { stepsEl.removeAttribute('hidden'); e.target.textContent = 'Hide steps'; }
-      else { stepsEl.setAttribute('hidden', ''); e.target.textContent = 'Show steps'; }
-    });
 
     // example chips
     body.appendChild(el('div', { class:'calc-examples' }, [
@@ -4485,16 +4519,149 @@ function mountCalculus(root) {
     compute();
   };
 
+  const renderIntegral = () => {
+    let mode = 'indef';
+    const draw = () => {
+      body.innerHTML = `
+        <div class="calc-subtabs" role="tablist">
+          <button class="calc-subtab${mode === 'indef' ? ' active' : ''}" data-im="indef">Indefinite</button>
+          <button class="calc-subtab${mode === 'def' ? ' active' : ''}" data-im="def">Definite</button>
+        </div>
+        <p class="help">${mode === 'def'
+          ? 'Definite integral. Bounds may be numbers, <span class="chip">pi</span>, or <span class="chip">e</span>.'
+          : 'Indefinite integral — the result includes the constant <span class="chip">+ C</span>.'}</p>
+        ${palHTML()}
+        <div class="calc-input-row">
+          <div class="field calc-fx">
+            <label>∫ f(<span class="cvl">x</span>) d<span class="cvl">x</span></label>
+            <input class="input mono" id="ci-fx" autocomplete="off" spellcheck="false" placeholder="e.g.  x^2 + sin(x)" value="x^2 + sin(x)">
+          </div>
+          <div class="field calc-var"><label>Variable</label><input class="input mono" id="ci-var" value="x" maxlength="3" autocomplete="off" spellcheck="false"></div>
+        </div>
+        ${mode === 'def' ? `
+        <div class="calc-input-row">
+          <div class="field"><label>From (lower bound)</label><input class="input mono" id="ci-a" value="0" autocomplete="off"></div>
+          <div class="field"><label>To (upper bound)</label><input class="input mono" id="ci-b" value="1" autocomplete="off"></div>
+        </div>` : ''}
+        <div class="btn-row"><button class="btn accent" id="ci-go">Integrate</button><button class="btn ghost sm" id="ci-clear">Clear</button></div>
+        <div id="calc-error" class="calc-error" role="alert" hidden></div>
+        <div id="calc-out" hidden>
+          <div class="result">
+            <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+            <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
+            <div class="result-label">${mode === 'def' ? 'Definite integral' : 'Antiderivative'}</div>
+            <div class="calc-result-math" id="calc-answer"></div>
+          </div>
+          <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" id="calc-toggle">Hide steps</button></div>
+          <ol class="calc-steps" id="calc-steps"></ol>
+        </div>
+      `;
+      const fx = $('#ci-fx'), vEl = $('#ci-var'), errBox = $('#calc-error'),
+            outBox = $('#calc-out'), stepsEl = $('#calc-steps'), ansEl = $('#calc-answer');
+      let lastResult = null;
+      const showError = (m) => { errBox.textContent = m; errBox.hidden = false; outBox.hidden = true; };
+      const syncVar = () => { const v = vEl.value.trim() || 'x'; $$('.cvl', body).forEach(s => s.textContent = v); };
+      const compute = () => {
+        const expr = fx.value.trim(), v = vEl.value.trim() || 'x';
+        if (!expr) { errBox.hidden = true; outBox.hidden = true; return; }
+        if (!window.CalcEngine) { showError('Loading the calculus engine…'); ensureEngine(ok => ok ? compute() : showError('Couldn’t load the calculus engine. Check your connection, then try again.')); return; }
+        let r;
+        if (mode === 'def') { const a = $('#ci-a').value.trim() || '0', b = $('#ci-b').value.trim() || '0'; r = window.CalcEngine.definiteIntegral(expr, v, a, b); }
+        else r = window.CalcEngine.integral(expr, v);
+        if (!r.ok) { showError(r.error || 'Could not integrate that.'); return; }
+        lastResult = r; errBox.hidden = true; outBox.hidden = false;
+        renderMath(ansEl, r.resultLatex, true); renderStepsInto(stepsEl, r.steps);
+      };
+      wirePalette(() => fx); wireCopy(() => lastResult); wireToggle($('#calc-toggle'), stepsEl);
+      $('#ci-go').addEventListener('click', compute);
+      $('#ci-clear').addEventListener('click', () => { fx.value = ''; outBox.hidden = true; errBox.hidden = true; fx.focus(); });
+      fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+      vEl.addEventListener('input', syncVar);
+      const exs = mode === 'def'
+        ? [['x^2','0','3'], ['sin(x)','0','pi'], ['1/x','1','e'], ['x e^x','0','2']]
+        : ['x^2 + sin(x)', '1/x', 'x e^x', '(2x+1)^5', '2x/(x^2+1)', 'ln(x)'];
+      body.appendChild(el('div', { class:'calc-examples' }, [
+        el('span', { class:'calc-ex-label', text:'Try:' }),
+        ...exs.map(ex => mode === 'def'
+          ? el('button', { class:'chip calc-ex', text:`∫${ex[0]} from ${ex[1]} to ${ex[2]}`, on:{ click:() => {
+              fx.value = ex[0]; $('#ci-a').value = ex[1]; $('#ci-b').value = ex[2]; syncVar(); compute(); } } })
+          : el('button', { class:'chip calc-ex', text: ex, on:{ click:() => { fx.value = ex; syncVar(); compute(); } } }))
+      ]));
+      $$('.calc-subtab', body).forEach(b => b.addEventListener('click', () => { if (b.dataset.im !== mode) { mode = b.dataset.im; draw(); } }));
+      syncVar(); compute();
+    };
+    draw();
+  };
+
+  const renderLimit = () => {
+    body.innerHTML = `
+      <p class="help">Find a limit. The point can be a number, <span class="chip">pi</span>, or
+        <span class="chip">inf</span> / <span class="chip">-inf</span>.</p>
+      ${palHTML()}
+      <div class="calc-input-row">
+        <div class="field calc-fx"><label>f(<span class="cvl">x</span>)</label>
+          <input class="input mono" id="cl-fx" autocomplete="off" spellcheck="false" placeholder="e.g.  sin(x)/x" value="sin(x)/x"></div>
+        <div class="field calc-var"><label>Variable</label><input class="input mono" id="cl-var" value="x" maxlength="3" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="calc-input-row">
+        <div class="field"><label>as <span class="cvl">x</span> →</label>
+          <input class="input mono" id="cl-pt" value="0" placeholder="0, pi, inf, -inf" autocomplete="off"></div>
+        <div class="field"><label>Direction</label>
+          <div class="calc-dir">
+            <button class="calc-dirbtn active" data-dir="both">Two-sided</button>
+            <button class="calc-dirbtn" data-dir="left">Left −</button>
+            <button class="calc-dirbtn" data-dir="right">Right +</button>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row"><button class="btn accent" id="cl-go">Find limit</button><button class="btn ghost sm" id="cl-clear">Clear</button></div>
+      <div id="calc-error" class="calc-error" role="alert" hidden></div>
+      <div id="calc-out" hidden>
+        <div class="result">
+          <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+          <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
+          <div class="result-label">Limit</div>
+          <div class="calc-result-math" id="calc-answer"></div>
+        </div>
+        <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" id="calc-toggle">Hide steps</button></div>
+        <ol class="calc-steps" id="calc-steps"></ol>
+      </div>
+    `;
+    let dir = 'both', lastResult = null;
+    const fx = $('#cl-fx'), vEl = $('#cl-var'), ptEl = $('#cl-pt'), errBox = $('#calc-error'),
+          outBox = $('#calc-out'), stepsEl = $('#calc-steps'), ansEl = $('#calc-answer');
+    const showError = (m) => { errBox.textContent = m; errBox.hidden = false; outBox.hidden = true; };
+    const syncVar = () => { const v = vEl.value.trim() || 'x'; $$('.cvl', body).forEach(s => s.textContent = v); };
+    const compute = () => {
+      const expr = fx.value.trim(), v = vEl.value.trim() || 'x', pt = ptEl.value.trim() || '0';
+      if (!expr) { errBox.hidden = true; outBox.hidden = true; return; }
+      if (!window.CalcEngine) { showError('Loading the calculus engine…'); ensureEngine(ok => ok ? compute() : showError('Couldn’t load the calculus engine. Check your connection, then try again.')); return; }
+      const r = window.CalcEngine.limit(expr, v, pt, dir);
+      if (!r.ok) { showError(r.error || 'Could not evaluate that limit.'); return; }
+      lastResult = r; errBox.hidden = true; outBox.hidden = false;
+      renderMath(ansEl, r.resultLatex, true); renderStepsInto(stepsEl, r.steps);
+    };
+    wirePalette(() => fx); wireCopy(() => lastResult); wireToggle($('#calc-toggle'), stepsEl);
+    $('#cl-go').addEventListener('click', compute);
+    $('#cl-clear').addEventListener('click', () => { fx.value = ''; outBox.hidden = true; errBox.hidden = true; fx.focus(); });
+    fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+    ptEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+    vEl.addEventListener('input', syncVar);
+    $$('.calc-dirbtn', body).forEach(b => b.addEventListener('click', () => {
+      dir = b.dataset.dir; $$('.calc-dirbtn', body).forEach(x => x.classList.toggle('active', x === b)); compute();
+    }));
+    body.appendChild(el('div', { class:'calc-examples' }, [
+      el('span', { class:'calc-ex-label', text:'Try:' }),
+      ...[['sin(x)/x','0'], ['(x^2-1)/(x-1)','1'], ['(1-cos(x))/x^2','0'], ['(2x^2+3)/(x^2-1)','inf'], ['1/x','0']].map(([e, p]) =>
+        el('button', { class:'chip calc-ex', text:`${e} → ${p}`, on:{ click:() => { fx.value = e; ptEl.value = p; syncVar(); compute(); } } }))
+    ]));
+    syncVar(); compute();
+  };
+
   const render = (mode) => {
-    if (mode === 'integral') {
-      body.innerHTML = upcoming('Integrals',
-        'Indefinite &amp; definite integrals with substitution and by-parts steps are coming to this tool.');
-    } else if (mode === 'limit') {
-      body.innerHTML = upcoming('Limits',
-        'One-sided limits and limits at infinity, with the reasoning shown, are coming to this tool.');
-    } else {
-      renderDeriv();
-    }
+    if (mode === 'integral') renderIntegral();
+    else if (mode === 'limit') renderLimit();
+    else renderDeriv();
   };
 
   render('deriv');

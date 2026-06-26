@@ -469,6 +469,7 @@
       case 'log':  return Div(ONE, Mul([u, Func('ln', Num(10))]));
       case 'exp':  return Func('exp', u);
       case 'sqrt': return Div(ONE, Mul([TWO, Func('sqrt', u)]));
+      case 'abs':  return Div(u, Func('abs', u));   // d/dx|u| = u/|u| (sign), u≠0
       default:     return null;
     }
   }
@@ -705,6 +706,7 @@
       case 'func': {
         if (n.name === 'sqrt') return '\\sqrt{' + toLatex(n.arg, x) + '}';
         if (n.name === 'exp')  return 'e^{' + toLatex(n.arg, x) + '}';
+        if (n.name === 'abs')  return '\\left|' + toLatex(n.arg, x) + '\\right|';
         const cmd = FUNCS[n.name] || ('\\operatorname{' + n.name + '}');
         return cmd + '\\!\\left(' + toLatex(n.arg, x) + '\\right)';
       }
@@ -784,6 +786,456 @@
   }
 
   /* ========================================================================
+     SHARED HELPERS for integration & limits
+     ===================================================================== */
+  const D = (node, x) => simplify(diff(node, x, []));      // stepless derivative
+
+  function substitute(node, target, repl) {
+    if (canon(node) === canon(target)) return repl;
+    switch (node.t) {
+      case 'neg':  return Neg(substitute(node.arg, target, repl));
+      case 'add':  return Add(node.args.map(a => substitute(a, target, repl)));
+      case 'mul':  return Mul(node.args.map(a => substitute(a, target, repl)));
+      case 'div':  return Div(substitute(node.num, target, repl), substitute(node.den, target, repl));
+      case 'pow':  return Pow(substitute(node.base, target, repl), substitute(node.exp, target, repl));
+      case 'func': return Func(node.name, substitute(node.arg, target, repl));
+      default:     return node;
+    }
+  }
+
+  /* If node is linear in x (a·x + b with a,b constant), return {a, b} nodes. */
+  function asLinear(node, x) {
+    const a = D(node, x);
+    if (dependsOn(a, x)) return null;
+    const b = simplify(Add([node, Neg(Mul([a, Var(x)]))]));
+    if (dependsOn(b, x)) return null;
+    return { a, b };
+  }
+
+  /* ========================================================================
+     INTEGRATION
+     integrate(node, x, depth) -> { node, steps } | null  (antiderivative, no +C)
+     Steps are committed only on success, so failed strategies leave no trace.
+     ===================================================================== */
+  const intTex = (node, x) => '\\int ' + toLatex(node, x) + '\\,d' + x;
+
+  function tableAntideriv(name, u) {            // ∫ f(u) d(u) for base functions
+    switch (name) {
+      case 'sin':  return Neg(Func('cos', u));
+      case 'cos':  return Func('sin', u);
+      case 'exp':  return Func('exp', u);
+      case 'sinh': return Func('cosh', u);
+      case 'cosh': return Func('sinh', u);
+      case 'tan':  return Neg(Func('ln', Func('cos', u)));
+      case 'cot':  return Func('ln', Func('sin', u));
+      case 'sec':  return Func('ln', Add([Func('sec', u), Func('tan', u)]));
+      case 'csc':  return Neg(Func('ln', Add([Func('csc', u), Func('cot', u)])));
+      default:     return null;
+    }
+  }
+
+  const isAlgebraic = (f, x) => dependsOn(f, x) &&
+    (f.t === 'var' || (f.t === 'pow' && f.base.t === 'var' && f.base.name === x && f.exp.t === 'num'));
+  const isExpTerm = (f, x) =>
+    (f.t === 'func' && f.name === 'exp' && dependsOn(f.arg, x)) ||
+    (f.t === 'pow' && !dependsOn(f.base, x) && dependsOn(f.exp, x));
+
+  /* recognise a couple of standard non-elementary-looking forms */
+  function trySpecial(node, x) {
+    const n = simplify(node);
+    if (n.t !== 'div') return null;
+    const c = numericValue(n.num);
+    if (c == null) return null;
+    const den = n.den;
+    // c / (x² + k), k > 0  ->  (c/√k)·arctan(x/√k)
+    if (den.t === 'add') {
+      let hasX2 = false, k = 0, ok = true;
+      for (const t of den.args) {
+        if (canon(t) === canon(Pow(Var(x), Num(2)))) hasX2 = true;
+        else { const v = numericValue(t); if (v == null) ok = false; else k += v; }
+      }
+      if (hasX2 && ok && k > 0) {
+        const sk = Math.sqrt(k);
+        const inner = (Math.abs(sk - 1) < 1e-12) ? Var(x) : Div(Var(x), ratNode(sk));
+        return { node: Mul([ratNode(c / sk), Func('atan', inner)]),
+                 rule: 'Standard form', note: '∫ c/(x²+k) dx = (c/√k)·arctan(x/√k).' };
+      }
+    }
+    // c / √(1 − x²)  ->  c·arcsin(x)
+    if (den.t === 'func' && den.name === 'sqrt') {
+      const s = simplify(Add([den.arg, Pow(Var(x), Num(2))]));
+      if (numEq(s, 1)) return { node: Mul([Num(c), Func('asin', Var(x))]),
+        rule: 'Standard form', note: '∫ c/√(1−x²) dx = c·arcsin(x).' };
+    }
+    return null;
+  }
+
+  function integrate(node, x, depth) {
+    if (depth > 8) return null;
+    node = simplify(node);
+    const steps = [];
+    const ok = (res) => ({ node: simplify(res), steps });
+
+    // constant
+    if (!dependsOn(node, x)) {
+      steps.push({ rule: 'Constant rule', note: 'Integral of a constant.', latex: intTex(node, x) + ' = ' + toLatex(node, x) + x });
+      return ok(Mul([node, Var(x)]));
+    }
+
+    // unary minus
+    if (node.t === 'neg') {
+      const c = integrate(node.arg, x, depth);
+      if (!c) return null;
+      steps.push(...c.steps);
+      return ok(Neg(c.node));
+    }
+
+    // sum rule
+    if (node.t === 'add') {
+      const parts = [];
+      for (const a of node.args) { const c = integrate(a, x, depth); if (!c) return null; parts.push(c); }
+      steps.push({ rule: 'Sum rule', note: 'Integrate term by term.',
+        latex: intTex(node, x) + ' = ' + node.args.map(a => intTex(a, x)).join(' + ').replace(/\+ \\int -/g, '- \\int ') });
+      parts.forEach(p => steps.push(...p.steps));
+      return ok(Add(parts.map(p => p.node)));
+    }
+
+    // pull constant factors out of a product
+    if (node.t === 'mul') {
+      const consts = node.args.filter(a => !dependsOn(a, x));
+      const vars   = node.args.filter(a =>  dependsOn(a, x));
+      if (consts.length && vars.length) {
+        const cNode = consts.length === 1 ? consts[0] : Mul(consts);
+        const gNode = vars.length === 1 ? vars[0] : Mul(vars);
+        const c = integrate(gNode, x, depth);
+        if (!c) return null;
+        steps.push({ rule: 'Constant multiple', note: 'Pull constant factors outside the integral.',
+          latex: intTex(node, x) + ' = ' + toLatex(cNode, x) + '\\!' + intTex(gNode, x) });
+        steps.push(...c.steps);
+        return ok(Mul([cNode, c.node]));
+      }
+    }
+
+    // ∫ x dx
+    if (node.t === 'var' && node.name === x) {
+      const res = Div(Pow(Var(x), Num(2)), Num(2));
+      steps.push({ rule: 'Power rule', note: '∫ xⁿ dx = xⁿ⁺¹/(n+1).', latex: intTex(node, x) + ' = ' + toLatex(res, x) });
+      return ok(res);
+    }
+
+    // powers
+    if (node.t === 'pow') {
+      const base = node.base, exp = node.exp;
+      const en = numericValue(exp);
+      // x^n
+      if (base.t === 'var' && base.name === x && en != null) {
+        if (Math.abs(en + 1) < 1e-12) {
+          const res = Func('ln', Func('abs', Var(x)));
+          steps.push({ rule: 'Reciprocal rule', note: '∫ x⁻¹ dx = ln|x|.', latex: intTex(node, x) + ' = ' + toLatex(res, x) });
+          return ok(res);
+        }
+        const res = Div(Pow(Var(x), ratNode(en + 1)), ratNode(en + 1));
+        steps.push({ rule: 'Power rule', note: '∫ xⁿ dx = xⁿ⁺¹/(n+1).', latex: intTex(node, x) + ' = ' + toLatex(res, x) });
+        return ok(res);
+      }
+      // e^(linear)  and  a^(linear)
+      if (!dependsOn(base, x)) {
+        const lin = asLinear(exp, x);
+        if (lin) {
+          let res;
+          if (base.t === 'const' && base.name === 'e') res = Div(node, lin.a);
+          else res = Div(node, Mul([lin.a, Func('ln', base)]));
+          steps.push({ rule: 'Exponential rule', note: 'Linear substitution u = ' + toText(exp, x) + '.',
+            latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+          return ok(res);
+        }
+      }
+      // (linear)^n
+      if (en != null && Math.abs(en + 1) > 1e-12) {
+        const lin = asLinear(base, x);
+        if (lin) {
+          const res = Div(Pow(base, ratNode(en + 1)), Mul([ratNode(en + 1), lin.a]));
+          steps.push({ rule: 'Power rule + linear substitution', note: 'u = ' + toText(base, x) + ', du = ' + toText(lin.a, x) + ' dx.',
+            latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+          return ok(res);
+        }
+      }
+      // (linear)^(-1)
+      if (en != null && Math.abs(en + 1) < 1e-12) {
+        const lin = asLinear(base, x);
+        if (lin) {
+          const res = Div(Func('ln', Func('abs', base)), lin.a);
+          steps.push({ rule: 'Reciprocal + linear substitution', note: 'u = ' + toText(base, x) + '.',
+            latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+          return ok(res);
+        }
+      }
+    }
+
+    // functions
+    if (node.t === 'func') {
+      const arg = node.arg;
+      if (node.name === 'sqrt') {                 // ∫ √u  →  ∫ u^(1/2)
+        const c = integrate(Pow(arg, ratNode(0.5)), x, depth);
+        if (c) { steps.push(...c.steps); return ok(c.node); }
+      }
+      if (arg.t === 'var' && arg.name === x) {
+        const F = tableAntideriv(node.name, arg);
+        if (F) {
+          steps.push({ rule: 'Standard integral', note: 'From the table of antiderivatives.', latex: intTex(node, x) + ' = ' + toLatex(F, x) });
+          return ok(F);
+        }
+      }
+      const lin = asLinear(arg, x);
+      if (lin) {
+        const F = tableAntideriv(node.name, arg);
+        if (F) {
+          const res = Div(F, lin.a);
+          steps.push({ rule: 'Linear substitution', note: 'u = ' + toText(arg, x) + ', du = ' + toText(lin.a, x) + ' dx.',
+            latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+          return ok(res);
+        }
+      }
+    }
+
+    // division
+    if (node.t === 'div') {
+      const p = node.num, q = node.den;
+      // constant denominator -> constant multiple
+      if (!dependsOn(q, x)) {
+        const c = integrate(p, x, depth);
+        if (c) {
+          steps.push({ rule: 'Constant multiple', note: 'Constant in the denominator.',
+            latex: intTex(node, x) + ' = \\dfrac{1}{' + toLatex(q, x) + '}' + intTex(p, x) });
+          steps.push(...c.steps);
+          return ok(Div(c.node, q));
+        }
+      }
+      // standard arctan / arcsin forms
+      const sp = trySpecial(node, x);
+      if (sp) { steps.push({ rule: sp.rule, note: sp.note, latex: intTex(node, x) + ' = ' + toLatex(sp.node, x) }); return ok(sp.node); }
+      // c / (linear) and c / (linear)^n  (handled directly so simplify can't fold x⁻¹ back into a quotient loop)
+      if (!dependsOn(p, x)) {
+        const lin = asLinear(q, x);
+        if (lin) {
+          const res = Div(Mul([p, Func('ln', Func('abs', q))]), lin.a);
+          steps.push({ rule: 'Reciprocal rule', note: 'u = ' + toText(q, x) + ', du = ' + toText(lin.a, x) + ' dx; ∫ du/u = ln|u|.',
+            latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+          return ok(res);
+        }
+        if (q.t === 'pow') {
+          const en = numericValue(q.exp), ql = asLinear(q.base, x);
+          if (en != null && ql && Math.abs(en - 1) > 1e-12) {
+            const res = Div(Mul([p, Pow(q.base, ratNode(1 - en))]), Mul([ratNode(1 - en), ql.a]));
+            steps.push({ rule: 'Power rule + linear substitution', note: 'Rewrite 1/uⁿ as u⁻ⁿ.',
+              latex: intTex(node, x) + ' = ' + toLatex(simplify(res), x) });
+            return ok(res);
+          }
+        }
+      }
+      // otherwise fall through to the shared u-sub / by-parts below
+    }
+
+    // general u-substitution
+    const us = tryUSub(node, x, depth);
+    if (us) { steps.push(...us.steps); return ok(us.node); }
+
+    // integration by parts
+    const bp = tryByParts(node, x, depth);
+    if (bp) { steps.push(...bp.steps); return ok(bp.node); }
+
+    return null;
+  }
+
+  function collectSubCandidates(node, x, acc) {
+    switch (node.t) {
+      case 'func':
+        if (dependsOn(node, x)) acc.push(node);            // whole, e.g. u = sin(x) for ∫sin·cos
+        if (dependsOn(node.arg, x)) acc.push(node.arg);    // inner, e.g. u = x² in sin(x²)
+        collectSubCandidates(node.arg, x, acc); break;
+      case 'pow':
+        if (dependsOn(node.base, x) && !(node.base.t === 'var' && node.base.name === x)) acc.push(node.base);
+        if (dependsOn(node.exp, x)) acc.push(node.exp);    // e^(g(x)) -> u = g(x)
+        collectSubCandidates(node.base, x, acc); collectSubCandidates(node.exp, x, acc); break;
+      case 'div':
+        if (dependsOn(node.den, x)) acc.push(node.den);
+        collectSubCandidates(node.num, x, acc); collectSubCandidates(node.den, x, acc); break;
+      case 'add': case 'mul': node.args.forEach(a => collectSubCandidates(a, x, acc)); break;
+      case 'neg': collectSubCandidates(node.arg, x, acc); break;
+    }
+  }
+
+  function tryUSub(node, x, depth) {
+    if (depth > 6) return null;
+    const cands = [];
+    collectSubCandidates(node, x, cands);
+    const seen = new Set();
+    const U = (x === 'u') ? 'w' : 'u';
+    for (const u of cands) {
+      const key = canon(u);
+      if (seen.has(key)) continue; seen.add(key);
+      if (u.t === 'var') continue;                          // trivial
+      const du = D(u, x);
+      if (numEq(du, 0)) continue;
+      const rest = simplify(Div(node, du));
+      const restU = substitute(rest, u, Var(U));
+      if (dependsOn(restU, x)) continue;                    // not purely a function of u
+      const inner = integrate(restU, U, depth + 1);
+      if (!inner) continue;
+      const F = simplify(substitute(inner.node, Var(U), u));
+      const steps = [{
+        rule: 'u-substitution',
+        note: 'Let u = ' + toText(u, x) + ', so du = ' + toText(du, x) + ' dx.',
+        latex: intTex(node, x) + ' = \\int ' + toLatex(restU, U) + '\\,d' + U
+      }];
+      steps.push(...inner.steps.map(s => ({ ...s })));
+      steps.push({ rule: 'Substitute back', note: 'Replace u with ' + toText(u, x) + '.',
+        latex: '= ' + toLatex(F, x) });
+      return { node: F, steps };
+    }
+    return null;
+  }
+
+  function tryByParts(node, x, depth) {
+    if (depth > 5) return null;
+    const factors = (node.t === 'mul') ? node.args.slice() : [node];
+    if (!factors.some(f => dependsOn(f, x))) return null;
+    const score = (f) => {
+      if (f.t === 'func' && (f.name === 'ln' || f.name === 'log')) return 5;   // Log
+      if (f.t === 'func' && /^(asin|acos|atan)$/.test(f.name)) return 4;        // Inverse trig
+      if (isAlgebraic(f, x)) return 3;                                          // Algebraic
+      if (f.t === 'func' && /^(sin|cos|tan|sec|csc|cot)$/.test(f.name)) return 2; // Trig
+      if (isExpTerm(f, x)) return 1;                                            // Exp
+      return 0;
+    };
+    let ui = -1, best = -1;
+    factors.forEach((f, i) => { const s = score(f); if (s > best) { best = s; ui = i; } });
+    if (ui < 0 || best === 0) return null;
+    const u = factors[ui];
+    const dvFactors = factors.filter((_, i) => i !== ui);
+    const dv = dvFactors.length ? (dvFactors.length === 1 ? dvFactors[0] : Mul(dvFactors)) : Num(1);
+    const vRes = integrate(dv, x, depth + 1);
+    if (!vRes) return null;
+    const v = vRes.node;
+    const du = D(u, x);
+    const remaining = integrate(simplify(Mul([v, du])), x, depth + 1);
+    if (!remaining) return null;                            // e.g. cyclic ∫eˣsin x — bail gracefully
+    const result = Add([Mul([u, v]), Neg(remaining.node)]);
+    const steps = [{
+      rule: 'Integration by parts',
+      note: 'u = ' + toText(u, x) + ', dv = ' + toText(dv, x) + ' dx  ⇒  du = ' + toText(du, x) + ' dx, v = ' + toText(v, x) + '.',
+      latex: intTex(node, x) + ' = ' + toLatex(simplify(Mul([u, v])), x) + ' - ' + intTex(simplify(Mul([v, du])), x)
+    }];
+    steps.push(...vRes.steps, ...remaining.steps);
+    return { node: simplify(result), steps };
+  }
+
+  /* Simpson's rule — deterministic numeric fallback for definite integrals. */
+  function simpson(f, x, a, b, n) {
+    if (n % 2) n++;
+    const h = (b - a) / n;
+    let s = evalNode(f, x, a) + evalNode(f, x, b);
+    for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * evalNode(f, x, a + i * h);
+    return (h / 3) * s;
+  }
+
+  /* ========================================================================
+     LIMITS
+     ===================================================================== */
+  function parsePoint(str) {
+    const s = String(str).trim().toLowerCase().replace(/\s+/g, '');
+    if (/^[+]?(inf|infinity|∞|oo)$/.test(s)) return { kind: 'inf', sign: 1 };
+    if (/^-(inf|infinity|∞|oo)$/.test(s))    return { kind: 'inf', sign: -1 };
+    const node = parse(str);
+    const v = evalNode(node, ' ', 0);
+    if (!Number.isFinite(v)) throw new ParseError('Enter a number, or ∞ / -∞, for the approach point.');
+    return { kind: 'finite', val: v, node: simplify(node) };
+  }
+
+  const limTex = (f, x, point) => {
+    const p = point.kind === 'inf' ? (point.sign < 0 ? '-\\infty' : '\\infty') : toLatex(point.node, x);
+    return '\\lim_{' + x + ' \\to ' + p + '} ' + toLatex(f, x);
+  };
+
+  const snapNum = (v) => {
+    if (Math.abs(v) < 1e-6) return 0;
+    const r = Math.round(v);
+    if (Math.abs(v - r) <= 1e-4 * (1 + Math.abs(v))) return r;
+    return v;
+  };
+
+  function classify(vals) {
+    const v = vals.filter(Number.isFinite);
+    if (v.length < 2) {
+      const inf = vals.find(z => z === Infinity || z === -Infinity);
+      if (inf !== undefined) return { kind: 'inf', sign: inf > 0 ? 1 : -1 };
+      return { kind: 'dne' };
+    }
+    const last = v[v.length - 1], prev = v[v.length - 2];
+    if (Math.abs(last - prev) <= 1e-3 * (1 + Math.abs(last))) return { kind: 'value', value: snapNum(last) };
+    if (Math.abs(last) > 1e4 && Math.abs(last) >= Math.abs(prev)) return { kind: 'inf', sign: Math.sign(last) };
+    return { kind: 'dne' };
+  }
+
+  function estimateLimit(f, x, point, dir) {
+    const at = v => evalNode(f, x, v);
+    if (point.kind === 'inf') {
+      const out = [];
+      for (let k = 1; k <= 8; k++) out.push(at(point.sign * Math.pow(10, k)));
+      return classify(out);
+    }
+    const a = point.val, right = [], left = [];
+    for (let k = 1; k <= 7; k++) { const h = Math.pow(10, -k); right.push(at(a + h)); left.push(at(a - h)); }
+    if (dir === 'right') return classify(right);
+    if (dir === 'left')  return classify(left);
+    const R = classify(right), L = classify(left);
+    if (R.kind === 'value' && L.kind === 'value')
+      return (Math.abs(R.value - L.value) <= 1e-6 * (1 + Math.abs(R.value)))
+        ? { kind: 'value', value: (R.value + L.value) / 2 } : { kind: 'dne', reason: 'left ≠ right' };
+    if (R.kind === 'inf' && L.kind === 'inf')
+      return R.sign === L.sign ? { kind: 'inf', sign: R.sign } : { kind: 'dne', reason: 'sign differs' };
+    return { kind: 'dne' };
+  }
+
+  function limitSymbolic(f, x, point, dir, depth, steps) {
+    f = simplify(f);
+    if (point.kind === 'finite') {
+      const a = point.val;
+      if (f.t === 'div') {
+        const nu = evalNode(f.num, x, a), de = evalNode(f.den, x, a);
+        const indet = (Math.abs(nu) < 1e-9 && Math.abs(de) < 1e-9) ? '0/0'
+          : (!Number.isFinite(nu) && !Number.isFinite(de)) ? '∞/∞' : null;
+        if (indet && depth < 6) {
+          const nf = Div(D(f.num, x), D(f.den, x));
+          steps.push({ rule: "L'Hôpital's Rule", note: 'Indeterminate form ' + indet + ': differentiate top and bottom.',
+            latex: limTex(f, x, point) + ' = ' + limTex(simplify(nf), x, point) });
+          return limitSymbolic(nf, x, point, dir, depth + 1, steps);
+        }
+      }
+      const fa = evalNode(f, x, a);
+      if (Number.isFinite(fa)) {
+        const exact = simplify(substitute(f, Var(x), point.node));
+        steps.push({ rule: 'Direct substitution', note: 'Continuous here — plug the value in.',
+          latex: limTex(f, x, point) + ' = ' + toLatex(exact, x) });
+        return { value: fa };
+      }
+      return null;
+    }
+    // infinity
+    if (f.t === 'div' && depth < 6) {
+      const big = point.sign * 1e6;
+      const nu = evalNode(f.num, x, big), de = evalNode(f.den, x, big);
+      if (!Number.isFinite(nu) && !Number.isFinite(de)) {
+        const nf = Div(D(f.num, x), D(f.den, x));
+        steps.push({ rule: "L'Hôpital's Rule", note: 'Indeterminate form ∞/∞ at infinity: differentiate top and bottom.',
+          latex: limTex(f, x, point) + ' = ' + limTex(simplify(nf), x, point) });
+        return limitSymbolic(nf, x, point, dir, depth + 1, steps);
+      }
+    }
+    return null;
+  }
+
+  /* ========================================================================
      PUBLIC API
      ===================================================================== */
   function derivative(input, variable) {
@@ -820,8 +1272,91 @@
     } catch { return null; }
   }
 
+  const fmtVal = (v) => Number.isFinite(v) ? fmt(Number(v.toPrecision(8))) : String(v);
+
+  function integral(input, variable) {
+    const x = (variable || 'x').trim() || 'x';
+    let ast;
+    try { ast = parse(input); }
+    catch (e) { return { ok: false, error: e.message || 'Could not read that expression.', input, variable: x }; }
+    try {
+      const r = integrate(ast, x, 0);
+      if (!r) return { ok: false, input, variable: x,
+        error: 'No elementary antiderivative found with the current methods. Try rewriting it, or this one may need a technique beyond the tool.' };
+      return {
+        ok: true, input, variable: x,
+        inputLatex: toLatex(simplify(ast), x),
+        resultLatex: toLatex(r.node, x) + ' + C',
+        resultText: toText(r.node, x) + ' + C',
+        steps: r.steps
+      };
+    } catch (e) { return { ok: false, error: e.message || 'Could not integrate that.', input, variable: x }; }
+  }
+
+  function definiteIntegral(input, variable, aStr, bStr) {
+    const x = (variable || 'x').trim() || 'x';
+    let ast, a, b;
+    try { ast = parse(input); a = parsePoint(aStr); b = parsePoint(bStr); }
+    catch (e) { return { ok: false, error: e.message || 'Could not read the input.', input, variable: x }; }
+    if (a.kind !== 'finite' || b.kind !== 'finite')
+      return { ok: false, input, variable: x, error: 'Enter finite limits of integration (improper integrals aren’t supported yet).' };
+    try {
+      const r = integrate(ast, x, 0);
+      if (r) {
+        const F = r.node;
+        const value = evalNode(F, x, b.val) - evalNode(F, x, a.val);
+        const steps = r.steps.slice();
+        steps.push({ rule: 'Fundamental Theorem of Calculus', note: 'Evaluate the antiderivative: F(b) − F(a).',
+          latex: '\\left[' + toLatex(F, x) + '\\right]_{' + toLatex(a.node, x) + '}^{' + toLatex(b.node, x) + '} = ' + fmtVal(value) });
+        return { ok: true, input, variable: x, antiderivLatex: toLatex(F, x) + ' + C',
+          resultLatex: fmtVal(value), resultText: fmtVal(value), valueNumber: value, steps };
+      }
+      const value = simpson(ast, x, a.val, b.val, 1000);
+      return { ok: true, numeric: true, input, variable: x,
+        resultLatex: '\\approx ' + fmtVal(value), resultText: '≈ ' + fmtVal(value), valueNumber: value,
+        steps: [{ rule: 'Numeric integration', note: 'No elementary antiderivative found; approximated with Simpson’s rule.',
+          latex: '\\int_{' + toLatex(a.node, x) + '}^{' + toLatex(b.node, x) + '} ' + toLatex(simplify(ast), x) + '\\,d' + x + ' \\approx ' + fmtVal(value) }] };
+    } catch (e) { return { ok: false, error: e.message || 'Could not evaluate that integral.', input, variable: x }; }
+  }
+
+  function limit(input, variable, pointStr, dir) {
+    const x = (variable || 'x').trim() || 'x';
+    dir = dir || 'both';
+    let ast, point;
+    try { ast = parse(input); point = parsePoint(pointStr); }
+    catch (e) { return { ok: false, error: e.message || 'Could not read the input.', input, variable: x }; }
+    try {
+      const est = estimateLimit(ast, x, point, dir);
+      const steps = [];
+      const sym = limitSymbolic(ast, x, point, dir, 0, steps);
+
+      // Prefer the rigorous symbolic value when it resolves (exact, and immune to
+      // floating-point cancellation that can fool the numeric estimate).
+      const answer = (sym && Number.isFinite(sym.value)) ? { kind: 'value', value: sym.value } : est;
+
+      let resLatex, resText;
+      if (answer.kind === 'value') { const n = ratNode(answer.value); resLatex = toLatex(n, x); resText = toText(n, x); }
+      else if (answer.kind === 'inf') { resLatex = answer.sign < 0 ? '-\\infty' : '\\infty'; resText = answer.sign < 0 ? '-∞' : '∞'; }
+      else { resLatex = '\\text{DNE}'; resText = 'does not exist'; }
+
+      if (!steps.length) {
+        const side = dir === 'both' ? 'both sides' : 'the ' + dir;
+        steps.push({ rule: 'Numerical estimate', note: 'Evaluating the function as ' + x + ' approaches the point from ' + side + '.',
+          latex: limTex(ast, x, point) + (answer.kind === 'dne' ? '\\;\\text{ does not exist}' : ' = ' + resLatex) });
+      } else if (answer.kind !== 'dne') {
+        steps.push({ rule: 'Result', note: '', latex: limTex(ast, x, point) + ' = ' + resLatex });
+      }
+      return { ok: true, input, variable: x, point: pointStr, direction: dir,
+        inputLatex: toLatex(simplify(ast), x), resultLatex: resLatex, resultText: resText,
+        exists: answer.kind !== 'dne', steps };
+    } catch (e) { return { ok: false, error: e.message || 'Could not evaluate that limit.', input, variable: x }; }
+  }
+
   const API = {
     derivative,
+    integral,
+    definiteIntegral,
+    limit,
     evaluate,
     parse,
     simplify,
