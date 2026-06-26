@@ -35,6 +35,7 @@
   --accent-3:     #3DDC97;   /* neon mint — pass */
   --accent-4:     #3AA0F0;   /* electric blue */
   --purple:       #B98BFF;
+  --purple-deep:  #8B1FD6;   /* deep saturated purple — Numbers emphasis */
   --pink:         #FF3D9A;
   --orange:       #FF8C00;
   /* Type */
@@ -359,12 +360,17 @@ main{padding:28px 28px 80px}
 /* Per-category accent — drives the subtle hover tint.
    Set on every card (in shelves and in the Pinned/Recent rail) so a
    card keeps its original category color wherever it appears. */
-.tool[data-shelf="plan"]    {--cat-color:var(--orange)}
-.tool[data-shelf="study"]   {--cat-color:var(--accent-2)}
-.tool[data-shelf="numbers"] {--cat-color:var(--accent)}
-.tool[data-shelf="words"]   {--cat-color:var(--accent-3)}
-.tool[data-shelf="lab"]     {--cat-color:var(--accent-4)}
-.tool[data-shelf="toolbox"] {--cat-color:var(--pink)}
+.tool[data-shelf="plan"],    .panel[data-shelf="plan"]    {--cat-color:var(--orange)}
+.tool[data-shelf="study"],   .panel[data-shelf="study"]   {--cat-color:var(--accent-2)}
+.tool[data-shelf="numbers"], .panel[data-shelf="numbers"] {--cat-color:var(--purple-deep)}
+.tool[data-shelf="words"],   .panel[data-shelf="words"]   {--cat-color:var(--accent-3)}
+.tool[data-shelf="lab"],     .panel[data-shelf="lab"]     {--cat-color:var(--accent-4)}
+.tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink)}
+
+/* Inside an open applet panel, the emphasis color (--accent) is derived
+   from the applet's category color so each tool's UI matches its shelf.
+   Soft/background variants (--accent-soft) are intentionally left alone. */
+.panel[data-shelf]{--accent:var(--cat-color)}
 
 .tool:hover{
   transform:translate(-2px,-2px);
@@ -4300,6 +4306,7 @@ function openTool(id) {
   const body = oldBody.cloneNode(false);
   oldBody.parentNode.replaceChild(body, oldBody);
   if (t.mount) currentMountResult = t.mount(body);
+  $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
   $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing');
   $('#panel-backdrop').classList.add('open');
@@ -14237,8 +14244,8 @@ function mountGrammar(root) {
         color:var(--muted);padding:5px 10px;border:1px solid var(--rule);border-radius:2px;
         cursor:pointer;transition:color .12s,border-color .12s,background .12s;
       }
-      .gc-lang-btn.active{color:var(--ink);border-color:var(--ink-2);background:var(--paper-3)}
-      .gc-lang-btn:hover{color:var(--ink-2);border-color:var(--ink-2)}
+      .gc-lang-btn.active{color:var(--accent);border-color:var(--accent);background:var(--paper-3)}
+      .gc-lang-btn:hover{color:var(--ink-2);border-color:var(--accent)}
       .gc-auto-badge{
         font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
         background:var(--accent-soft);color:var(--accent);padding:2px 5px;border-radius:2px;
@@ -14251,7 +14258,7 @@ function mountGrammar(root) {
       }
       .gc-check-btn{
         font-family:var(--sans);font-weight:600;font-size:13px;
-        background:var(--ink);color:var(--paper);
+        background:var(--accent);color:var(--paper);
         padding:8px 16px;border-radius:2px;cursor:pointer;
         transition:transform .12s,box-shadow .12s;
         box-shadow:2px 2px 0 0 var(--accent);letter-spacing:.01em;
@@ -14263,15 +14270,15 @@ function mountGrammar(root) {
         color:var(--muted);padding:6px 10px;border:1px solid var(--rule);border-radius:2px;
         cursor:pointer;transition:color .12s,border-color .12s;
       }
-      .gc-clear-btn:hover{color:var(--ink-2);border-color:var(--ink-2)}
+      .gc-clear-btn:hover{color:var(--accent);border-color:var(--accent)}
       .gc-copy-btn{
         margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.12em;
         color:var(--muted);text-transform:uppercase;
         padding:4px 8px;border:1px solid var(--rule);border-radius:2px;
         transition:color .12s,border-color .12s;cursor:pointer;
       }
-      .gc-copy-btn:hover{color:var(--ink);border-color:var(--ink-2)}
-      .gc-copy-btn.copied{color:var(--accent-3);border-color:var(--accent-3)}
+      .gc-copy-btn:hover{color:var(--accent);border-color:var(--accent)}
+      .gc-copy-btn.copied{color:var(--accent);border-color:var(--accent)}
 
       .gc-panel{
         background:var(--paper-2);border:1px solid var(--rule);
