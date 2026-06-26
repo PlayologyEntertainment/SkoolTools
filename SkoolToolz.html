@@ -36,6 +36,7 @@
   --accent-4:     #3AA0F0;   /* electric blue */
   --purple:       #B98BFF;
   --pink:         #FF3D9A;
+  --orange:       #FF8C00;
   /* Type */
   --serif: 'Fraunces', ui-serif, Georgia, serif;
   --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
@@ -358,7 +359,7 @@ main{padding:28px 28px 80px}
 /* Per-category accent — drives the subtle hover tint.
    Set on every card (in shelves and in the Pinned/Recent rail) so a
    card keeps its original category color wherever it appears. */
-.tool[data-shelf="plan"]    {--cat-color:var(--purple)}
+.tool[data-shelf="plan"]    {--cat-color:var(--orange)}
 .tool[data-shelf="study"]   {--cat-color:var(--accent-2)}
 .tool[data-shelf="numbers"] {--cat-color:var(--accent)}
 .tool[data-shelf="words"]   {--cat-color:var(--accent-3)}
@@ -2354,7 +2355,7 @@ async function copy(text, btn) {
    No mount = placeholder ("Soon").
    ========================================================= */
 const SHELVES = [
-  { id: 'plan',    name: 'Plan',    color: 'var(--purple)' },
+  { id: 'plan',    name: 'Plan',    color: 'var(--orange)' },
   { id: 'study',   name: 'Study',   color: 'var(--accent-2)' },
   { id: 'numbers', name: 'Numbers', color: 'var(--accent)' },
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
