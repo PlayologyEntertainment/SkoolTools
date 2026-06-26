@@ -359,12 +359,17 @@ main{padding:28px 28px 80px}
 /* Per-category accent — drives the subtle hover tint.
    Set on every card (in shelves and in the Pinned/Recent rail) so a
    card keeps its original category color wherever it appears. */
-.tool[data-shelf="plan"]    {--cat-color:var(--orange)}
-.tool[data-shelf="study"]   {--cat-color:var(--accent-2)}
-.tool[data-shelf="numbers"] {--cat-color:var(--accent)}
-.tool[data-shelf="words"]   {--cat-color:var(--accent-3)}
-.tool[data-shelf="lab"]     {--cat-color:var(--accent-4)}
-.tool[data-shelf="toolbox"] {--cat-color:var(--pink)}
+.tool[data-shelf="plan"],    .panel[data-shelf="plan"]    {--cat-color:var(--orange)}
+.tool[data-shelf="study"],   .panel[data-shelf="study"]   {--cat-color:var(--accent-2)}
+.tool[data-shelf="numbers"], .panel[data-shelf="numbers"] {--cat-color:var(--accent)}
+.tool[data-shelf="words"],   .panel[data-shelf="words"]   {--cat-color:var(--accent-3)}
+.tool[data-shelf="lab"],     .panel[data-shelf="lab"]     {--cat-color:var(--accent-4)}
+.tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink)}
+
+/* Inside an open applet panel, the emphasis color (--accent) is derived
+   from the applet's category color so each tool's UI matches its shelf.
+   Soft/background variants (--accent-soft) are intentionally left alone. */
+.panel[data-shelf]{--accent:var(--cat-color)}
 
 .tool:hover{
   transform:translate(-2px,-2px);
@@ -4300,6 +4305,7 @@ function openTool(id) {
   const body = oldBody.cloneNode(false);
   oldBody.parentNode.replaceChild(body, oldBody);
   if (t.mount) currentMountResult = t.mount(body);
+  $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
   $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing');
   $('#panel-backdrop').classList.add('open');
