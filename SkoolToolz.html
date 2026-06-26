@@ -2166,6 +2166,92 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
 .mp-hist-icon{font-size:14px;flex-shrink:0}
 .mp-hist-your{color:var(--muted)}
 
+/* ── Calculus Solver ── */
+.calc-pal{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 16px}
+.calc-pal button{
+  font-family:var(--mono);font-size:13px;color:var(--ink-2);
+  background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;
+  padding:6px 10px;min-width:38px;min-height:38px;cursor:pointer;
+  transition:color .12s,border-color .12s,background .12s;
+}
+.calc-pal button:hover{color:var(--ink);border-color:var(--ink-2);background:var(--paper-3)}
+.calc-input-row{display:grid;grid-template-columns:1fr 110px;gap:14px;align-items:end}
+@media (max-width:520px){.calc-input-row{grid-template-columns:1fr}}
+.calc-error{
+  background:color-mix(in srgb, var(--pink) 14%, var(--paper-2));
+  border:1px solid var(--pink);color:var(--ink);
+  font-size:14px;border-radius:3px;padding:11px 14px;margin:14px 0;
+}
+.calc-result-math{
+  font-size:26px;color:var(--ink);overflow-x:auto;padding:4px 0;
+  line-height:1.3;
+}
+.calc-result-math .katex{font-size:1.15em}
+.calc-eval{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin:14px 0 4px;font-family:var(--mono);font-size:12px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+}
+.calc-eval label{font:inherit;color:var(--muted)}
+.calc-eval-out{color:var(--accent-3);text-transform:none;letter-spacing:0;font-size:14px}
+.calc-steps-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:22px 0 10px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);
+}
+.calc-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.calc-step{
+  background:var(--paper-2);border:1px solid var(--rule);
+  border-left:2px solid var(--accent);border-radius:3px;padding:12px 14px;
+}
+.calc-step-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.calc-step-num{
+  font-family:var(--mono);font-size:11px;color:var(--paper);
+  background:var(--accent);border-radius:2px;
+  min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;
+}
+.calc-step-rule{
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);
+}
+.calc-step-math{font-size:16px;overflow-x:auto;color:var(--ink);padding:2px 0}
+.calc-step-note{font-size:12.5px;color:var(--muted);margin-top:6px}
+.calc-examples{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:22px}
+.calc-ex-label{
+  font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+}
+.calc-ex{cursor:pointer;font-family:var(--mono);font-size:13px}
+.calc-ex:hover{border-color:var(--accent);color:var(--ink)}
+.calc-soon{
+  text-align:center;padding:34px 20px;color:var(--ink-2);
+}
+.calc-soon-badge{
+  display:inline-block;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  border:1px solid var(--rule);border-radius:2px;padding:4px 9px;margin-bottom:14px;
+}
+.calc-soon h4{font-family:var(--serif);font-size:24px;font-weight:500;margin:0 0 8px;color:var(--ink)}
+.calc-soon p{max-width:46ch;margin:0 auto 8px}
+.calc-subtabs{display:inline-flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:14px}
+.calc-subtab{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:8px 16px;cursor:pointer;background:transparent;
+  transition:color .12s,background .12s;
+}
+.calc-subtab:hover{color:var(--ink-2)}
+.calc-subtab.active{color:var(--paper);background:var(--accent)}
+.calc-dir{display:inline-flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden;flex-wrap:wrap}
+.calc-dirbtn{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  color:var(--muted);padding:9px 12px;cursor:pointer;background:transparent;
+  border-right:1px solid var(--rule);transition:color .12s,background .12s;
+}
+.calc-dirbtn:last-child{border-right:none}
+.calc-dirbtn:hover{color:var(--ink-2)}
+.calc-dirbtn.active{color:var(--paper);background:var(--accent)}
+
 </style>
 </head>
 <body>
@@ -4060,6 +4146,9 @@ function registerTools() {
   TOOLS.push({ id:'graphing', shelf:'numbers', icon:'📈', name:'Graphing Calculator',
     desc:'Plot y=f(x), find roots, intersections.', tag:'new',
     keywords:['plot','graph','function','curve','roots','intersection','derivative'], mount: mountGraphing });
+  TOOLS.push({ id:'calculus', shelf:'numbers', icon:'∫', name:'Calculus Solver',
+    desc:'Derivatives, rule-by-rule.', tag:'new',
+    keywords:['calculus','derivative','differentiate','chain','product','quotient','power','rule','ap','calc','slope','integral','limit'], mount: mountCalculus });
   TOOLS.push({ id:'stats', shelf:'numbers', icon:'📊', name:'Statistics Sheet',
     desc:'Mean→t-tests, paste from sheets.', tag:'upgraded',
     keywords:['mean','median','stddev','variance','ttest','confidence','regression','histogram','distribution'], mount: mountStats });
@@ -4168,6 +4257,424 @@ function registerTools() {
     keywords:['list','shuffle','pick','sort'], mount: mountList });
   TOOLS.push({ id:'code', shelf:'toolbox', icon:'{}', name:'Code Playground',
     desc:'JS · Python (Pyodide) · HTML.', tag:'new', keywords:['code','javascript','python','html'], mount: mountCode });
+}
+
+/* ========== CALCULUS SOLVER ==========
+   Symbolic derivatives with rule-by-rule shown work. The heavy engine
+   (calculus-engine.js) is lazy-loaded on first open via loadCalcEngine();
+   results render through the shared KaTeX path. Integrals & Limits are
+   roadmapped (Phase 1.1 follow-ups) and shown as upcoming. */
+function mountCalculus(root) {
+  const $ = (sel, ctx) => (ctx || root).querySelector(sel);
+
+  root.innerHTML = `
+    <div class="tabs" role="tablist" aria-label="Calculus modes">
+      <button class="tab active" data-mode="deriv" role="tab" aria-selected="true">Derivatives</button>
+      <button class="tab" data-mode="integral" role="tab" aria-selected="false">Integrals</button>
+      <button class="tab" data-mode="limit" role="tab" aria-selected="false">Limits</button>
+    </div>
+    <div id="calc-body"></div>
+  `;
+  const body = $('#calc-body');
+
+  /* ── Self-contained lazy-loaders ──
+     The symbolic engine is a separate module (calculus-engine.js) fetched on
+     first open, then cached. Loaded via a <script> tag (not fetch) so it also
+     works from a local file:// copy. Both loaders piggyback on window globals,
+     so they won't re-download if another tool already pulled them in. */
+  let engineLoading = false;
+  const ensureEngine = (cb) => {
+    if (window.CalcEngine) { cb(true); return; }
+    const queue = (mountCalculus._eq = mountCalculus._eq || []);
+    queue.push(cb);
+    if (engineLoading) return;
+    engineLoading = true;
+    const s = document.createElement('script');
+    s.src = 'calculus-engine.js';
+    s.onload = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(!!window.CalcEngine)); };
+    s.onerror = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(false)); };
+    document.head.appendChild(s);
+  };
+  let katexLoadStarted = false;
+  const ensureKatex = (cb) => {
+    if (window.katex) { cb(); return; }
+    const queue = (mountCalculus._kq = mountCalculus._kq || []);
+    queue.push(cb);
+    if (katexLoadStarted) return;
+    katexLoadStarted = true;
+    if (!document.getElementById('katex-css')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css'; link.rel = 'stylesheet';
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css';
+      document.head.appendChild(link);
+    }
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js';
+    s.onload = () => queue.splice(0).forEach(fn => fn());
+    s.onerror = () => queue.splice(0).forEach(fn => fn());   // graceful: raw LaTeX stays
+    document.head.appendChild(s);
+  };
+
+  /* render KaTeX into an element, lazy-loading the renderer as needed */
+  const renderMath = (elm, latex, display) => {
+    elm.dataset.tex = latex;
+    elm.textContent = latex;                       // raw fallback until KaTeX is ready
+    ensureKatex(() => {
+      if (!window.katex) return;
+      try { elm.textContent = ''; window.katex.render(latex, elm, { throwOnError:false, displayMode: !!display }); }
+      catch(e) { elm.textContent = latex; }
+    });
+  };
+
+  /* ── shared building blocks across the three modes ── */
+  const PAL = {
+    'x':'x', '+':'+', '−':'-', '^':'^', '( )':'()', '√':'sqrt()', 'π':'pi',
+    'sin( )':'sin()', 'cos( )':'cos()', 'tan( )':'tan()', 'ln( )':'ln()', 'e^( )':'e^()'
+  };
+  const palHTML = () => `
+    <div class="calc-pal" aria-label="Insert symbol">
+      ${['x','+','−','^','( )','√','π','sin( )','cos( )','tan( )','ln( )','e^( )'].map(s =>
+        `<button type="button" data-ins="${escape(s)}">${escape(s)}</button>`).join('')}
+    </div>`;
+  const wirePalette = (getInput) => {
+    const pal = $('.calc-pal');
+    if (!pal) return;
+    pal.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-ins]');
+      if (!b) return;
+      const input = getInput();
+      if (!input) return;
+      const ins = PAL[b.dataset.ins] ?? b.dataset.ins;
+      const caretInside = ins.endsWith('()');
+      const s = input.selectionStart ?? input.value.length, en = input.selectionEnd ?? input.value.length;
+      input.value = input.value.slice(0, s) + ins + input.value.slice(en);
+      const pos = s + ins.length - (caretInside ? 1 : 0);
+      input.focus(); input.setSelectionRange(pos, pos);
+    });
+  };
+  const renderStepsInto = (stepsEl, steps) => {
+    stepsEl.innerHTML = '';
+    steps.forEach((s, i) => {
+      const li = el('li', { class:'calc-step' });
+      li.appendChild(el('div', { class:'calc-step-head' }, [
+        el('span', { class:'calc-step-num', text: String(i + 1) }),
+        el('span', { class:'calc-step-rule', text: s.rule })
+      ]));
+      const math = el('div', { class:'calc-step-math' });
+      li.appendChild(math);
+      if (s.note) li.appendChild(el('div', { class:'calc-step-note', text: s.note }));
+      stepsEl.appendChild(li);
+      renderMath(math, s.latex, false);
+    });
+  };
+  const wireToggle = (btn, stepsEl) => {
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const hidden = stepsEl.hasAttribute('hidden');
+      if (hidden) { stepsEl.removeAttribute('hidden'); btn.textContent = 'Hide steps'; }
+      else { stepsEl.setAttribute('hidden', ''); btn.textContent = 'Show steps'; }
+    });
+  };
+  const wireCopy = (getResult) => {
+    $$('[data-copy]', body).forEach(btn => btn.addEventListener('click', () => {
+      const r = getResult();
+      if (!r) return;
+      copy(btn.dataset.copy === 'tex' ? r.resultLatex : r.resultText, btn);
+    }));
+  };
+
+  const renderDeriv = () => {
+    body.innerHTML = `
+      <p class="help">Type a function of <span class="chip">x</span> (or pick another variable).
+        Use <span class="chip">^</span> for powers, <span class="chip">*</span> or just write
+        <span class="chip">2x</span>, and functions like <span class="chip">sin(x)</span>,
+        <span class="chip">ln(x)</span>, <span class="chip">sqrt(x)</span>, <span class="chip">e^x</span>.</p>
+
+      <div class="calc-pal" aria-label="Insert symbol">
+        ${['x','+','−','^','( )','√','π','sin( )','cos( )','tan( )','ln( )','e^( )'].map(s =>
+          `<button type="button" data-ins="${escape(s)}">${escape(s)}</button>`).join('')}
+      </div>
+
+      <div class="calc-input-row">
+        <div class="field calc-fx">
+          <label for="calc-fx">f(<span id="calc-vlabel">x</span>) =</label>
+          <input class="input mono" id="calc-fx" autocomplete="off" spellcheck="false"
+                 placeholder="e.g.  x^3 - 4x + 7" value="x^3 - 4x + 7" autofocus>
+        </div>
+        <div class="field calc-var">
+          <label for="calc-var">Variable</label>
+          <input class="input mono" id="calc-var" value="x" maxlength="3" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn accent" id="calc-go">Differentiate</button>
+        <button class="btn ghost sm" id="calc-clear">Clear</button>
+      </div>
+
+      <div id="calc-error" class="calc-error" role="alert" hidden></div>
+
+      <div id="calc-out" hidden>
+        <div class="result" id="calc-result">
+          <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+          <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
+          <div class="result-label">Derivative</div>
+          <div class="calc-result-math" id="calc-answer"></div>
+        </div>
+
+        <div class="calc-eval">
+          <label for="calc-at">Evaluate f′ at <span id="calc-vlabel2">x</span> =</label>
+          <input class="input mono" id="calc-at" type="number" inputmode="decimal" placeholder="optional" style="width:120px">
+          <span class="calc-eval-out mono" id="calc-at-out"></span>
+        </div>
+
+        <div class="calc-steps-head">
+          <span>Step by step</span>
+          <button class="btn ghost sm" id="calc-toggle">Hide steps</button>
+        </div>
+        <ol class="calc-steps" id="calc-steps"></ol>
+      </div>
+    `;
+
+    const fx     = $('#calc-fx');
+    const vEl    = $('#calc-var');
+    const errBox = $('#calc-error');
+    const outBox = $('#calc-out');
+    const stepsEl= $('#calc-steps');
+    const ansEl  = $('#calc-answer');
+
+    let lastResult = null;
+
+    const showError = (msg) => {
+      errBox.textContent = msg;
+      errBox.hidden = false;
+      outBox.hidden = true;
+    };
+
+    const syncVarLabels = () => {
+      const v = (vEl.value.trim() || 'x');
+      $('#calc-vlabel').textContent = v;
+      const l2 = $('#calc-vlabel2'); if (l2) l2.textContent = v;
+    };
+
+    const evalAt = () => {
+      const out = $('#calc-at-out');
+      const at  = $('#calc-at');
+      if (!lastResult || !out) return;
+      const raw = at.value.trim();
+      if (raw === '') { out.textContent = ''; return; }
+      const x = parseFloat(raw);
+      if (!isFinite(x)) { out.textContent = ''; return; }
+      const val = window.CalcEngine.evaluate(lastResult.resultText, lastResult.variable, x);
+      out.textContent = (val == null) ? '= undefined here' : '= ' + fmtNum(val);
+    };
+
+    const renderResult = (r) => {
+      lastResult = r;
+      errBox.hidden = true;
+      outBox.hidden = false;
+      renderMath(ansEl, r.resultLatex, true);
+      renderStepsInto(stepsEl, r.steps);
+      evalAt();
+    };
+
+    const compute = () => {
+      const expr = fx.value.trim();
+      const v = (vEl.value.trim() || 'x');
+      if (!expr) { errBox.hidden = true; outBox.hidden = true; return; }
+      if (!window.CalcEngine) {
+        showError('Loading the calculus engine…');
+        ensureEngine((ok) => {
+          if (ok) compute();
+          else showError('Couldn’t load the calculus engine. Check your connection, then try again.');
+        });
+        return;
+      }
+      const r = window.CalcEngine.derivative(expr, v);
+      if (!r.ok) { showError(r.error || 'Could not read that expression.'); return; }
+      renderResult(r);
+    };
+
+    wirePalette(() => fx);
+    wireCopy(() => lastResult);
+    wireToggle($('#calc-toggle'), stepsEl);
+
+    $('#calc-go').addEventListener('click', compute);
+    $('#calc-clear').addEventListener('click', () => {
+      fx.value = ''; outBox.hidden = true; errBox.hidden = true; fx.focus();
+    });
+    fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+    vEl.addEventListener('input', syncVarLabels);
+    body.addEventListener('input', (e) => { if (e.target && e.target.id === 'calc-at') evalAt(); });
+
+    // example chips
+    body.appendChild(el('div', { class:'calc-examples' }, [
+      el('span', { class:'calc-ex-label', text:'Try:' }),
+      ...['x^3 - 4x + 7','sin(x^2)','x e^x','(2x+1)/(x-3)','ln(3x)','sqrt(x^2+1)','x^x'].map(ex =>
+        el('button', { class:'chip calc-ex', text: ex, on:{ click:() => { fx.value = ex; syncVarLabels(); compute(); } } }))
+    ]));
+
+    syncVarLabels();
+    // kick off the lazy load and compute the seeded example
+    compute();
+  };
+
+  const renderIntegral = () => {
+    let mode = 'indef';
+    const draw = () => {
+      body.innerHTML = `
+        <div class="calc-subtabs" role="tablist">
+          <button class="calc-subtab${mode === 'indef' ? ' active' : ''}" data-im="indef">Indefinite</button>
+          <button class="calc-subtab${mode === 'def' ? ' active' : ''}" data-im="def">Definite</button>
+        </div>
+        <p class="help">${mode === 'def'
+          ? 'Definite integral. Bounds may be numbers, <span class="chip">pi</span>, or <span class="chip">e</span>.'
+          : 'Indefinite integral — the result includes the constant <span class="chip">+ C</span>.'}</p>
+        ${palHTML()}
+        <div class="calc-input-row">
+          <div class="field calc-fx">
+            <label>∫ f(<span class="cvl">x</span>) d<span class="cvl">x</span></label>
+            <input class="input mono" id="ci-fx" autocomplete="off" spellcheck="false" placeholder="e.g.  x^2 + sin(x)" value="x^2 + sin(x)">
+          </div>
+          <div class="field calc-var"><label>Variable</label><input class="input mono" id="ci-var" value="x" maxlength="3" autocomplete="off" spellcheck="false"></div>
+        </div>
+        ${mode === 'def' ? `
+        <div class="calc-input-row">
+          <div class="field"><label>From (lower bound)</label><input class="input mono" id="ci-a" value="0" autocomplete="off"></div>
+          <div class="field"><label>To (upper bound)</label><input class="input mono" id="ci-b" value="1" autocomplete="off"></div>
+        </div>` : ''}
+        <div class="btn-row"><button class="btn accent" id="ci-go">Integrate</button><button class="btn ghost sm" id="ci-clear">Clear</button></div>
+        <div id="calc-error" class="calc-error" role="alert" hidden></div>
+        <div id="calc-out" hidden>
+          <div class="result">
+            <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+            <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
+            <div class="result-label">${mode === 'def' ? 'Definite integral' : 'Antiderivative'}</div>
+            <div class="calc-result-math" id="calc-answer"></div>
+          </div>
+          <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" id="calc-toggle">Hide steps</button></div>
+          <ol class="calc-steps" id="calc-steps"></ol>
+        </div>
+      `;
+      const fx = $('#ci-fx'), vEl = $('#ci-var'), errBox = $('#calc-error'),
+            outBox = $('#calc-out'), stepsEl = $('#calc-steps'), ansEl = $('#calc-answer');
+      let lastResult = null;
+      const showError = (m) => { errBox.textContent = m; errBox.hidden = false; outBox.hidden = true; };
+      const syncVar = () => { const v = vEl.value.trim() || 'x'; $$('.cvl', body).forEach(s => s.textContent = v); };
+      const compute = () => {
+        const expr = fx.value.trim(), v = vEl.value.trim() || 'x';
+        if (!expr) { errBox.hidden = true; outBox.hidden = true; return; }
+        if (!window.CalcEngine) { showError('Loading the calculus engine…'); ensureEngine(ok => ok ? compute() : showError('Couldn’t load the calculus engine. Check your connection, then try again.')); return; }
+        let r;
+        if (mode === 'def') { const a = $('#ci-a').value.trim() || '0', b = $('#ci-b').value.trim() || '0'; r = window.CalcEngine.definiteIntegral(expr, v, a, b); }
+        else r = window.CalcEngine.integral(expr, v);
+        if (!r.ok) { showError(r.error || 'Could not integrate that.'); return; }
+        lastResult = r; errBox.hidden = true; outBox.hidden = false;
+        renderMath(ansEl, r.resultLatex, true); renderStepsInto(stepsEl, r.steps);
+      };
+      wirePalette(() => fx); wireCopy(() => lastResult); wireToggle($('#calc-toggle'), stepsEl);
+      $('#ci-go').addEventListener('click', compute);
+      $('#ci-clear').addEventListener('click', () => { fx.value = ''; outBox.hidden = true; errBox.hidden = true; fx.focus(); });
+      fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+      vEl.addEventListener('input', syncVar);
+      const exs = mode === 'def'
+        ? [['x^2','0','3'], ['sin(x)','0','pi'], ['1/x','1','e'], ['x e^x','0','2']]
+        : ['x^2 + sin(x)', '1/x', 'x e^x', '(2x+1)^5', '2x/(x^2+1)', 'ln(x)'];
+      body.appendChild(el('div', { class:'calc-examples' }, [
+        el('span', { class:'calc-ex-label', text:'Try:' }),
+        ...exs.map(ex => mode === 'def'
+          ? el('button', { class:'chip calc-ex', text:`∫${ex[0]} from ${ex[1]} to ${ex[2]}`, on:{ click:() => {
+              fx.value = ex[0]; $('#ci-a').value = ex[1]; $('#ci-b').value = ex[2]; syncVar(); compute(); } } })
+          : el('button', { class:'chip calc-ex', text: ex, on:{ click:() => { fx.value = ex; syncVar(); compute(); } } }))
+      ]));
+      $$('.calc-subtab', body).forEach(b => b.addEventListener('click', () => { if (b.dataset.im !== mode) { mode = b.dataset.im; draw(); } }));
+      syncVar(); compute();
+    };
+    draw();
+  };
+
+  const renderLimit = () => {
+    body.innerHTML = `
+      <p class="help">Find a limit. The point can be a number, <span class="chip">pi</span>, or
+        <span class="chip">inf</span> / <span class="chip">-inf</span>.</p>
+      ${palHTML()}
+      <div class="calc-input-row">
+        <div class="field calc-fx"><label>f(<span class="cvl">x</span>)</label>
+          <input class="input mono" id="cl-fx" autocomplete="off" spellcheck="false" placeholder="e.g.  sin(x)/x" value="sin(x)/x"></div>
+        <div class="field calc-var"><label>Variable</label><input class="input mono" id="cl-var" value="x" maxlength="3" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="calc-input-row">
+        <div class="field"><label>as <span class="cvl">x</span> →</label>
+          <input class="input mono" id="cl-pt" value="0" placeholder="0, pi, inf, -inf" autocomplete="off"></div>
+        <div class="field"><label>Direction</label>
+          <div class="calc-dir">
+            <button class="calc-dirbtn active" data-dir="both">Two-sided</button>
+            <button class="calc-dirbtn" data-dir="left">Left −</button>
+            <button class="calc-dirbtn" data-dir="right">Right +</button>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row"><button class="btn accent" id="cl-go">Find limit</button><button class="btn ghost sm" id="cl-clear">Clear</button></div>
+      <div id="calc-error" class="calc-error" role="alert" hidden></div>
+      <div id="calc-out" hidden>
+        <div class="result">
+          <button class="copy-btn" data-copy="tex" title="Copy as LaTeX">LaTeX</button>
+          <button class="copy-btn" data-copy="txt" style="right:64px" title="Copy as plain text">Copy</button>
+          <div class="result-label">Limit</div>
+          <div class="calc-result-math" id="calc-answer"></div>
+        </div>
+        <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" id="calc-toggle">Hide steps</button></div>
+        <ol class="calc-steps" id="calc-steps"></ol>
+      </div>
+    `;
+    let dir = 'both', lastResult = null;
+    const fx = $('#cl-fx'), vEl = $('#cl-var'), ptEl = $('#cl-pt'), errBox = $('#calc-error'),
+          outBox = $('#calc-out'), stepsEl = $('#calc-steps'), ansEl = $('#calc-answer');
+    const showError = (m) => { errBox.textContent = m; errBox.hidden = false; outBox.hidden = true; };
+    const syncVar = () => { const v = vEl.value.trim() || 'x'; $$('.cvl', body).forEach(s => s.textContent = v); };
+    const compute = () => {
+      const expr = fx.value.trim(), v = vEl.value.trim() || 'x', pt = ptEl.value.trim() || '0';
+      if (!expr) { errBox.hidden = true; outBox.hidden = true; return; }
+      if (!window.CalcEngine) { showError('Loading the calculus engine…'); ensureEngine(ok => ok ? compute() : showError('Couldn’t load the calculus engine. Check your connection, then try again.')); return; }
+      const r = window.CalcEngine.limit(expr, v, pt, dir);
+      if (!r.ok) { showError(r.error || 'Could not evaluate that limit.'); return; }
+      lastResult = r; errBox.hidden = true; outBox.hidden = false;
+      renderMath(ansEl, r.resultLatex, true); renderStepsInto(stepsEl, r.steps);
+    };
+    wirePalette(() => fx); wireCopy(() => lastResult); wireToggle($('#calc-toggle'), stepsEl);
+    $('#cl-go').addEventListener('click', compute);
+    $('#cl-clear').addEventListener('click', () => { fx.value = ''; outBox.hidden = true; errBox.hidden = true; fx.focus(); });
+    fx.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+    ptEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); compute(); } });
+    vEl.addEventListener('input', syncVar);
+    $$('.calc-dirbtn', body).forEach(b => b.addEventListener('click', () => {
+      dir = b.dataset.dir; $$('.calc-dirbtn', body).forEach(x => x.classList.toggle('active', x === b)); compute();
+    }));
+    body.appendChild(el('div', { class:'calc-examples' }, [
+      el('span', { class:'calc-ex-label', text:'Try:' }),
+      ...[['sin(x)/x','0'], ['(x^2-1)/(x-1)','1'], ['(1-cos(x))/x^2','0'], ['(2x^2+3)/(x^2-1)','inf'], ['1/x','0']].map(([e, p]) =>
+        el('button', { class:'chip calc-ex', text:`${e} → ${p}`, on:{ click:() => { fx.value = e; ptEl.value = p; syncVar(); compute(); } } }))
+    ]));
+    syncVar(); compute();
+  };
+
+  const render = (mode) => {
+    if (mode === 'integral') renderIntegral();
+    else if (mode === 'limit') renderLimit();
+    else renderDeriv();
+  };
+
+  render('deriv');
+  root.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (!tab || !tab.dataset.mode) return;
+    $$('.tab', root).forEach(t => {
+      const on = t === tab;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    render(tab.dataset.mode);
+  });
 }
 
 /* =========================================================
