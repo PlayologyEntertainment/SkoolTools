@@ -1768,6 +1768,63 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
   border:1px solid var(--rule);padding:1px 5px;border-radius:2px;margin-right:2px;
 }
 
+/* Plot-type segmented control (Cartesian / Polar / Parametric) */
+.gc-plottype{
+  display:inline-flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden;flex-shrink:0;
+}
+.gc-pt-btn{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:5px 9px;cursor:pointer;background:transparent;
+  border:0;border-right:1px solid var(--rule);transition:color .12s,background .12s;
+  white-space:nowrap;
+}
+.gc-pt-btn:last-child{border-right:0}
+.gc-pt-btn.active{color:var(--ink);background:var(--paper-3)}
+.gc-pt-btn:hover{color:var(--ink)}
+
+/* Toggle buttons (Derivative, Table) */
+.gc-toggle{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:5px 10px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--rule);background:transparent;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:6px;
+  transition:color .12s,border-color .12s,background .12s;
+}
+.gc-toggle:hover{color:var(--ink);border-color:var(--ink-2)}
+.gc-toggle.active{color:var(--accent-4);border-color:var(--accent-4)}
+.gc-toggle .tg-dot{
+  width:8px;height:8px;border-radius:50%;border:1.5px solid currentColor;transition:background .12s;
+}
+.gc-toggle.active .tg-dot{background:var(--accent-4)}
+.gc-mode-btn:disabled,.gc-toggle:disabled{opacity:.32;cursor:not-allowed}
+
+/* Value-table panel */
+.gc-table-wrap{
+  border-top:1px solid var(--rule);background:var(--paper-2);
+  flex-shrink:0;display:none;flex-direction:column;
+}
+.gc-table-wrap.open{display:flex}
+.gc-table-head{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:7px 14px;border-bottom:1px solid var(--rule-2);
+}
+.gc-table-scroll{max-height:190px;overflow:auto}
+.gc-table{
+  border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px;
+}
+.gc-table th,.gc-table td{
+  padding:4px 12px;text-align:right;white-space:nowrap;
+  border-bottom:1px solid var(--rule-2);border-right:1px solid var(--rule-2);
+}
+.gc-table th{
+  position:sticky;top:0;background:var(--paper-3);color:var(--muted);
+  font-weight:600;letter-spacing:.06em;z-index:1;
+}
+.gc-table td{color:var(--ink-2)}
+.gc-table td:first-child,.gc-table th:first-child{color:var(--ink);text-align:left}
+.gc-table tr:hover td{background:var(--paper-3)}
+.gc-table th .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
 
 .fref-shell{
   display:flex;flex-direction:column;height:100%;overflow:hidden;
@@ -4144,8 +4201,8 @@ function registerTools() {
     desc:'Scientific, with history & ANS.', tag:'upgraded',
     keywords:['math','calc','scientific','sum','add'], mount: mountCalculator });
   TOOLS.push({ id:'graphing', shelf:'numbers', icon:'📈', name:'Graphing Calculator',
-    desc:'Plot y=f(x), find roots, intersections.', tag:'new',
-    keywords:['plot','graph','function','curve','roots','intersection','derivative'], mount: mountGraphing });
+    desc:'Cartesian, polar & parametric; table, derivative & area.', tag:'upgraded',
+    keywords:['plot','graph','function','curve','roots','intersection','derivative','polar','parametric','table','area','integral'], mount: mountGraphing });
   TOOLS.push({ id:'calculus', shelf:'numbers', icon:'∫', name:'Calculus Solver',
     desc:'Derivatives, rule-by-rule.', tag:'new',
     keywords:['calculus','derivative','differentiate','chain','product','quotient','power','rule','ap','calc','slope','integral','limit'], mount: mountCalculus });
@@ -11766,20 +11823,34 @@ function mountGraphing(root) {
   /* ── Palette for up to 6 functions ── */
   const FN_COLORS = ['#FF5A3D','#6A95FF','#4EAE53','#FFD23F','#B58BFF','#FF7AA8'];
 
+  /* ── A function carries an expression per plot type so switching modes
+        never loses what the student typed. ── */
+  function newFn(i) {
+    return {
+      color: FN_COLORS[i % FN_COLORS.length],
+      cart:  i === 0 ? 'sin(x)' : '',                 // y = f(x)
+      polar: i === 0 ? '6 cos(3 theta)' : '',         // r = f(θ)  (a rose)
+      px:    i === 0 ? '5 cos(3 t)' : '',             // x = x(t)  (a Lissajous)
+      py:    i === 0 ? '5 sin(2 t)' : '',             // y = y(t)
+    };
+  }
+
   /* ── State ── */
-  let fns = [{ expr: 'sin(x)', color: FN_COLORS[0] }];
+  let fns = [ newFn(0) ];
+  let plotType = 'cartesian';            // 'cartesian' | 'polar' | 'parametric'
   let view = { xMin: -10, xMax: 10, yMin: -7, yMax: 7 };
-  let mode = 'zoom'; // 'zoom' | 'trace' | 'roots' | 'intersect'
+  let pMin = 0, pMax = 2 * Math.PI;      // parameter (θ or t) range for polar/parametric
+  let mode = 'zoom';                     // 'zoom' | 'trace' | 'roots' | 'intersect' | 'area'
   let traceIdx = 0;
-  let traceT = 0.5; // 0..1 across xMin..xMax
-  let rootMarkers = []; // [{x,y,color}]
-  let intersectMarkers = [];
-  let cursorPos = null;
-  let isPanning = false;
-  let panStart = null;
-  let panView = null;
-  let isPinching = false;
-  let pinchStart = null;
+  let traceT = 0.5;                      // 0..1 across the active domain
+  let rootMarkers = [];                  // [{x,color}]
+  let intersectMarkers = [];             // [{x,y}]
+  let showDeriv = false;                 // derivative overlay (cartesian)
+  let showTable = false;                 // value-table panel
+  let areaA = -2, areaB = 2, areaFn = 0; // area-under-curve bounds + target fn (cartesian)
+  let tStart = -5, tStep = 1;            // value-table start/step
+  let isPanning = false, panStart = null, panView = null;
+  let isPinching = false, pinchStart = null;
   let rafId = null;
 
   /* ── Tokenizer / evaluator ── */
@@ -11795,40 +11866,76 @@ function mountGraphing(root) {
     sec: x => 1/Math.cos(x), csc: x => 1/Math.sin(x), cot: x => 1/Math.tan(x),
   };
 
-  function makeEval(expr) {
-    // Preprocess: implicit multiplication, ^ to **, common shorthands
+  // varName is 'x' (cartesian), 'theta' (polar) or 't' (parametric).
+  function makeEval(expr, varName='x') {
+    if (!expr || !expr.trim()) return null;
+    const v = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Normalise symbols, then add implicit multiplication. The number rule uses a
+    // look-behind so digits *inside* a name (log10, log2, atan2) are left alone.
     let s = expr.trim()
+      .replace(/θ/g, 'theta')
+      .replace(/π/g, 'pi')
       .replace(/\^/g, '**')
-      .replace(/(\d)(x)/g, '$1*$2')
-      .replace(/(x)(\d)/g, '$1*$2')
-      .replace(/(\d)\s*\(/g, '$1*(')
-      .replace(/\)\s*\(/g, ')*(')
-      .replace(/\)\s*(x)/g, ')*$1')
-      .replace(/(x)\s*\(/g, '$1*(');
+      .replace(/(?<![a-zA-Z0-9.])(\d+(?:\.\d+)?)\s*(?=[a-zA-Z(])/g, '$1*')  // 2x, 6 cos(, 3 theta, 0.5(
+      .replace(/\)\s*(?=[a-zA-Z0-9(.])/g, ')*')                            // )(  )x  )2
+      .replace(new RegExp('(?<![a-zA-Z])(' + v + ')\\s*(?=\\d)', 'g'), '$1*') // x2
+      .replace(new RegExp('(?<![a-zA-Z])(' + v + ')\\s*\\(', 'g'), '$1*(');   // x(  (variable, not a function name)
 
-    // Build the function body
-    const constDefs = Object.entries(CONSTS).map(([k,v]) => `const ${k}=${v};`).join('');
-    const funDefs = Object.entries(FUNS).map(([k]) => `const ${k}=_F.${k};`).join('');
+    const constDefs = Object.entries(CONSTS).map(([k,val]) => `const ${k}=${val};`).join('');
+    const funDefs = Object.keys(FUNS).map(k => `const ${k}=_F.${k};`).join('');
     const body = `${constDefs}${funDefs}return (${s});`;
     try {
       // eslint-disable-next-line no-new-func
-      const fn = new Function('x', '_F', body);
-      return x => { try { const r = fn(x, FUNS); return (isFinite(r) ? r : NaN); } catch { return NaN; } };
+      const fn = new Function(varName, '_F', body);
+      return val => { try { const r = fn(val, FUNS); return (isFinite(r) ? r : NaN); } catch { return NaN; } };
     } catch {
       return null;
     }
   }
 
-  /* ── Canvas setup ── */
+  /* ── Per-plot-type helpers ── */
+  // Returns true if a function row has usable input for the current plot type.
+  function fnActive(fn) {
+    if (plotType === 'cartesian')  return !!(fn.cart.trim()  && makeEval(fn.cart, 'x'));
+    if (plotType === 'polar')      return !!(fn.polar.trim() && makeEval(fn.polar, 'theta'));
+    return !!(fn.px.trim() && fn.py.trim() && makeEval(fn.px, 't') && makeEval(fn.py, 't'));
+  }
+  function activeFns() { return fns.filter(fnActive); }
+  // Maps a sample index to a world point for the current plot type, or null.
+  function samplerFor(fn, N) {
+    if (plotType === 'cartesian') {
+      const f = makeEval(fn.cart, 'x'); if (!f) return null;
+      const dx = (view.xMax - view.xMin) / N;
+      return i => { const x = view.xMin + i * dx; const y = f(x); return { x, y }; };
+    }
+    if (plotType === 'polar') {
+      const f = makeEval(fn.polar, 'theta'); if (!f) return null;
+      const dt = (pMax - pMin) / N;
+      return i => { const th = pMin + i * dt; const r = f(th); return { x: r * Math.cos(th), y: r * Math.sin(th) }; };
+    }
+    const fx = makeEval(fn.px, 't'), fy = makeEval(fn.py, 't'); if (!fx || !fy) return null;
+    const dt = (pMax - pMin) / N;
+    return i => { const t = pMin + i * dt; return { x: fx(t), y: fy(t) }; };
+  }
+
+  /* ── Markup ── */
   root.innerHTML = `
     <div class="gc-shell">
       <div class="gc-top">
         <div class="gc-fn-bar" id="gc-fn-bar"></div>
         <div class="gc-controls">
+          <div class="gc-plottype" id="gc-plottype">
+            <button class="gc-pt-btn active" data-pt="cartesian">y = f(x)</button>
+            <button class="gc-pt-btn" data-pt="polar">r = f(θ)</button>
+            <button class="gc-pt-btn" data-pt="parametric">x,y (t)</button>
+          </div>
           <button class="gc-mode-btn active" data-mode="zoom">Zoom / Pan</button>
           <button class="gc-mode-btn" data-mode="trace">Trace</button>
           <button class="gc-mode-btn" data-mode="roots">Roots</button>
           <button class="gc-mode-btn" data-mode="intersect">Intersections</button>
+          <button class="gc-mode-btn" data-mode="area">Area</button>
+          <button class="gc-toggle" id="gc-deriv" title="Overlay the derivative f ′(x)"><span class="tg-dot"></span>f ′(x)</button>
+          <button class="gc-toggle" id="gc-table-toggle" title="Show a value table"><span class="tg-dot"></span>Table</button>
           <div class="gc-spacer"></div>
           <span class="gc-view-label">x:</span>
           <input class="gc-view-input" id="gc-xmin" value="-10" title="x min">
@@ -11836,6 +11943,11 @@ function mountGraphing(root) {
           <span class="gc-view-label">y:</span>
           <input class="gc-view-input" id="gc-ymin" value="-7" title="y min">
           <input class="gc-view-input" id="gc-ymax" value="7" title="y max">
+          <span class="gc-view-label" id="gc-param-wrap" style="display:none">
+            <span id="gc-param-label">θ:</span>
+            <input class="gc-view-input" id="gc-pmin" value="0" title="parameter min">
+            <input class="gc-view-input" id="gc-pmax" value="6.2832" title="parameter max">
+          </span>
           <button class="btn ghost sm" id="gc-reset-view" title="Reset view">Reset</button>
         </div>
       </div>
@@ -11844,6 +11956,15 @@ function mountGraphing(root) {
       </div>
       <div class="gc-results-panel" id="gc-results">
         <span style="color:var(--muted-2);font-style:italic">Enter a function above to plot it.</span>
+      </div>
+      <div class="gc-table-wrap" id="gc-table-wrap">
+        <div class="gc-table-head">
+          <span class="gc-view-label" id="gc-table-startlbl">x start:</span>
+          <input class="gc-view-input" id="gc-tstart" value="-5">
+          <span class="gc-view-label">step:</span>
+          <input class="gc-view-input" id="gc-tstep" value="1">
+        </div>
+        <div class="gc-table-scroll" id="gc-table-scroll"></div>
       </div>
       <div class="gc-info-bar" id="gc-info-bar">
         <div class="gc-info-item" id="gc-status">Ready</div>
@@ -11855,17 +11976,19 @@ function mountGraphing(root) {
         <span><kbd>R</kbd> roots</span>
         <span><kbd>T</kbd> trace</span>
         <span><kbd>0</kbd> reset view</span>
-        <span>Supports: sin, cos, tan, log, sqrt, abs, ^, π</span>
+        <span>Supports: sin, cos, tan, log, sqrt, abs, ^, π, e</span>
       </div>
     </div>`;
 
-  const wrap    = root.querySelector('#gc-wrap');
-  const canvas  = root.querySelector('#gc-canvas');
-  const ctx     = canvas.getContext('2d');
-  const fnBar   = root.querySelector('#gc-fn-bar');
-  const results = root.querySelector('#gc-results');
+  const wrap     = root.querySelector('#gc-wrap');
+  const canvas   = root.querySelector('#gc-canvas');
+  const ctx      = canvas.getContext('2d');
+  const fnBar    = root.querySelector('#gc-fn-bar');
+  const results  = root.querySelector('#gc-results');
   const statusEl = root.querySelector('#gc-status');
   const cursorEl = root.querySelector('#gc-cursor-display');
+  const tableWrap   = root.querySelector('#gc-table-wrap');
+  const tableScroll = root.querySelector('#gc-table-scroll');
 
   /* ── Resize observer ── */
   function resize() {
@@ -11882,240 +12005,239 @@ function mountGraphing(root) {
   ro.observe(wrap);
 
   /* ── Coordinate transforms ── */
+  function dims() {
+    const dpr = window.devicePixelRatio || 1;
+    return { W: canvas.width / dpr, H: canvas.height / dpr };
+  }
   function toCanvas(wx, wy) {
-    const W = canvas.width  / (window.devicePixelRatio||1);
-    const H = canvas.height / (window.devicePixelRatio||1);
+    const { W, H } = dims();
     return {
       x: (wx - view.xMin) / (view.xMax - view.xMin) * W,
       y: H - (wy - view.yMin) / (view.yMax - view.yMin) * H
     };
   }
   function toWorld(cx, cy) {
-    const W = canvas.width  / (window.devicePixelRatio||1);
-    const H = canvas.height / (window.devicePixelRatio||1);
+    const { W, H } = dims();
     return {
       x: view.xMin + cx / W * (view.xMax - view.xMin),
       y: view.yMin + (H - cy) / H * (view.yMax - view.yMin)
     };
   }
 
+  /* ── A single polyline from a sampler (with discontinuity guard) ── */
+  function strokeSampler(sampler, N, color, dash) {
+    if (!sampler) return;
+    const { H } = dims();
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (dash) { ctx.setLineDash(dash); ctx.lineWidth = 1.8; }
+    else { ctx.lineWidth = 2.2; ctx.shadowColor = color + '40'; ctx.shadowBlur = 6; }
+    let started = false, prevY = NaN;
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const p = sampler(i);
+      if (!p || !isFinite(p.x) || !isFinite(p.y)) { started = false; prevY = NaN; continue; }
+      const c = toCanvas(p.x, p.y);
+      if (started && isFinite(prevY) && Math.abs(c.y - prevY) > H * 3) started = false;
+      if (!started) { ctx.moveTo(c.x, c.y); started = true; }
+      else ctx.lineTo(c.x, c.y);
+      prevY = c.y;
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /* ── Draw ── */
   function draw() {
     rafId = null;
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const { W, H } = dims();
     ctx.save();
     ctx.clearRect(0, 0, W, H);
 
-    const bgColor  = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#0F0D0C';
-    const ruleColor = getComputedStyle(document.documentElement).getPropertyValue('--rule').trim() || 'rgba(240,233,218,0.1)';
-    const inkColor = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#F0E9DA';
-    const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#837C70';
-    const paper3 = getComputedStyle(document.documentElement).getPropertyValue('--paper-3').trim() || '#232020';
+    const cs = getComputedStyle(document.documentElement);
+    const bgColor    = cs.getPropertyValue('--paper').trim()   || '#0F0D0C';
+    const ruleColor  = cs.getPropertyValue('--rule').trim()    || 'rgba(240,233,218,0.1)';
+    const inkColor   = cs.getPropertyValue('--ink').trim()     || '#F0E9DA';
+    const mutedColor = cs.getPropertyValue('--muted').trim()   || '#837C70';
+    const paper3     = cs.getPropertyValue('--paper-3').trim() || '#232020';
 
-    // Background
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, W, H);
 
-    // Grid lines
+    /* Grid */
     function niceStep(range, targetLines) {
       const rough = range / targetLines;
       const mag = Math.pow(10, Math.floor(Math.log10(rough)));
       const norm = rough / mag;
       let step;
-      if (norm < 1.5) step = 1;
-      else if (norm < 3) step = 2;
-      else if (norm < 7) step = 5;
-      else step = 10;
+      if (norm < 1.5) step = 1; else if (norm < 3) step = 2;
+      else if (norm < 7) step = 5; else step = 10;
       return step * mag;
     }
-
-    const xRange = view.xMax - view.xMin;
-    const yRange = view.yMax - view.yMin;
-    const xStep = niceStep(xRange, Math.max(4, Math.min(12, W / 60)));
-    const yStep = niceStep(yRange, Math.max(4, Math.min(10, H / 60)));
+    const xStep = niceStep(view.xMax - view.xMin, Math.max(4, Math.min(12, W / 60)));
+    const yStep = niceStep(view.yMax - view.yMin, Math.max(4, Math.min(10, H / 60)));
 
     ctx.save();
     ctx.strokeStyle = ruleColor;
     ctx.lineWidth = 1;
-    // Vertical gridlines
     const xStart = Math.ceil(view.xMin / xStep) * xStep;
     for (let gx = xStart; gx <= view.xMax + xStep * 0.01; gx += xStep) {
       const c = toCanvas(gx, 0);
-      ctx.beginPath(); ctx.moveTo(c.x, 0); ctx.lineTo(c.x, H);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x, 0); ctx.lineTo(c.x, H); ctx.stroke();
     }
-    // Horizontal gridlines
     const yStart = Math.ceil(view.yMin / yStep) * yStep;
     for (let gy = yStart; gy <= view.yMax + yStep * 0.01; gy += yStep) {
       const c = toCanvas(0, gy);
-      ctx.beginPath(); ctx.moveTo(0, c.y); ctx.lineTo(W, c.y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, c.y); ctx.lineTo(W, c.y); ctx.stroke();
     }
     ctx.restore();
 
-    // Axes
+    /* Axes */
     ctx.save();
     const origin = toCanvas(0, 0);
     ctx.strokeStyle = mutedColor;
     ctx.lineWidth = 1.5;
-    // X axis
-    if (origin.y >= 0 && origin.y <= H) {
-      ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(W, origin.y); ctx.stroke();
-    }
-    // Y axis
-    if (origin.x >= 0 && origin.x <= W) {
-      ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, H); ctx.stroke();
-    }
+    if (origin.y >= 0 && origin.y <= H) { ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(W, origin.y); ctx.stroke(); }
+    if (origin.x >= 0 && origin.x <= W) { ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, H); ctx.stroke(); }
     ctx.restore();
 
-    // Axis labels
+    /* Axis labels */
     ctx.save();
     ctx.fillStyle = mutedColor;
-    ctx.font = `10px ${getComputedStyle(document.documentElement).getPropertyValue('--mono').split(',')[0] || 'monospace'}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    ctx.font = `10px ${cs.getPropertyValue('--mono').split(',')[0] || 'monospace'}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     const labelY = Math.min(H - 14, Math.max(2, origin.y + 4));
     for (let gx = xStart; gx <= view.xMax + xStep * 0.01; gx += xStep) {
       if (Math.abs(gx) < xStep * 0.001) continue;
       const c = toCanvas(gx, 0);
       if (c.x < 8 || c.x > W - 8) continue;
-      const lbl = Math.abs(gx) >= 1000 ? gx.toExponential(0) :
-                  (gx % 1 === 0 ? gx.toString() : parseFloat(gx.toPrecision(4)).toString());
+      const lbl = Math.abs(gx) >= 1000 ? gx.toExponential(0)
+                : (gx % 1 === 0 ? gx.toString() : parseFloat(gx.toPrecision(4)).toString());
       ctx.fillText(lbl, c.x, labelY);
     }
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     const labelX = Math.min(W - 4, Math.max(28, origin.x - 4));
     for (let gy = yStart; gy <= view.yMax + yStep * 0.01; gy += yStep) {
       if (Math.abs(gy) < yStep * 0.001) continue;
       const c = toCanvas(0, gy);
       if (c.y < 8 || c.y > H - 8) continue;
-      const lbl = Math.abs(gy) >= 1000 ? gy.toExponential(0) :
-                  (gy % 1 === 0 ? gy.toString() : parseFloat(gy.toPrecision(4)).toString());
+      const lbl = Math.abs(gy) >= 1000 ? gy.toExponential(0)
+                : (gy % 1 === 0 ? gy.toString() : parseFloat(gy.toPrecision(4)).toString());
       ctx.fillText(lbl, labelX, c.y);
     }
     ctx.restore();
 
-    // Plot functions
-    const STEPS = Math.min(1200, Math.max(600, W * 2));
-    const dx = (view.xMax - view.xMin) / STEPS;
-
-    fns.forEach((fn, fi) => {
-      if (!fn.expr.trim()) return;
-      const f = makeEval(fn.expr);
-      if (!f) return;
-
-      ctx.save();
-      ctx.strokeStyle = fn.color;
-      ctx.lineWidth = 2.2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.shadowColor = fn.color + '40';
-      ctx.shadowBlur = 6;
-
-      let started = false;
-      let prevY = NaN;
-      ctx.beginPath();
-      for (let i = 0; i <= STEPS; i++) {
-        const wx = view.xMin + i * dx;
-        const wy = f(wx);
-        if (!isFinite(wy)) { started = false; prevY = NaN; continue; }
-        const c = toCanvas(wx, wy);
-        // Discontinuity guard: if y jumps too far, start new segment
-        if (started && isFinite(prevY) && Math.abs(c.y - prevY) > H * 3) {
-          started = false;
+    /* Area-under-curve shading (cartesian, area mode) */
+    if (plotType === 'cartesian' && mode === 'area') {
+      const fn = fns[areaFn];
+      const f = fn ? makeEval(fn.cart, 'x') : null;
+      if (f) {
+        const a = Math.min(areaA, areaB), b = Math.max(areaA, areaB);
+        const N = 240, dx = (b - a) / N;
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = fn.color;
+        ctx.beginPath();
+        const o0 = toCanvas(a, 0);
+        ctx.moveTo(o0.x, o0.y);
+        for (let i = 0; i <= N; i++) {
+          const x = a + i * dx, y = f(x);
+          const c = toCanvas(x, isFinite(y) ? y : 0);
+          ctx.lineTo(c.x, c.y);
         }
-        if (!started) { ctx.moveTo(c.x, c.y); started = true; }
-        else ctx.lineTo(c.x, c.y);
-        prevY = c.y;
+        const o1 = toCanvas(b, 0);
+        ctx.lineTo(o1.x, o1.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        // boundary lines
+        ctx.save();
+        ctx.strokeStyle = fn.color; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        [a, b].forEach(xb => { const c = toCanvas(xb, 0); ctx.beginPath(); ctx.moveTo(c.x, 0); ctx.lineTo(c.x, H); ctx.stroke(); });
+        ctx.restore();
       }
-      ctx.stroke();
-      ctx.restore();
+    }
+
+    /* Plot every function */
+    const STEPS = plotType === 'cartesian' ? Math.min(1200, Math.max(600, W * 2)) : 1600;
+    fns.forEach(fn => {
+      if (!fnActive(fn)) return;
+      strokeSampler(samplerFor(fn, STEPS), STEPS, fn.color);
+      // Derivative overlay (cartesian only)
+      if (showDeriv && plotType === 'cartesian') {
+        const f = makeEval(fn.cart, 'x');
+        if (f) {
+          const h = (view.xMax - view.xMin) / 5000;
+          const dx = (view.xMax - view.xMin) / STEPS;
+          const dsamp = i => { const x = view.xMin + i * dx; return { x, y: (f(x + h) - f(x - h)) / (2 * h) }; };
+          strokeSampler(dsamp, STEPS, fn.color, [6, 5]);
+        }
+      }
     });
 
-    // Root markers
+    /* Root markers */
     rootMarkers.forEach(m => {
       const c = toCanvas(m.x, 0);
       if (c.x < -10 || c.x > W + 10) return;
       ctx.save();
-      ctx.strokeStyle = m.color;
-      ctx.fillStyle = m.color;
-      ctx.lineWidth = 2;
-      ctx.shadowColor = m.color + '60';
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.arc(c.x, toCanvas(0, 0).y, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.font = `bold 10px monospace`;
-      ctx.fillStyle = inkColor;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = m.color; ctx.shadowColor = m.color + '60'; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(c.x, toCanvas(0, 0).y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.font = `bold 10px monospace`; ctx.fillStyle = inkColor; ctx.shadowBlur = 0;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       ctx.fillText(formatN(m.x), c.x, toCanvas(0, 0).y - 8);
       ctx.restore();
     });
 
-    // Intersection markers
+    /* Intersection markers */
     intersectMarkers.forEach(m => {
       const c = toCanvas(m.x, m.y);
       if (c.x < -10 || c.x > W + 10 || c.y < -10 || c.y > H + 10) return;
       ctx.save();
-      ctx.strokeStyle = '#FFD23F';
-      ctx.fillStyle = '#FFD23F';
-      ctx.lineWidth = 2;
-      ctx.shadowColor = '#FFD23F60';
-      ctx.shadowBlur = 8;
-      // Diamond shape
+      ctx.fillStyle = '#FFD23F'; ctx.shadowColor = '#FFD23F60'; ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.moveTo(c.x, c.y - 7);
-      ctx.lineTo(c.x + 7, c.y);
-      ctx.lineTo(c.x, c.y + 7);
-      ctx.lineTo(c.x - 7, c.y);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(c.x, c.y - 7); ctx.lineTo(c.x + 7, c.y); ctx.lineTo(c.x, c.y + 7); ctx.lineTo(c.x - 7, c.y);
+      ctx.closePath(); ctx.fill();
       ctx.restore();
     });
 
-    // Trace mode
-    if (mode === 'trace' && fns.length > 0) {
-      const fn = fns[traceIdx];
-      if (fn && fn.expr.trim()) {
-        const f = makeEval(fn.expr);
-        if (f) {
-          const wx = view.xMin + traceT * (view.xMax - view.xMin);
-          const wy = f(wx);
-          if (isFinite(wy)) {
-            const c = toCanvas(wx, wy);
-            ctx.save();
-            ctx.strokeStyle = fn.color;
-            ctx.fillStyle = fn.color;
-            ctx.shadowColor = fn.color + '80';
-            ctx.shadowBlur = 12;
-            ctx.lineWidth = 2;
-            // Crosshair
-            ctx.beginPath();
-            ctx.moveTo(c.x - 10, c.y); ctx.lineTo(c.x + 10, c.y);
-            ctx.moveTo(c.x, c.y - 10); ctx.lineTo(c.x, c.y + 10);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
-            ctx.fill();
-            // Label
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = paper3;
-            ctx.strokeStyle = fn.color;
-            ctx.lineWidth = 1;
-            const label = `(${formatN(wx)}, ${formatN(wy)})`;
-            ctx.font = `bold 11px monospace`;
-            const tw = ctx.measureText(label).width;
-            const lx = Math.min(W - tw - 12, Math.max(6, c.x + 10));
-            const ly = Math.max(20, Math.min(H - 24, c.y - 18));
-            ctx.fillRect(lx - 4, ly - 11, tw + 10, 20);
-            ctx.strokeRect(lx - 4, ly - 11, tw + 10, 20);
-            ctx.fillStyle = fn.color;
-            ctx.fillText(label, lx + 1, ly + 3);
-            ctx.restore();
-          }
+    /* Trace */
+    if (mode === 'trace') {
+      const act = activeFns();
+      if (act.length) {
+        const fn = act[Math.min(traceIdx, act.length - 1)];
+        let pt = null, label = '';
+        if (plotType === 'cartesian') {
+          const f = makeEval(fn.cart, 'x');
+          const x = view.xMin + traceT * (view.xMax - view.xMin), y = f(x);
+          if (isFinite(y)) { pt = { x, y }; label = `(${formatN(x)}, ${formatN(y)})`; }
+        } else if (plotType === 'polar') {
+          const f = makeEval(fn.polar, 'theta');
+          const th = pMin + traceT * (pMax - pMin), r = f(th);
+          if (isFinite(r)) { pt = { x: r * Math.cos(th), y: r * Math.sin(th) }; label = `θ=${formatN(th)}  r=${formatN(r)}`; }
+        } else {
+          const fx = makeEval(fn.px, 't'), fy = makeEval(fn.py, 't');
+          const t = pMin + traceT * (pMax - pMin), x = fx(t), y = fy(t);
+          if (isFinite(x) && isFinite(y)) { pt = { x, y }; label = `t=${formatN(t)}  (${formatN(x)}, ${formatN(y)})`; }
+        }
+        if (pt) {
+          const c = toCanvas(pt.x, pt.y);
+          ctx.save();
+          ctx.strokeStyle = fn.color; ctx.fillStyle = fn.color;
+          ctx.shadowColor = fn.color + '80'; ctx.shadowBlur = 12; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(c.x - 10, c.y); ctx.lineTo(c.x + 10, c.y);
+          ctx.moveTo(c.x, c.y - 10); ctx.lineTo(c.x, c.y + 10); ctx.stroke();
+          ctx.beginPath(); ctx.arc(c.x, c.y, 5, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0; ctx.fillStyle = paper3; ctx.strokeStyle = fn.color; ctx.lineWidth = 1;
+          ctx.font = `bold 11px monospace`;
+          const tw = ctx.measureText(label).width;
+          const lx = Math.min(W - tw - 12, Math.max(6, c.x + 10));
+          const ly = Math.max(20, Math.min(H - 24, c.y - 18));
+          ctx.fillRect(lx - 4, ly - 11, tw + 10, 20);
+          ctx.strokeRect(lx - 4, ly - 11, tw + 10, 20);
+          ctx.fillStyle = fn.color; ctx.fillText(label, lx + 1, ly + 3);
+          ctx.restore();
         }
       }
     }
@@ -12133,94 +12255,156 @@ function mountGraphing(root) {
     if (!isFinite(n)) return '∞';
     if (Math.abs(n) < 1e-10) return '0';
     if (Math.abs(n) >= 1e6 || (Math.abs(n) < 0.001 && n !== 0)) return n.toExponential(4);
-    const s = parseFloat(n.toPrecision(7)).toString();
-    return s;
+    return parseFloat(n.toPrecision(7)).toString();
   }
 
-  /* ── Root finder: bisection + Newton's on each sign-change interval ── */
+  /* ── Root finder: scan + bisection ── */
   function findRoots(f, xMin, xMax, tolerance=1e-9, maxIter=80) {
-    const SCAN = 800;
-    const step = (xMax - xMin) / SCAN;
-    const roots = [];
+    const SCAN = 800, step = (xMax - xMin) / SCAN, roots = [];
     let prev = f(xMin);
     for (let i = 1; i <= SCAN; i++) {
-      const x = xMin + i * step;
-      const cur = f(x);
+      const x = xMin + i * step, cur = f(x);
       if (!isFinite(prev) || !isFinite(cur)) { prev = cur; continue; }
       if (prev * cur <= 0) {
-        // Bisection
-        let lo = x - step, hi = x, flo = prev, fhi = cur;
+        let lo = x - step, hi = x, flo = prev;
         for (let it = 0; it < maxIter; it++) {
-          const mid = (lo + hi) / 2;
-          const fmid = f(mid);
+          const mid = (lo + hi) / 2, fmid = f(mid);
           if (!isFinite(fmid)) break;
           if (Math.abs(fmid) < tolerance || (hi - lo) < tolerance) { lo = mid; break; }
-          if (flo * fmid <= 0) { hi = mid; fhi = fmid; } else { lo = mid; flo = fmid; }
+          if (flo * fmid <= 0) { hi = mid; } else { lo = mid; flo = fmid; }
         }
-        const root = lo;
-        if (roots.every(r => Math.abs(r - root) > 1e-6)) roots.push(root);
+        if (roots.every(r => Math.abs(r - lo) > 1e-6)) roots.push(lo);
       }
       prev = cur;
     }
     return roots;
   }
-
-  /* ── Intersection finder ── */
   function findIntersections(f1, f2, xMin, xMax) {
-    const diff = x => f1(x) - f2(x);
-    const xs = findRoots(diff, xMin, xMax);
-    return xs.map(x => ({ x, y: f1(x) }));
+    return findRoots(x => f1(x) - f2(x), xMin, xMax).map(x => ({ x, y: f1(x) }));
+  }
+  // Simpson's rule for the definite integral (signed area).
+  function simpson(f, a, b, n=1000) {
+    if (n % 2) n++;
+    const h = (b - a) / n;
+    let s = (f(a) || 0) + (f(b) || 0);
+    for (let i = 1; i < n; i++) { const fx = f(a + i * h); if (isFinite(fx)) s += (i % 2 ? 4 : 2) * fx; }
+    return s * h / 3;
   }
 
-  /* ── Run analysis ── */
+  /* ── Analysis / results panel ── */
   function runAnalysis() {
-    if (mode === 'roots') {
-      rootMarkers = [];
-      const chipHtml = [];
-      fns.forEach((fn, fi) => {
-        if (!fn.expr.trim()) return;
-        const f = makeEval(fn.expr);
-        if (!f) return;
-        const rs = findRoots(f, view.xMin, view.xMax);
-        rs.forEach(rx => {
+    rootMarkers = []; intersectMarkers = [];
+
+    if (plotType === 'cartesian' && mode === 'roots') {
+      const chips = [];
+      fns.forEach(fn => {
+        if (!fnActive(fn)) return;
+        findRoots(makeEval(fn.cart, 'x'), view.xMin, view.xMax).forEach(rx => {
           rootMarkers.push({ x: rx, color: fn.color });
-          chipHtml.push(`<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>x = ${formatN(rx)}</span>`);
+          chips.push(`<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>x = ${formatN(rx)}</span>`);
         });
       });
-      results.innerHTML = chipHtml.length
-        ? `<span class="gc-view-label" style="margin-right:4px">Roots:</span>` + chipHtml.join('')
+      results.innerHTML = chips.length
+        ? `<span class="gc-view-label" style="margin-right:4px">Roots:</span>` + chips.join('')
         : `<span style="color:var(--muted-2);font-style:italic">No roots found in the visible window.</span>`;
-      schedDraw();
-    } else if (mode === 'intersect') {
-      intersectMarkers = [];
-      const chipHtml = [];
-      const active = fns.filter(fn => fn.expr.trim() && makeEval(fn.expr));
-      for (let a = 0; a < active.length; a++) {
-        for (let b = a + 1; b < active.length; b++) {
-          const fa = makeEval(active[a].expr);
-          const fb = makeEval(active[b].expr);
-          const pts = findIntersections(fa, fb, view.xMin, view.xMax);
-          pts.forEach(pt => {
-            intersectMarkers.push(pt);
-            chipHtml.push(`<span class="gc-result-chip"><span class="dot" style="background:#FFD23F"></span>(${formatN(pt.x)}, ${formatN(pt.y)})</span>`);
-          });
-        }
+
+    } else if (plotType === 'cartesian' && mode === 'intersect') {
+      const chips = [], act = activeFns();
+      for (let a = 0; a < act.length; a++) for (let b = a + 1; b < act.length; b++) {
+        findIntersections(makeEval(act[a].cart, 'x'), makeEval(act[b].cart, 'x'), view.xMin, view.xMax).forEach(pt => {
+          intersectMarkers.push(pt);
+          chips.push(`<span class="gc-result-chip"><span class="dot" style="background:#FFD23F"></span>(${formatN(pt.x)}, ${formatN(pt.y)})</span>`);
+        });
       }
-      results.innerHTML = chipHtml.length
-        ? `<span class="gc-view-label" style="margin-right:4px">Intersections:</span>` + chipHtml.join('')
-        : (active.length < 2
+      results.innerHTML = chips.length
+        ? `<span class="gc-view-label" style="margin-right:4px">Intersections:</span>` + chips.join('')
+        : (act.length < 2
           ? `<span style="color:var(--muted-2);font-style:italic">Add at least 2 functions to find intersections.</span>`
           : `<span style="color:var(--muted-2);font-style:italic">No intersections found in the visible window.</span>`);
-      schedDraw();
+
+    } else if (plotType === 'cartesian' && mode === 'area') {
+      renderAreaPanel();
+
     } else {
-      rootMarkers = [];
-      intersectMarkers = [];
-      const activeFns = fns.filter(fn => fn.expr.trim() && makeEval(fn.expr));
-      results.innerHTML = activeFns.length
-        ? activeFns.map(fn => `<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>${fn.expr}</span>`).join('')
+      const act = activeFns();
+      const label = plotType === 'polar' ? 'r =' : plotType === 'parametric' ? 'x,y =' : '';
+      results.innerHTML = act.length
+        ? act.map(fn => {
+            const txt = plotType === 'cartesian' ? fn.cart
+              : plotType === 'polar' ? fn.polar
+              : `(${fn.px}, ${fn.py})`;
+            return `<span class="gc-result-chip"><span class="dot" style="background:${fn.color}"></span>${escapeHtml(txt)}</span>`;
+          }).join('')
         : `<span style="color:var(--muted-2);font-style:italic">Enter a function above to plot it.</span>`;
-      schedDraw();
     }
+
+    renderTable();
+    schedDraw();
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  /* ── Area panel (bounds + integral value) ── */
+  function renderAreaPanel() {
+    const act = fns.map((fn, i) => ({ fn, i })).filter(o => fnActive(o.fn));
+    if (!act.length) {
+      results.innerHTML = `<span style="color:var(--muted-2);font-style:italic">Enter a function to shade the area under it.</span>`;
+      return;
+    }
+    if (!fnActive(fns[areaFn])) areaFn = act[0].i;
+    const opts = act.map(o => `<option value="${o.i}" ${o.i === areaFn ? 'selected' : ''}>y${o.i ? o.i + 1 : ''} = ${escapeHtml(fns[o.i].cart)}</option>`).join('');
+    const f = makeEval(fns[areaFn].cart, 'x');
+    const val = f ? simpson(f, Math.min(areaA, areaB), Math.max(areaA, areaB)) : NaN;
+    results.innerHTML =
+      `<span class="gc-view-label">∫ from</span>` +
+      `<input class="gc-view-input" id="gc-area-a" value="${areaA}">` +
+      `<span class="gc-view-label">to</span>` +
+      `<input class="gc-view-input" id="gc-area-b" value="${areaB}">` +
+      `<select class="gc-view-input" id="gc-area-fn" style="width:auto;text-align:left">${opts}</select>` +
+      `<span class="gc-result-chip"><span class="dot" style="background:${fns[areaFn].color}"></span>area ≈ ${formatN(val)}</span>`;
+    const aA = results.querySelector('#gc-area-a'), aB = results.querySelector('#gc-area-b'), aF = results.querySelector('#gc-area-fn');
+    const upd = () => {
+      const na = parseFloat(aA.value), nb = parseFloat(aB.value);
+      if (isFinite(na)) areaA = na;
+      if (isFinite(nb)) areaB = nb;
+      areaFn = +aF.value;
+      renderAreaPanel(); schedDraw();
+    };
+    [aA, aB].forEach(el => { el.addEventListener('change', upd); el.addEventListener('keydown', e => { if (e.key === 'Enter') upd(); }); });
+    aF.addEventListener('change', upd);
+  }
+
+  /* ── Value table ── */
+  function renderTable() {
+    tableWrap.classList.toggle('open', showTable);
+    if (!showTable) return;
+    const ROWS = 28;
+    const act = activeFns();
+    let html = '<table class="gc-table"><thead><tr>';
+    if (plotType === 'cartesian') {
+      html += '<th>x</th>' + act.map(fn => `<th><span class="dot" style="background:${fn.color}"></span>y</th>`).join('');
+    } else if (plotType === 'polar') {
+      html += '<th>θ</th>' + act.map(fn => `<th><span class="dot" style="background:${fn.color}"></span>r</th>`).join('');
+    } else {
+      html += '<th>t</th>' + act.map(fn => `<th><span class="dot" style="background:${fn.color}"></span>x</th><th><span class="dot" style="background:${fn.color}"></span>y</th>`).join('');
+    }
+    html += '</tr></thead><tbody>';
+    const evals = act.map(fn => {
+      if (plotType === 'cartesian') return [makeEval(fn.cart, 'x')];
+      if (plotType === 'polar')     return [makeEval(fn.polar, 'theta')];
+      return [makeEval(fn.px, 't'), makeEval(fn.py, 't')];
+    });
+    for (let r = 0; r < ROWS; r++) {
+      const v = tStart + r * tStep;
+      html += `<tr><td>${formatN(v)}</td>`;
+      evals.forEach(es => {
+        if (es.length === 1) html += `<td>${formatN(es[0](v))}</td>`;
+        else html += `<td>${formatN(es[0](v))}</td><td>${formatN(es[1](v))}</td>`;
+      });
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    tableScroll.innerHTML = act.length ? html : '<div style="padding:14px;color:var(--muted-2);font-style:italic;font-family:var(--mono);font-size:12px">Enter a function to fill the table.</div>';
   }
 
   /* ── Function bar ── */
@@ -12229,238 +12413,256 @@ function mountGraphing(root) {
     fns.forEach((fn, i) => {
       const row = document.createElement('div');
       row.className = 'gc-fn-row';
-      row.innerHTML = `
-        <span class="gc-fn-color" style="background:${fn.color}"></span>
-        <span class="gc-fn-label">y${i > 0 ? i+1 : ''} =</span>
-        <span class="gc-fn-eq" style="color:${fn.color}"></span>
-        <input class="gc-fn-input" id="gc-fn-${i}" value="${fn.expr.replace(/"/g,'&quot;')}"
-          placeholder="${i===0?'e.g. sin(x), x^2, abs(x-1)':i===1?'e.g. cos(x)':'f(x) = …'}"
-          spellcheck="false" autocomplete="off" autocorrect="off">
-        ${fns.length > 1 ? `<button class="gc-fn-del" data-del="${i}" title="Remove">×</button>` : ''}
-      `;
+      if (plotType === 'parametric') {
+        row.innerHTML = `
+          <span class="gc-fn-color" style="background:${fn.color}"></span>
+          <span class="gc-fn-label">x${i ? i+1 : ''} =</span>
+          <input class="gc-fn-input" data-field="px" value="${escapeHtml(fn.px)}" placeholder="${i===0?'e.g. 5 cos(3 t)':'x(t)'}" spellcheck="false" autocomplete="off" autocorrect="off">
+          <span class="gc-fn-label">y${i ? i+1 : ''} =</span>
+          <input class="gc-fn-input" data-field="py" value="${escapeHtml(fn.py)}" placeholder="${i===0?'e.g. 5 sin(2 t)':'y(t)'}" spellcheck="false" autocomplete="off" autocorrect="off">
+          ${fns.length > 1 ? `<button class="gc-fn-del" data-del="${i}" title="Remove">×</button>` : ''}`;
+      } else {
+        const field = plotType === 'polar' ? 'polar' : 'cart';
+        const lbl = plotType === 'polar' ? `r${i ? i+1 : ''} =` : `y${i ? i+1 : ''} =`;
+        const ph = plotType === 'polar'
+          ? (i===0 ? 'e.g. 6 cos(3 theta)' : 'r(θ)')
+          : (i===0 ? 'e.g. sin(x), x^2, abs(x-1)' : i===1 ? 'e.g. cos(x)' : 'f(x) = …');
+        row.innerHTML = `
+          <span class="gc-fn-color" style="background:${fn.color}"></span>
+          <span class="gc-fn-label">${lbl}</span>
+          <input class="gc-fn-input" data-field="${field}" value="${escapeHtml(fn[field])}" placeholder="${ph}" spellcheck="false" autocomplete="off" autocorrect="off">
+          ${fns.length > 1 ? `<button class="gc-fn-del" data-del="${i}" title="Remove">×</button>` : ''}`;
+      }
       fnBar.appendChild(row);
+      row.querySelectorAll('.gc-fn-input').forEach(inp => wireInput(inp, i, inp.dataset.field));
     });
 
-    // Add function button
     if (fns.length < 6) {
       const addBtn = document.createElement('div');
       addBtn.className = 'gc-fn-add';
       addBtn.textContent = 'Add function';
       addBtn.addEventListener('click', () => {
-        fns.push({ expr: '', color: FN_COLORS[fns.length % FN_COLORS.length] });
+        fns.push(newFn(fns.length));
+        fns[fns.length - 1].cart = ''; fns[fns.length - 1].polar = '';
+        fns[fns.length - 1].px = ''; fns[fns.length - 1].py = '';
         renderFnBar();
-        fnBar.querySelectorAll('.gc-fn-input').forEach((inp, i2) => {
-          wireInput(inp, i2);
-          if (i2 === fns.length - 1) inp.focus();
-        });
+        const inputs = fnBar.querySelectorAll('.gc-fn-row:last-of-type .gc-fn-input');
+        if (inputs.length) inputs[0].focus();
         runAnalysis();
       });
       fnBar.appendChild(addBtn);
     }
 
-    fnBar.querySelectorAll('.gc-fn-input').forEach((inp, i2) => wireInput(inp, i2));
-    fnBar.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-del]');
-      if (!btn) return;
-      const idx = +btn.dataset.del;
-      fns.splice(idx, 1);
-      renderFnBar();
-      runAnalysis();
+    fnBar.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        fns.splice(+btn.dataset.del, 1);
+        renderFnBar(); runAnalysis();
+      });
     });
   }
-
-  function wireInput(inp, i) {
-    inp.addEventListener('input', () => {
-      fns[i].expr = inp.value;
-      runAnalysis();
-    });
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { runAnalysis(); inp.blur(); }
-    });
+  function wireInput(inp, i, field) {
+    inp.addEventListener('input', () => { fns[i][field] = inp.value; runAnalysis(); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { runAnalysis(); inp.blur(); } });
   }
 
-  /* ── View inputs ── */
+  /* ── View / parameter inputs ── */
   function syncViewInputs() {
     root.querySelector('#gc-xmin').value = parseFloat(view.xMin.toPrecision(6));
     root.querySelector('#gc-xmax').value = parseFloat(view.xMax.toPrecision(6));
     root.querySelector('#gc-ymin').value = parseFloat(view.yMin.toPrecision(6));
     root.querySelector('#gc-ymax').value = parseFloat(view.yMax.toPrecision(6));
+    root.querySelector('#gc-pmin').value = parseFloat(pMin.toPrecision(6));
+    root.querySelector('#gc-pmax').value = parseFloat(pMax.toPrecision(6));
   }
   function readViewInputs() {
     const xMin = parseFloat(root.querySelector('#gc-xmin').value);
     const xMax = parseFloat(root.querySelector('#gc-xmax').value);
     const yMin = parseFloat(root.querySelector('#gc-ymin').value);
     const yMax = parseFloat(root.querySelector('#gc-ymax').value);
-    if (isFinite(xMin) && isFinite(xMax) && xMin < xMax &&
-        isFinite(yMin) && isFinite(yMax) && yMin < yMax) {
+    if (isFinite(xMin) && isFinite(xMax) && xMin < xMax && isFinite(yMin) && isFinite(yMax) && yMin < yMax) {
       view = { xMin, xMax, yMin, yMax };
-      runAnalysis();
     }
+    const a = parseFloat(root.querySelector('#gc-pmin').value);
+    const b = parseFloat(root.querySelector('#gc-pmax').value);
+    if (isFinite(a) && isFinite(b) && a < b) { pMin = a; pMax = b; }
+    runAnalysis();
   }
-  ['#gc-xmin','#gc-xmax','#gc-ymin','#gc-ymax'].forEach(sel => {
-    root.querySelector(sel).addEventListener('change', readViewInputs);
-    root.querySelector(sel).addEventListener('keydown', e => { if (e.key==='Enter') readViewInputs(); });
+  ['#gc-xmin','#gc-xmax','#gc-ymin','#gc-ymax','#gc-pmin','#gc-pmax'].forEach(sel => {
+    const el = root.querySelector(sel);
+    el.addEventListener('change', readViewInputs);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') readViewInputs(); });
   });
   root.querySelector('#gc-reset-view').addEventListener('click', () => {
     view = { xMin:-10, xMax:10, yMin:-7, yMax:7 };
-    syncViewInputs();
-    runAnalysis();
+    pMin = 0; pMax = 2 * Math.PI;
+    syncViewInputs(); runAnalysis();
   });
+
+  /* ── Plot-type segmented control ── */
+  function setPlotType(pt) {
+    plotType = pt;
+    root.querySelectorAll('.gc-pt-btn').forEach(b => b.classList.toggle('active', b.dataset.pt === pt));
+    const cartesian = pt === 'cartesian';
+    // Roots / intersections / area / derivative are cartesian-only.
+    ['roots','intersect','area'].forEach(m => {
+      root.querySelector(`.gc-mode-btn[data-mode="${m}"]`).disabled = !cartesian;
+    });
+    root.querySelector('#gc-deriv').disabled = !cartesian;
+    if (!cartesian && (mode === 'roots' || mode === 'intersect' || mode === 'area')) setMode('zoom');
+    if (!cartesian) { showDeriv = false; root.querySelector('#gc-deriv').classList.remove('active'); }
+    // Parameter-range inputs only matter for polar/parametric.
+    root.querySelector('#gc-param-wrap').style.display = cartesian ? 'none' : '';
+    root.querySelector('#gc-param-label').textContent = pt === 'polar' ? 'θ:' : 't:';
+    root.querySelector('#gc-table-startlbl').textContent = cartesian ? 'x start:' : (pt === 'polar' ? 'θ start:' : 't start:');
+    renderFnBar(); runAnalysis();
+  }
+  root.querySelectorAll('.gc-pt-btn').forEach(btn => btn.addEventListener('click', () => setPlotType(btn.dataset.pt)));
 
   /* ── Mode buttons ── */
   function setMode(m) {
     mode = m;
     root.querySelectorAll('.gc-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
-    rootMarkers = [];
-    intersectMarkers = [];
-    if (mode === 'trace') {
-      statusEl.textContent = 'Trace: drag or ← → to move along curve.';
-    } else if (mode === 'roots') {
-      statusEl.textContent = 'Finding roots in the visible x-range…';
-    } else if (mode === 'intersect') {
-      statusEl.textContent = 'Finding intersections in the visible x-range…';
-    } else {
-      statusEl.textContent = 'Scroll to zoom · Drag to pan.';
-    }
+    if (m === 'trace')         statusEl.textContent = 'Trace: drag or ← → to move along the curve.';
+    else if (m === 'roots')    statusEl.textContent = 'Finding roots in the visible x-range…';
+    else if (m === 'intersect')statusEl.textContent = 'Finding intersections in the visible x-range…';
+    else if (m === 'area')     statusEl.textContent = 'Area: set the bounds below to shade & integrate.';
+    else                       statusEl.textContent = 'Scroll to zoom · Drag to pan.';
     runAnalysis();
   }
   root.querySelectorAll('.gc-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    btn.addEventListener('click', () => { if (!btn.disabled) setMode(btn.dataset.mode); });
   });
 
-  /* ── Mouse / touch events ── */
+  /* ── Toggles ── */
+  const derivBtn = root.querySelector('#gc-deriv');
+  derivBtn.addEventListener('click', () => {
+    if (derivBtn.disabled) return;
+    showDeriv = !showDeriv;
+    derivBtn.classList.toggle('active', showDeriv);
+    schedDraw();
+  });
+  const tableBtn = root.querySelector('#gc-table-toggle');
+  tableBtn.addEventListener('click', () => {
+    showTable = !showTable;
+    tableBtn.classList.toggle('active', showTable);
+    renderTable();
+  });
+  ['#gc-tstart','#gc-tstep'].forEach(sel => {
+    const el = root.querySelector(sel);
+    const upd = () => {
+      const s = parseFloat(root.querySelector('#gc-tstart').value);
+      const st = parseFloat(root.querySelector('#gc-tstep').value);
+      if (isFinite(s)) tStart = s;
+      if (isFinite(st) && st !== 0) tStep = st;
+      renderTable();
+    };
+    el.addEventListener('change', upd);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') upd(); });
+  });
+
+  /* ── Pointer helpers ── */
   function getCanvasXY(e) {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
-  // Scroll to zoom
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const pt = getCanvasXY(e);
-    const wx = toWorld(pt.x, pt.y).x;
-    const wy = toWorld(pt.x, pt.y).y;
+    const w = toWorld(pt.x, pt.y);
     const factor = e.deltaY > 0 ? 1.12 : 0.89;
-    const cx = (pt.x / (canvas.width / (window.devicePixelRatio||1)));
-    const cy = (pt.y / (canvas.height / (window.devicePixelRatio||1)));
+    const { W, H } = dims();
+    const cx = pt.x / W, cy = pt.y / H;
     const xRange = (view.xMax - view.xMin) * factor;
     const yRange = (view.yMax - view.yMin) * factor;
-    view.xMin = wx - cx * xRange;
-    view.xMax = wx + (1-cx) * xRange;
-    view.yMin = wy - (1-cy) * yRange;
-    view.yMax = wy + cy * yRange;
-    syncViewInputs();
-    runAnalysis();
+    view.xMin = w.x - cx * xRange; view.xMax = w.x + (1 - cx) * xRange;
+    view.yMin = w.y - (1 - cy) * yRange; view.yMax = w.y + cy * yRange;
+    syncViewInputs(); runAnalysis();
   }, { passive: false });
 
-  // Mouse pan / trace
   canvas.addEventListener('mousedown', (e) => {
     if (mode === 'trace') {
       const pt = getCanvasXY(e);
-      const wx = toWorld(pt.x, pt.y).x;
-      const xRange = view.xMax - view.xMin;
-      traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
-      schedDraw();
-      return;
+      traceT = Math.max(0, Math.min(1, (toWorld(pt.x, pt.y).x - view.xMin) / (view.xMax - view.xMin)));
+      schedDraw(); return;
     }
-    isPanning = true;
-    panStart = getCanvasXY(e);
-    panView = { ...view };
+    isPanning = true; panStart = getCanvasXY(e); panView = { ...view };
   });
   canvas.addEventListener('mousemove', (e) => {
     const pt = getCanvasXY(e);
-    const wx = toWorld(pt.x, pt.y);
-    cursorEl.textContent = `x=${formatN(wx.x)}  y=${formatN(wx.y)}`;
+    const w = toWorld(pt.x, pt.y);
+    cursorEl.textContent = `x=${formatN(w.x)}  y=${formatN(w.y)}`;
     if (mode === 'trace' && e.buttons === 1) {
-      const xRange = view.xMax - view.xMin;
-      traceT = Math.max(0, Math.min(1, (wx.x - view.xMin) / xRange));
-      schedDraw();
-      return;
+      traceT = Math.max(0, Math.min(1, (w.x - view.xMin) / (view.xMax - view.xMin)));
+      schedDraw(); return;
     }
     if (!isPanning || !panStart) return;
-    const dxW = (pt.x - panStart.x) / (canvas.width / (window.devicePixelRatio||1)) * (panView.xMax - panView.xMin);
-    const dyW = (pt.y - panStart.y) / (canvas.height / (window.devicePixelRatio||1)) * (panView.yMax - panView.yMin);
-    view.xMin = panView.xMin - dxW;
-    view.xMax = panView.xMax - dxW;
-    view.yMin = panView.yMin + dyW;
-    view.yMax = panView.yMax + dyW;
-    syncViewInputs();
-    schedDraw();
+    const { W, H } = dims();
+    const dxW = (pt.x - panStart.x) / W * (panView.xMax - panView.xMin);
+    const dyW = (pt.y - panStart.y) / H * (panView.yMax - panView.yMin);
+    view.xMin = panView.xMin - dxW; view.xMax = panView.xMax - dxW;
+    view.yMin = panView.yMin + dyW; view.yMax = panView.yMax + dyW;
+    syncViewInputs(); schedDraw();
   });
   canvas.addEventListener('mouseup', () => { isPanning = false; panStart = null; if (mode === 'zoom') runAnalysis(); });
   canvas.addEventListener('mouseleave', () => { cursorEl.textContent = ''; isPanning = false; });
 
-  // Keyboard trace
   document.addEventListener('keydown', onKey);
   function onKey(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.key === 'ArrowRight' && mode === 'trace') { traceT = Math.min(1, traceT + 0.005); schedDraw(); }
     if (e.key === 'ArrowLeft'  && mode === 'trace') { traceT = Math.max(0, traceT - 0.005); schedDraw(); }
-    if (e.key === 'r' || e.key === 'R') setMode('roots');
+    if (e.key === 'r' || e.key === 'R') { if (plotType === 'cartesian') setMode('roots'); }
     if (e.key === 't' || e.key === 'T') setMode('trace');
     if (e.key === '0') { view = { xMin:-10, xMax:10, yMin:-7, yMax:7 }; syncViewInputs(); runAnalysis(); }
   }
 
-  // Touch pan & pinch-zoom
+  /* ── Touch ── */
   canvas.addEventListener('touchstart', (e) => {
+    const r = canvas.getBoundingClientRect();
     if (e.touches.length === 1) {
       const t = e.touches[0];
-      const r = canvas.getBoundingClientRect();
       if (mode === 'trace') {
-        const cx = t.clientX - r.left;
-        const xRange = view.xMax - view.xMin;
-        const wx = toWorld(cx, 0).x;
-        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
+        const wx = toWorld(t.clientX - r.left, 0).x;
+        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / (view.xMax - view.xMin)));
         schedDraw();
-      } else {
-        isPanning = true;
-        panStart = { x: t.clientX - r.left, y: t.clientY - r.top };
-        panView = { ...view };
-      }
+      } else { isPanning = true; panStart = { x: t.clientX - r.left, y: t.clientY - r.top }; panView = { ...view }; }
     } else if (e.touches.length === 2) {
-      isPanning = false;
-      isPinching = true;
-      const r = canvas.getBoundingClientRect();
+      isPanning = false; isPinching = true;
       const t0 = e.touches[0], t1 = e.touches[1];
-      const dx = (t0.clientX - t1.clientX), dy = (t0.clientY - t1.clientY);
-      pinchStart = { dist: Math.sqrt(dx*dx+dy*dy), view: { ...view } };
+      const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
+      pinchStart = { dist: Math.sqrt(dx*dx + dy*dy), view: { ...view } };
     }
     e.preventDefault();
   }, { passive: false });
   canvas.addEventListener('touchmove', (e) => {
     const r = canvas.getBoundingClientRect();
+    const { W, H } = dims();
     if (isPinching && e.touches.length === 2 && pinchStart) {
       const t0 = e.touches[0], t1 = e.touches[1];
       const dx = t0.clientX - t1.clientX, dy = t0.clientY - t1.clientY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      const factor = pinchStart.dist / dist;
+      const factor = pinchStart.dist / Math.sqrt(dx*dx + dy*dy);
       const pv = pinchStart.view;
-      const cx = ((t0.clientX + t1.clientX)/2 - r.left) / (canvas.width / (window.devicePixelRatio||1));
-      const cy = ((t0.clientY + t1.clientY)/2 - r.top)  / (canvas.height / (window.devicePixelRatio||1));
+      const cx = ((t0.clientX + t1.clientX)/2 - r.left) / W;
+      const cy = ((t0.clientY + t1.clientY)/2 - r.top) / H;
       const mx = pv.xMin + cx * (pv.xMax - pv.xMin);
-      const my = pv.yMin + (1-cy) * (pv.yMax - pv.yMin);
-      const xRange = (pv.xMax - pv.xMin) * factor;
-      const yRange = (pv.yMax - pv.yMin) * factor;
-      view.xMin = mx - cx * xRange;
-      view.xMax = mx + (1-cx) * xRange;
-      view.yMin = my - (1-cy) * yRange;
-      view.yMax = my + cy * yRange;
+      const my = pv.yMin + (1 - cy) * (pv.yMax - pv.yMin);
+      const xRange = (pv.xMax - pv.xMin) * factor, yRange = (pv.yMax - pv.yMin) * factor;
+      view.xMin = mx - cx * xRange; view.xMax = mx + (1 - cx) * xRange;
+      view.yMin = my - (1 - cy) * yRange; view.yMax = my + cy * yRange;
       syncViewInputs(); schedDraw();
     } else if (isPanning && e.touches.length === 1 && panStart) {
       const t = e.touches[0];
       const cx = t.clientX - r.left, cy = t.clientY - r.top;
       if (mode === 'trace') {
-        const xRange = view.xMax - view.xMin;
         const wx = toWorld(cx, 0).x;
-        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / xRange));
+        traceT = Math.max(0, Math.min(1, (wx - view.xMin) / (view.xMax - view.xMin)));
         schedDraw();
       } else {
-        const dxW = (cx - panStart.x) / (canvas.width / (window.devicePixelRatio||1)) * (panView.xMax - panView.xMin);
-        const dyW = (cy - panStart.y) / (canvas.height / (window.devicePixelRatio||1)) * (panView.yMax - panView.yMin);
-        view.xMin = panView.xMin - dxW;
-        view.xMax = panView.xMax - dxW;
-        view.yMin = panView.yMin + dyW;
-        view.yMax = panView.yMax + dyW;
+        const dxW = (cx - panStart.x) / W * (panView.xMax - panView.xMin);
+        const dyW = (cy - panStart.y) / H * (panView.yMax - panView.yMin);
+        view.xMin = panView.xMin - dxW; view.xMax = panView.xMax - dxW;
+        view.yMin = panView.yMin + dyW; view.yMax = panView.yMax + dyW;
         syncViewInputs(); schedDraw();
       }
     }
@@ -12476,9 +12678,7 @@ function mountGraphing(root) {
   syncViewInputs();
   setMode('zoom');
   resize();
-
   setTimeout(() => {
-    // Focus first input
     const firstInp = fnBar.querySelector('.gc-fn-input');
     if (firstInp) firstInp.focus();
     runAnalysis();

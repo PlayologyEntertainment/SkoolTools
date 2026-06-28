@@ -63,11 +63,12 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
 - Lazy-loaded symbolic engine; results render via the existing LaTeX path.
 - *Why first:* pure show-work, no accounts, closes the loudest gap.
 
-### 1.2 Graphing Calculator → multi-function + tables
-- Plot multiple functions at once with a value **table** readout.
-- **Derivative overlay** (ties into 1.1) and **area-under-curve** shading.
-- **Polar & parametric** modes.
-- Tap-to-read coordinates, root/intersection finding (extend existing canvas).
+### 1.2 Graphing Calculator → multi-function + tables  ✅ *shipped*
+- ✅ Plot multiple functions at once with a value **table** readout.
+- ✅ **Derivative overlay** (numeric f′, ties into 1.1) and **area-under-curve**
+  shading with a live definite-integral readout (Simpson's rule).
+- ✅ **Polar & parametric** modes (segmented plot-type control).
+- ✅ Tap-to-read coordinates, root/intersection finding (extend existing canvas).
 
 ### 1.3 Statistics Sheet → distributions & regression
 - **Distribution lookups** (normal, binomial, t) — replaces the printed tables
