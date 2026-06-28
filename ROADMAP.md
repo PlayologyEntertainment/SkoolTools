@@ -70,12 +70,15 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
 - ✅ **Polar & parametric** modes (segmented plot-type control).
 - ✅ Tap-to-read coordinates, root/intersection finding (extend existing canvas).
 
-### 1.3 Statistics Sheet → distributions & regression
-- **Distribution lookups** (normal, binomial, t) — replaces the printed tables
-  AP Stats students still carry.
-- **Linear regression** with r², residual plot, and prediction.
-- Confidence intervals and one/two-sample t-tests (paste-from-spreadsheet input
-  already supported).
+### 1.3 Statistics Sheet → distributions & regression  ✅ *shipped*
+- ✅ **Distribution lookups** (normal, binomial, t) — both directions
+  (probability-from-value and inverse / critical value) with a shaded-curve /
+  PMF-bar visual. Replaces the printed tables AP Stats students still carry.
+- ✅ **Linear regression** with r², **residual plot**, and **prediction** (ŷ for
+  a given x, marked on the scatter).
+- ✅ Confidence intervals and one/two-sample t-tests — now with a
+  one/two-tailed selector and a **CI for the difference of means** (paste-from-
+  spreadsheet input already supported).
 
 ### 1.4 Chemistry Helpers → balancer & titration
 - **Equation balancer** via the matrix/null-space method, with steps shown.

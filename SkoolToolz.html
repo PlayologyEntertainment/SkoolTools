@@ -4207,8 +4207,8 @@ function registerTools() {
     desc:'Derivatives, rule-by-rule.', tag:'new',
     keywords:['calculus','derivative','differentiate','chain','product','quotient','power','rule','ap','calc','slope','integral','limit'], mount: mountCalculus });
   TOOLS.push({ id:'stats', shelf:'numbers', icon:'📊', name:'Statistics Sheet',
-    desc:'Mean→t-tests, paste from sheets.', tag:'upgraded',
-    keywords:['mean','median','stddev','variance','ttest','confidence','regression','histogram','distribution'], mount: mountStats });
+    desc:'Mean→t-tests, distributions, regression.', tag:'upgraded',
+    keywords:['mean','median','stddev','variance','ttest','confidence','regression','residual','predict','histogram','distribution','normal','binomial','t-distribution','probability','z-score','critical value','p-value'], mount: mountStats });
   TOOLS.push({ id:'percentage', shelf:'numbers', icon:'%', name:'Percentage',
     desc:'% of, what %, % change.',
     keywords:['percent','pct','off','discount'], mount: mountPercentage });
@@ -13726,39 +13726,81 @@ function mountStats(root) {
     return (n*(n+1))/((n-1)*(n-2)*(n-3))*k4-3*(n-1)**2/((n-2)*(n-3));
   }
 
-  /* t-distribution p-value (two-tailed) via regularized incomplete beta */
-  function tDist(t,df){
-    const x=df/(df+t*t);
-    function lgamma(z){
-      const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];
-      let y=z,tmp=z+5.5; tmp-=(z+0.5)*Math.log(tmp); let ser=1.000000000190015;
-      for(let j=0;j<6;j++)ser+=c[j]/++y;
-      return -tmp+Math.log(2.5066282746310005*ser/z);
-    }
-    function betacf(a,b,x){
-      const MAXIT=200,EPS=3e-7,qab=a+b,qap=a+1,qam=a-1;
-      let c=1,d=1-qab*x/qap;
-      if(Math.abs(d)<1e-30)d=1e-30; d=1/d; let h=d;
-      for(let m=1;m<=MAXIT;m++){
-        let m2=2*m,aa=m*(b-m)*x/((qam+m2)*(a+m2));
-        d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
-        c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
-        d=1/d; h*=d*c;
-        aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
-        d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
-        c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
-        d=1/d; const del=d*c; h*=del;
-        if(Math.abs(del-1)<EPS)break;
-      }
-      return h;
-    }
-    function betai(a,b,x){
-      if(x<0||x>1)return NaN; if(x===0)return 0; if(x===1)return 1;
-      const lb=lgamma(a)+lgamma(b)-lgamma(a+b);
-      return Math.exp(Math.log(x)*a+Math.log(1-x)*b-lb)*betacf(a,b,x)/a;
-    }
-    return betai(df/2,0.5,x);
+  /* ── Special functions (shared by tests & distribution lookups) ── */
+  function lgamma(z){
+    const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,.1208650973866179e-2,-.5395239384953e-5];
+    let y=z,tmp=z+5.5; tmp-=(z+0.5)*Math.log(tmp); let ser=1.000000000190015;
+    for(let j=0;j<6;j++)ser+=c[j]/++y;
+    return -tmp+Math.log(2.5066282746310005*ser/z);
   }
+  function betacf(a,b,x){
+    const MAXIT=200,EPS=3e-7,qab=a+b,qap=a+1,qam=a-1;
+    let c=1,d=1-qab*x/qap;
+    if(Math.abs(d)<1e-30)d=1e-30; d=1/d; let h=d;
+    for(let m=1;m<=MAXIT;m++){
+      let m2=2*m,aa=m*(b-m)*x/((qam+m2)*(a+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
+      d=1/d; h*=d*c;
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+      d=1+aa*d; if(Math.abs(d)<1e-30)d=1e-30;
+      c=1+aa/c; if(Math.abs(c)<1e-30)c=1e-30;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<EPS)break;
+    }
+    return h;
+  }
+  /* regularized incomplete beta — symmetry transform keeps the CF convergent */
+  function betai(a,b,x){
+    if(x<0||x>1)return NaN; if(x===0||x===1)return x;
+    const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+    return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b;
+  }
+  /* error function — Abramowitz & Stegun 7.1.26 (|err| ≤ 1.5e-7) */
+  function erf(x){
+    const s=x<0?-1:1; x=Math.abs(x);
+    const t=1/(1+0.3275911*x);
+    const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+    return s*y;
+  }
+  /* standard-normal quantile — Acklam's rational approximation (|err| ≈ 1e-9) */
+  function normInvStd(p){
+    if(p<=0)return -Infinity; if(p>=1)return Infinity;
+    const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+    const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+    const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+    const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+    const pl=0.02425,ph=1-pl; let q,r;
+    if(p<pl){ q=Math.sqrt(-2*Math.log(p)); return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+    if(p<=ph){ q=p-0.5; r=q*q; return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1); }
+    q=Math.sqrt(-2*Math.log(1-p)); return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+
+  /* Normal */
+  function normalPDF(x,mu=0,sd=1){ return Math.exp(-0.5*((x-mu)/sd)**2)/(sd*Math.sqrt(2*Math.PI)); }
+  function normalCDF(x,mu=0,sd=1){ return 0.5*(1+erf((x-mu)/(sd*Math.SQRT2))); }
+  function normalInv(p,mu=0,sd=1){ return mu+sd*normInvStd(p); }
+
+  /* Student's t — tDist is the two-tailed tail P(|T|>|t|); tCDF is the lower tail */
+  function tDist(t,df){ return betai(df/2,0.5,df/(df+t*t)); }
+  function tCDF(t,df){ const tail=tDist(t,df)/2; return t>=0?1-tail:tail; }
+  function tPDF(t,df){ return Math.exp(lgamma((df+1)/2)-lgamma(df/2))/Math.sqrt(df*Math.PI)*Math.pow(1+t*t/df,-(df+1)/2); }
+  function tInv(p,df){
+    if(p<=0)return -Infinity; if(p>=1)return Infinity;
+    let lo=-1e3,hi=1e3;
+    for(let i=0;i<100;i++){ const mid=(lo+hi)/2; if(tCDF(mid,df)<p)lo=mid;else hi=mid; }
+    return (lo+hi)/2;
+  }
+
+  /* Binomial */
+  function logChoose(n,k){ return lgamma(n+1)-lgamma(k+1)-lgamma(n-k+1); }
+  function binomPMF(k,n,p){
+    if(k<0||k>n)return 0;
+    if(p<=0)return k===0?1:0; if(p>=1)return k===n?1:0;
+    return Math.exp(logChoose(n,k)+k*Math.log(p)+(n-k)*Math.log(1-p));
+  }
+  function binomCDF(k,n,p){ let s=0; const kk=Math.floor(k); for(let i=0;i<=kk;i++)s+=binomPMF(i,n,p); return Math.min(1,s); }
+  function binomInv(prob,n,p){ let s=0; for(let k=0;k<=n;k++){ s+=binomPMF(k,n,p); if(s>=prob-1e-12)return k; } return n; }
 
   /* t-critical via bisection */
   function tCrit(df,conf){
@@ -13773,16 +13815,16 @@ function mountStats(root) {
   }
   function twoSampleT(a,b,equalVar=false){
     const n1=a.length,n2=b.length,m1=mean(a),m2=mean(b),v1=variance(a),v2=variance(b);
-    let t,df;
+    let t,df,se;
     if(equalVar){
       const sp2=((n1-1)*v1+(n2-1)*v2)/(n1+n2-2);
-      t=(m1-m2)/Math.sqrt(sp2*(1/n1+1/n2)); df=n1+n2-2;
+      se=Math.sqrt(sp2*(1/n1+1/n2)); t=(m1-m2)/se; df=n1+n2-2;
     } else {
       const se2=v1/n1+v2/n2;
-      t=(m1-m2)/Math.sqrt(se2);
+      se=Math.sqrt(se2); t=(m1-m2)/se;
       df=se2**2/((v1/n1)**2/(n1-1)+(v2/n2)**2/(n2-1));
     }
-    return {t,df,p:tDist(Math.abs(t),df),m1,m2,n1,n2};
+    return {t,df,p:tDist(Math.abs(t),df),m1,m2,n1,n2,se,diff:m1-m2};
   }
   function pairedT(a,b){
     if(a.length!==b.length)return null;
@@ -13916,14 +13958,16 @@ function mountStats(root) {
         <button class="st-tab${activeTab==='descriptive'?' active':''}" data-tab="descriptive">Descriptive</button>
         <button class="st-tab${activeTab==='compare'?' active':''}" data-tab="compare">Compare / T-Test</button>
         <button class="st-tab${activeTab==='regression'?' active':''}" data-tab="regression">Regression</button>
+        <button class="st-tab${activeTab==='distributions'?' active':''}" data-tab="distributions">Distributions</button>
       </div>
-      <div id="st-content">${valid?buildTab(data):buildEmpty()}</div>
+      <div id="st-content">${activeTab==='distributions'?buildDistributions():(valid?buildTab(data):buildEmpty())}</div>
     </div>
   </div>
 </div>`;
 
     wire(data, valid);
-    if(valid) setTimeout(()=>{ postRender(data); }, 10);
+    if(activeTab==='distributions') setTimeout(()=>{ wireDist(); computeDist(); }, 10);
+    else if(valid) setTimeout(()=>{ postRender(data); }, 10);
   }
 
   function buildEmpty(){
@@ -13954,7 +13998,7 @@ function mountStats(root) {
         <div class="st-stat"><div class="sl">N</div><div class="sv acc">${n}</div></div>
         <div class="st-stat"><div class="sl">Mean</div><div class="sv">${fmt(m)}</div><div class="ss">arithmetic</div></div>
         <div class="st-stat"><div class="sl">Median</div><div class="sv">${fmt(med)}</div></div>
-        <div class="st-stat"><div class="sl">Mode</div><div class="sv" style="font-size:13px">${mv.slice(0,3).map(fmt).join(', ')}${mv.length>3?'…':''}</div><div class="ss">freq: ${mf}</div></div>
+        <div class="st-stat"><div class="sl">Mode</div><div class="sv" style="font-size:13px">${mv.slice(0,3).map(x=>fmt(x)).join(', ')}${mv.length>3?'…':''}</div><div class="ss">freq: ${mf}</div></div>
       </div>
       <div class="st-sh">Spread</div>
       <div class="st-grid">
@@ -13993,7 +14037,7 @@ function mountStats(root) {
 
   function buildCompare(data){
     const otherOpts=datasets.map((d,i)=>`<option value="${i}"${i===activeIdx?' selected':''}>${d.name||'Dataset '+(i+1)} (n=${parseData(d.raw).length})</option>`).join('');
-    const saved=Storage.get('stats:tconfig',{type:'one',mu0:0,conf:'0.95',varEq:false});
+    const saved=Storage.get('stats:tconfig',{type:'one',mu0:0,conf:'0.95',varEq:false,tail:'two'});
     const ci=ciMean(data,parseFloat(saved.conf)||0.95);
     return `
       <div class="st-sh st-sh--first">T-Test</div>
@@ -14023,6 +14067,13 @@ function mountStats(root) {
           <option value="0.90"${saved.conf==='0.90'?' selected':''}>α = 0.10 (90%)</option>
           <option value="0.95"${saved.conf!=='0.90'&&saved.conf!=='0.99'?' selected':''}>α = 0.05 (95%)</option>
           <option value="0.99"${saved.conf==='0.99'?' selected':''}>α = 0.01 (99%)</option>
+        </select>
+      </div>
+      <div class="st-trow"><label>Alternative</label>
+        <select id="st-tails">
+          <option value="two"${saved.tail!=='right'&&saved.tail!=='left'?' selected':''}>Two-tailed (≠)</option>
+          <option value="right"${saved.tail==='right'?' selected':''}>One-tailed, greater (&gt;)</option>
+          <option value="left"${saved.tail==='left'?' selected':''}>One-tailed, less (&lt;)</option>
         </select>
       </div>
       <button class="st-run-btn" id="st-run-t">Run T-Test</button>
@@ -14095,59 +14146,84 @@ function mountStats(root) {
   function runTTest(data){
     const type=document.getElementById('st-ttype').value;
     const conf=parseFloat(document.getElementById('st-conf').value)||0.95;
+    const tail=document.getElementById('st-tails')?.value||'two';
     const mu0=parseFloat(document.getElementById('st-mu0')?.value||'0')||0;
     const bIdx=parseInt(document.getElementById('st-b-ds')?.value||'0');
     const varEq=document.getElementById('st-var-eq')?.value==='equal';
-    Storage.set('stats:tconfig',{type,mu0,conf:String(conf),varEq});
+    Storage.set('stats:tconfig',{type,mu0,conf:String(conf),varEq,tail});
     const resultEl=document.getElementById('st-t-result');
     const alpha=1-conf;
 
-    function showResult(res, extra, interp){
-      const sig=res.p<alpha;
+    /* tail-specific p-value from the t-stat (tDist gives the two-tailed area) */
+    function pFor(t,df){
+      if(tail==='right')return 1-tCDF(t,df);
+      if(tail==='left')return tCDF(t,df);
+      return tDist(Math.abs(t),df);
+    }
+    const tailLbl=tail==='two'?'2-tail':tail==='right'?'right-tail':'left-tail';
+    const altSym=tail==='two'?'≠':tail==='right'?'>':'<';
+
+    function showResult(pVal, extra, interp, ciHtml){
+      const sig=pVal<alpha;
       resultEl.innerHTML=`<div class="st-rbox">
         <div class="st-rgrid">${extra}</div>
-        <div><span class="st-sig ${sig?'sig':'ns'}">${sigCode(res.p)} · p = ${fmtP(res.p)}</span></div>
+        <div><span class="st-sig ${sig?'sig':'ns'}">${sigCode(pVal)} · p = ${fmtP(pVal)} (${tailLbl})</span></div>
         <div class="st-interp">${interp}</div>
+        ${ciHtml||''}
       </div>`;
+    }
+
+    /* CI for a difference: estimate ± t* · SE on df degrees of freedom */
+    function diffCI(label,est,se,df){
+      const tc=tCrit(df,conf), lo=est-tc*se, hi=est+tc*se;
+      return `<div class="st-sh" style="margin-top:16px">${Math.round(conf*100)}% CI for ${label}</div>
+        <div class="st-rgrid" style="margin-bottom:0">
+          <div class="st-rs"><div class="rsl">Estimate</div><div class="rsv">${fmt(est)}</div></div>
+          <div class="st-rs"><div class="rsl">Lower</div><div class="rsv">${fmt(lo)}</div></div>
+          <div class="st-rs"><div class="rsl">Upper</div><div class="rsv">${fmt(hi)}</div></div>
+          <div class="st-rs"><div class="rsl">t* (df=${fmt(df,3)})</div><div class="rsv">${fmt(tc,4)}</div></div>
+        </div>`;
     }
 
     if(type==='one'){
       const r=oneSampleT(data,mu0);
-      const sig=r.p<alpha;
-      showResult(r,`
+      const pVal=pFor(r.t,r.df), sig=pVal<alpha;
+      showResult(pVal,`
         <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
         <div class="st-rs"><div class="rsl">df</div><div class="rsv">${r.df}</div></div>
-        <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+        <div class="st-rs"><div class="rsl">p (${tailLbl})</div><div class="rsv">${fmtP(pVal)}</div></div>
         <div class="st-rs"><div class="rsl">Sample mean</div><div class="rsv">${fmt(r.m)}</div></div>
         <div class="st-rs"><div class="rsl">n</div><div class="rsv">${r.n}</div></div>
         <div class="st-rs"><div class="rsl">Std Dev</div><div class="rsv">${fmt(r.s)}</div></div>`,
-        `Mean (${fmt(r.m)}) is <b>${sig?'significantly different from':'not significantly different from'}</b> μ₀ = ${mu0} at α = ${alpha.toFixed(2)}. ${sig?'Reject H₀.':'Fail to reject H₀.'}`);
+        `H₁: μ ${altSym} ${mu0}. Mean (${fmt(r.m)}) is <b>${sig?'significantly different from':'not significantly different from'}</b> μ₀ = ${mu0} at α = ${alpha.toFixed(2)}. ${sig?'Reject H₀.':'Fail to reject H₀.'}`);
     } else {
       const bData=parseData(datasets[bIdx].raw);
       if(bData.length<2){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Second dataset needs ≥ 2 values.</p></div>`;return;}
       if(type==='two'){
         const r=twoSampleT(data,bData,varEq);
-        const sig=r.p<alpha;
-        showResult(r,`
+        const pVal=pFor(r.t,r.df), sig=pVal<alpha;
+        showResult(pVal,`
           <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
           <div class="st-rs"><div class="rsl">df</div><div class="rsv">${fmt(r.df,3)}</div></div>
-          <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+          <div class="st-rs"><div class="rsl">p (${tailLbl})</div><div class="rsv">${fmtP(pVal)}</div></div>
           <div class="st-rs"><div class="rsl">Mean A</div><div class="rsv">${fmt(r.m1)}</div></div>
           <div class="st-rs"><div class="rsl">Mean B</div><div class="rsv">${fmt(r.m2)}</div></div>
-          <div class="st-rs"><div class="rsl">Difference</div><div class="rsv">${fmt(r.m1-r.m2)}</div></div>`,
-          `${varEq?'Pooled':'Welch'} t-test: <b>${datasets[activeIdx].name||'A'}</b> (x̄=${fmt(r.m1)}) vs <b>${datasets[bIdx].name||'B'}</b> (x̄=${fmt(r.m2)}) — means are <b>${sig?'significantly different':'not significantly different'}</b> at α=${alpha.toFixed(2)}.`);
+          <div class="st-rs"><div class="rsl">Difference</div><div class="rsv">${fmt(r.diff)}</div></div>`,
+          `${varEq?'Pooled':'Welch'} t-test (H₁: μ_A ${altSym} μ_B): <b>${datasets[activeIdx].name||'A'}</b> (x̄=${fmt(r.m1)}) vs <b>${datasets[bIdx].name||'B'}</b> (x̄=${fmt(r.m2)}) — means are <b>${sig?'significantly different':'not significantly different'}</b> at α=${alpha.toFixed(2)}.`,
+          diffCI('μ_A − μ_B',r.diff,r.se,r.df));
       } else {
         if(data.length!==bData.length){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Paired test requires equal-length datasets (A has ${data.length}, B has ${bData.length}).</p></div>`;return;}
-        const r=pairedT(data,bData);
-        const sig=r.p<alpha;
-        showResult(r,`
+        const r=pairedT(data,bData), se=r.s/Math.sqrt(r.n);
+        const pVal=pFor(r.t,r.df), sig=pVal<alpha;
+        showResult(pVal,`
           <div class="st-rs"><div class="rsl">t-stat</div><div class="rsv">${fmt(r.t,4)}</div></div>
           <div class="st-rs"><div class="rsl">df</div><div class="rsv">${r.df}</div></div>
-          <div class="st-rs"><div class="rsl">p (2-tail)</div><div class="rsv">${fmtP(r.p)}</div></div>
+          <div class="st-rs"><div class="rsl">p (${tailLbl})</div><div class="rsv">${fmtP(pVal)}</div></div>
           <div class="st-rs"><div class="rsl">n pairs</div><div class="rsv">${r.n}</div></div>
           <div class="st-rs"><div class="rsl">Mean diff</div><div class="rsv">${fmt(r.m)}</div></div>
           <div class="st-rs"><div class="rsl">SD diff</div><div class="rsv">${fmt(r.s)}</div></div>`,
-          `Paired t-test on ${r.n} pairs: mean difference is ${fmt(r.m)}. <b>${sig?'Significant difference found':'No significant difference'}</b> at α=${alpha.toFixed(2)}.`);
+          `Paired t-test (H₁: μ_d ${altSym} 0) on ${r.n} pairs: mean difference is ${fmt(r.m)}. <b>${sig?'Significant difference found':'No significant difference'}</b> at α=${alpha.toFixed(2)}.`,
+          diffCI('mean difference μ_d',r.m,se,r.df));
       }
     }
   }
@@ -14163,6 +14239,9 @@ function mountStats(root) {
     if(!reg){resultEl.innerHTML=`<div class="st-rbox"><p style="color:var(--muted)">Cannot compute (zero variance in x?).</p></div>`;return;}
     const rStr=Math.abs(reg.r)>0.8?'Strong':Math.abs(reg.r)>0.5?'Moderate':'Weak';
     const rDir=reg.r>0?'positive':'negative';
+    const resid=yd.map((y,i)=>y-(reg.a+reg.b*xd[i]));
+    const sse=resid.reduce((s,e)=>s+e*e,0);
+    const sReg=n>2?Math.sqrt(sse/(n-2)):NaN; // residual standard error
     resultEl.innerHTML=`<div class="st-rbox" style="margin-top:12px">
       <div class="st-rgrid">
         <div class="st-rs"><div class="rsl">Slope b</div><div class="rsv">${fmt(reg.b)}</div></div>
@@ -14170,37 +14249,310 @@ function mountStats(root) {
         <div class="st-rs"><div class="rsl">r (Pearson)</div><div class="rsv">${fmt(reg.r,4)}</div></div>
         <div class="st-rs"><div class="rsl">R²</div><div class="rsv">${fmt(reg.r2,4)}</div></div>
         <div class="st-rs"><div class="rsl">SE of slope</div><div class="rsv">${fmt(reg.se_b)}</div></div>
+        <div class="st-rs"><div class="rsl">Resid. SE</div><div class="rsv">${fmt(sReg)}</div></div>
         <div class="st-rs"><div class="rsl">n</div><div class="rsv">${reg.n}</div></div>
       </div>
       <div class="st-interp">
         <b>ŷ = ${fmt(reg.a)} + ${fmt(reg.b)}x</b><br>
         ${rStr} ${rDir} relationship (r = ${fmt(reg.r,3)}). R² = ${(reg.r2*100).toFixed(1)}% variance explained.
       </div>
-      <canvas id="st-scatter" height="180" style="width:100%;max-height:180px;margin-top:14px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>
-    </div>`;
-    // Draw scatter
-    const canvas=document.getElementById('st-scatter');
-    if(!canvas)return;
+      <div class="st-sh" style="margin-top:16px">Predict</div>
+      <div class="st-trow"><label>x =</label><input type="number" id="st-pred-x" step="any" placeholder="enter a value"></div>
+      <div id="st-pred-out" class="st-interp" style="margin-top:2px">Enter an x value to predict ŷ.</div>
+      <div class="st-sh" style="margin-top:16px">Scatter &amp; Fit</div>
+      <canvas id="st-scatter" height="180" style="width:100%;max-height:180px;margin-top:4px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>
+      <div class="st-sh" style="margin-top:16px">Residual Plot</div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 4px">Residual eᵢ = yᵢ − ŷᵢ. A patternless band around 0 supports a linear fit.</p>
+      <canvas id="st-resid" height="150" style="width:100%;max-height:150px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>`;
+
+    const xMin=Math.min(...xd),xMax=Math.max(...xd);
+
+    // Scatter + fit line (predX, when finite, overlays a predicted point)
+    function drawScatter(predX){
+      const canvas=document.getElementById('st-scatter'); if(!canvas)return;
+      const dpr=window.devicePixelRatio||1;
+      canvas.width=canvas.offsetWidth*dpr; canvas.height=180*dpr;
+      const ctx2=canvas.getContext('2d'); ctx2.scale(dpr,dpr);
+      const W=canvas.offsetWidth,H=180,pad=30;
+      const hasP=isFinite(predX);
+      const xLo=hasP?Math.min(xMin,predX):xMin, xHi=hasP?Math.max(xMax,predX):xMax;
+      const fits=[reg.a+reg.b*xLo,reg.a+reg.b*xHi];
+      const yMin=Math.min(...yd,...(hasP?[reg.a+reg.b*predX]:[]),...fits);
+      const yMax=Math.max(...yd,...(hasP?[reg.a+reg.b*predX]:[]),...fits);
+      const xR=xHi-xLo||1,yR=yMax-yMin||1;
+      const px=x=>pad+(x-xLo)/xR*(W-2*pad);
+      const py=y=>H-pad-(y-yMin)/yR*(H-2*pad);
+      ctx2.strokeStyle='rgba(240,233,218,0.15)';ctx2.lineWidth=1;
+      ctx2.beginPath();ctx2.moveTo(pad,pad);ctx2.lineTo(pad,H-pad);ctx2.lineTo(W-pad,H-pad);ctx2.stroke();
+      ctx2.strokeStyle='#FF5A3D';ctx2.lineWidth=2;
+      ctx2.beginPath();ctx2.moveTo(px(xLo),py(fits[0]));ctx2.lineTo(px(xHi),py(fits[1]));ctx2.stroke();
+      ctx2.fillStyle='rgba(255,90,61,0.7)';
+      xd.forEach((x,i)=>{ctx2.beginPath();ctx2.arc(px(x),py(yd[i]),4,0,Math.PI*2);ctx2.fill();});
+      if(hasP){
+        const pyHat=reg.a+reg.b*predX;
+        ctx2.strokeStyle='#2FE4E4';ctx2.lineWidth=1.5;ctx2.setLineDash([4,3]);
+        ctx2.beginPath();ctx2.moveTo(px(predX),H-pad);ctx2.lineTo(px(predX),py(pyHat));ctx2.lineTo(pad,py(pyHat));ctx2.stroke();
+        ctx2.setLineDash([]);
+        ctx2.fillStyle='#2FE4E4';ctx2.beginPath();ctx2.arc(px(predX),py(pyHat),5,0,Math.PI*2);ctx2.fill();
+      }
+      ctx2.fillStyle='rgba(131,124,112,0.9)';ctx2.font='9px monospace';ctx2.textAlign='center';
+      ctx2.fillText(fmt(xLo,3),px(xLo),H-12);
+      ctx2.fillText(fmt(xHi,3),px(xHi),H-12);
+      ctx2.textAlign='start';
+    }
+
+    // Residual plot
+    function drawResid(){
+      const canvas=document.getElementById('st-resid'); if(!canvas)return;
+      const dpr=window.devicePixelRatio||1;
+      canvas.width=canvas.offsetWidth*dpr; canvas.height=150*dpr;
+      const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+      const W=canvas.offsetWidth,H=150,pad=30;
+      const eMax=Math.max(1e-9,...resid.map(Math.abs));
+      const px=x=>pad+(x-xMin)/(xMax-xMin||1)*(W-2*pad);
+      const py=e=>H/2-(e/eMax)*(H/2-pad);
+      ctx.strokeStyle='rgba(240,233,218,0.15)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.stroke();
+      ctx.strokeStyle='rgba(240,233,218,0.35)';ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(pad,py(0));ctx.lineTo(W-pad,py(0));ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='rgba(255,90,61,0.7)';
+      xd.forEach((x,i)=>{ctx.beginPath();ctx.arc(px(x),py(resid[i]),4,0,Math.PI*2);ctx.fill();});
+      ctx.fillStyle='rgba(131,124,112,0.9)';ctx.font='9px monospace';
+      ctx.fillText('0',6,py(0)+3);
+      ctx.textAlign='center';ctx.fillText(fmt(xMin,3),px(xMin),H-12);ctx.fillText(fmt(xMax,3),px(xMax),H-12);ctx.textAlign='start';
+    }
+
+    drawScatter(NaN);
+    drawResid();
+    document.getElementById('st-pred-x')?.addEventListener('input',e=>{
+      const xv=parseFloat(e.target.value);
+      const out=document.getElementById('st-pred-out');
+      if(!isFinite(xv)){ if(out)out.textContent='Enter an x value to predict ŷ.'; drawScatter(NaN); return; }
+      const yhat=reg.a+reg.b*xv;
+      const band=isFinite(sReg)?` &nbsp;(±${fmt(sReg)} typical residual)`:'';
+      if(out)out.innerHTML=`At x = ${fmt(xv)}: <b>ŷ = ${fmt(yhat,5)}</b>${band}`;
+      drawScatter(xv);
+    });
+  }
+
+  /* ── Distribution lookups (table replacement; no dataset needed) ── */
+  const DIST_DEFAULTS={dist:'normal',dir:'forward',mu:0,sd:1,df:10,n:20,p:0.5,region:'left',x:1,x2:2,prob:0.95};
+
+  function buildDistributions(){
+    const cfg=Storage.get('stats:distconfig',DIST_DEFAULTS);
+    const dist=cfg.dist, dir=cfg.dir, cont=dist!=='binomial';
+    let params='';
+    if(dist==='normal') params=`
+      <div class="st-trow"><label>Mean μ</label><input type="number" id="dl-mu" value="${cfg.mu}" step="any"></div>
+      <div class="st-trow"><label>Std dev σ</label><input type="number" id="dl-sd" value="${cfg.sd}" step="any" min="0"></div>`;
+    else if(dist==='t') params=`
+      <div class="st-trow"><label>Deg. freedom</label><input type="number" id="dl-df" value="${cfg.df}" step="1" min="1"></div>`;
+    else params=`
+      <div class="st-trow"><label>Trials n</label><input type="number" id="dl-n" value="${cfg.n}" step="1" min="1"></div>
+      <div class="st-trow"><label>Success p</label><input type="number" id="dl-p" value="${cfg.p}" step="any" min="0" max="1"></div>`;
+
+    let query='';
+    const sel=(opts,val)=>opts.map(([v,l])=>`<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('');
+    if(dir==='forward'){
+      if(cont){
+        query=`
+          <div class="st-trow"><label>Region</label><select id="dl-region">${sel([['left','Left  P(X ≤ x)'],['right','Right  P(X ≥ x)'],['between','Between  P(a ≤ X ≤ b)'],['twotail','Two-tailed  (both tails)']],cfg.region)}</select></div>
+          <div class="st-trow"><label>${cfg.region==='between'?'Lower a':'Value x'}</label><input type="number" id="dl-x" value="${cfg.x}" step="any"></div>
+          ${cfg.region==='between'?`<div class="st-trow"><label>Upper b</label><input type="number" id="dl-x2" value="${cfg.x2}" step="any"></div>`:''}`;
+      } else {
+        query=`
+          <div class="st-trow"><label>Region</label><select id="dl-region">${sel([['eq','Exactly  P(X = k)'],['le','At most  P(X ≤ k)'],['ge','At least  P(X ≥ k)'],['between','Between  P(a ≤ X ≤ b)']],cfg.region)}</select></div>
+          <div class="st-trow"><label>${cfg.region==='between'?'Lower a':'Count k'}</label><input type="number" id="dl-x" value="${cfg.x}" step="1" min="0"></div>
+          ${cfg.region==='between'?`<div class="st-trow"><label>Upper b</label><input type="number" id="dl-x2" value="${cfg.x2}" step="1" min="0"></div>`:''}`;
+      }
+    } else {
+      if(cont){
+        query=`
+          <div class="st-trow"><label>Direction</label><select id="dl-region">${sel([['left','Left area → x'],['right','Right area → x'],['central','Central area → ±x*']],cfg.region)}</select></div>
+          <div class="st-trow"><label>Probability</label><input type="number" id="dl-prob" value="${cfg.prob}" step="any" min="0" max="1"></div>`;
+      } else {
+        query=`
+          <div class="st-trow"><label>Cumulative p</label><input type="number" id="dl-prob" value="${cfg.prob}" step="any" min="0" max="1"></div>
+          <p style="font-size:12px;color:var(--muted);margin:-2px 0 0">Smallest k with P(X ≤ k) ≥ p.</p>`;
+      }
+    }
+
+    return `
+      <div class="st-sh st-sh--first">Distribution Lookup</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px;max-width:54ch">Replaces the printed normal / t / binomial tables — no dataset needed.</p>
+      <div class="st-trow"><label>Distribution</label>
+        <select id="dl-dist">
+          <option value="normal"${dist==='normal'?' selected':''}>Normal</option>
+          <option value="t"${dist==='t'?' selected':''}>Student's t</option>
+          <option value="binomial"${dist==='binomial'?' selected':''}>Binomial</option>
+        </select>
+      </div>
+      <div class="st-trow"><label>Find</label>
+        <select id="dl-dir">
+          <option value="forward"${dir==='forward'?' selected':''}>Probability from value</option>
+          <option value="inverse"${dir==='inverse'?' selected':''}>Value from probability</option>
+        </select>
+      </div>
+      ${params}
+      ${query}
+      <div id="dl-result"></div>
+      <canvas id="dl-canvas" height="180" style="width:100%;max-height:180px;margin-top:14px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>`;
+  }
+
+  function normalizeRegion(cfg){
+    const cont=cfg.dist!=='binomial';
+    if(cfg.dir==='forward'){
+      if(cont){ if(!['left','right','between','twotail'].includes(cfg.region))cfg.region='left'; }
+      else { if(!['eq','le','ge','between'].includes(cfg.region))cfg.region='le'; }
+    } else if(cont){
+      if(!['left','right','central'].includes(cfg.region))cfg.region='left';
+    }
+  }
+
+  function readDistCfg(){
+    const cfg=Storage.get('stats:distconfig',DIST_DEFAULTS);
+    const g=id=>document.getElementById(id);
+    const num=(id,cur)=>{ const el=g(id); if(!el)return cur; const v=parseFloat(el.value); return isFinite(v)?v:cur; };
+    if(g('dl-dist'))cfg.dist=g('dl-dist').value;
+    if(g('dl-dir'))cfg.dir=g('dl-dir').value;
+    if(g('dl-region'))cfg.region=g('dl-region').value;
+    cfg.mu=num('dl-mu',cfg.mu); cfg.sd=num('dl-sd',cfg.sd); cfg.df=num('dl-df',cfg.df);
+    cfg.n=num('dl-n',cfg.n); cfg.p=num('dl-p',cfg.p);
+    cfg.x=num('dl-x',cfg.x); cfg.x2=num('dl-x2',cfg.x2); cfg.prob=num('dl-prob',cfg.prob);
+    Storage.set('stats:distconfig',cfg);
+    return cfg;
+  }
+
+  function wireDist(){
+    const reRender=()=>{
+      const el=document.getElementById('st-content');
+      if(!el)return;
+      el.innerHTML=buildDistributions();
+      setTimeout(()=>{ wireDist(); computeDist(); },0);
+    };
+    document.getElementById('dl-dist')?.addEventListener('change',()=>{ const cfg=readDistCfg(); normalizeRegion(cfg); Storage.set('stats:distconfig',cfg); reRender(); });
+    document.getElementById('dl-dir')?.addEventListener('change',()=>{ const cfg=readDistCfg(); normalizeRegion(cfg); Storage.set('stats:distconfig',cfg); reRender(); });
+    document.getElementById('dl-region')?.addEventListener('change',()=>{ readDistCfg(); reRender(); });
+    ['dl-mu','dl-sd','dl-df','dl-n','dl-p','dl-x','dl-x2','dl-prob'].forEach(id=>{
+      document.getElementById(id)?.addEventListener('input',computeDist);
+    });
+  }
+
+  function drawDistCurve(pdf,xmin,xmax,shadeRanges,markers){
+    const canvas=document.getElementById('dl-canvas'); if(!canvas)return;
     const dpr=window.devicePixelRatio||1;
     canvas.width=canvas.offsetWidth*dpr; canvas.height=180*dpr;
-    const ctx2=canvas.getContext('2d'); ctx2.scale(dpr,dpr);
-    const W=canvas.offsetWidth,H=180,pad=30;
-    const xMin=Math.min(...xd),xMax=Math.max(...xd),yMin=Math.min(...yd),yMax=Math.max(...yd);
-    const xR=xMax-xMin||1,yR=yMax-yMin||1;
-    const px=x=>pad+(x-xMin)/xR*(W-2*pad);
-    const py=y=>H-pad-(y-yMin)/yR*(H-2*pad);
-    ctx2.strokeStyle='rgba(240,233,218,0.15)';ctx2.lineWidth=1;
-    ctx2.beginPath();ctx2.moveTo(pad,pad);ctx2.lineTo(pad,H-pad);ctx2.lineTo(W-pad,H-pad);ctx2.stroke();
-    // Regression line
-    ctx2.strokeStyle='#FF5A3D';ctx2.lineWidth=2;
-    ctx2.beginPath();ctx2.moveTo(px(xMin),py(reg.a+reg.b*xMin));ctx2.lineTo(px(xMax),py(reg.a+reg.b*xMax));ctx2.stroke();
-    // Points
-    ctx2.fillStyle='rgba(255,90,61,0.7)';
-    xd.forEach((x,i)=>{ctx2.beginPath();ctx2.arc(px(x),py(yd[i]),4,0,Math.PI*2);ctx2.fill();});
-    // Labels
-    ctx2.fillStyle='rgba(131,124,112,0.9)';ctx2.font=`${9*dpr}px monospace`;ctx2.scale(1/dpr,1/dpr);
-    ctx2.fillText(fmt(xMin,3),pad*dpr,(H-14)*dpr);
-    ctx2.fillText(fmt(xMax,3),(W-pad-20)*dpr,(H-14)*dpr);
+    const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const W=canvas.offsetWidth,H=180,pad=22,padb=26,N=240;
+    const pdfAt=x=>pdf(x); let ymax=0;
+    for(let i=0;i<=N;i++){ const y=pdfAt(xmin+(xmax-xmin)*i/N); if(y>ymax)ymax=y; }
+    if(!(ymax>0))ymax=1;
+    const px=x=>pad+(x-xmin)/(xmax-xmin)*(W-2*pad);
+    const py=y=>H-padb-(y/ymax)*(H-pad-padb);
+    ctx.fillStyle='rgba(255,90,61,0.28)';
+    (shadeRanges||[]).forEach(([lo,hi])=>{
+      lo=Math.max(lo,xmin); hi=Math.min(hi,xmax); if(hi<=lo)return;
+      ctx.beginPath(); ctx.moveTo(px(lo),py(0));
+      for(let i=0;i<=N;i++){ const x=xmin+(xmax-xmin)*i/N; if(x<lo)continue; if(x>hi)break; ctx.lineTo(px(x),py(pdfAt(x))); }
+      ctx.lineTo(px(hi),py(0)); ctx.closePath(); ctx.fill();
+    });
+    ctx.strokeStyle='rgba(240,233,218,0.15)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad,H-padb); ctx.lineTo(W-pad,H-padb); ctx.stroke();
+    ctx.strokeStyle='#FF5A3D'; ctx.lineWidth=2; ctx.beginPath();
+    for(let i=0;i<=N;i++){ const x=xmin+(xmax-xmin)*i/N,X=px(x),Y=py(pdfAt(x)); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+    ctx.stroke();
+    ctx.strokeStyle='#2FE4E4'; ctx.lineWidth=1.5;
+    (markers||[]).forEach(m=>{ if(!isFinite(m)||m<xmin||m>xmax)return; ctx.beginPath(); ctx.moveTo(px(m),pad); ctx.lineTo(px(m),H-padb); ctx.stroke(); });
+    ctx.fillStyle='rgba(131,124,112,0.9)'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText(fmt(xmin,3),px(xmin),H-9);
+    ctx.fillText(fmt((xmin+xmax)/2,3),px((xmin+xmax)/2),H-9);
+    ctx.fillText(fmt(xmax,3),px(xmax),H-9);
+    ctx.textAlign='start';
+  }
+
+  function drawDistBars(n,p,highlight){
+    const canvas=document.getElementById('dl-canvas'); if(!canvas)return;
+    const dpr=window.devicePixelRatio||1;
+    canvas.width=canvas.offsetWidth*dpr; canvas.height=180*dpr;
+    const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const W=canvas.offsetWidth,H=180,pad=22,padb=26,cnt=n+1;
+    let ymax=0; const pmf=[];
+    for(let k=0;k<=n;k++){ const v=binomPMF(k,n,p); pmf.push(v); if(v>ymax)ymax=v; }
+    if(!(ymax>0))ymax=1;
+    const bw=(W-2*pad)/cnt, py=v=>H-padb-(v/ymax)*(H-pad-padb);
+    ctx.strokeStyle='rgba(240,233,218,0.15)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad,H-padb); ctx.lineTo(W-pad,H-padb); ctx.stroke();
+    pmf.forEach((v,k)=>{
+      const x=pad+k*bw;
+      ctx.fillStyle=highlight(k)?'rgba(255,90,61,0.85)':'rgba(255,90,61,0.25)';
+      ctx.fillRect(x+bw*0.12,py(v),Math.max(1,bw*0.76),(H-padb)-py(v));
+    });
+    ctx.fillStyle='rgba(131,124,112,0.9)'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText('0',pad+bw*0.5,H-9);
+    ctx.fillText(String(n),pad+(n+0.5)*bw,H-9);
+    ctx.textAlign='start';
+  }
+
+  function computeDist(){
+    const cfg=readDistCfg();
+    const resEl=document.getElementById('dl-result');
+    if(!resEl)return;
+    const card=(items,interp)=>`<div class="st-rbox" style="margin-top:12px"><div class="st-rgrid">${items.map(([l,v])=>`<div class="st-rs"><div class="rsl">${l}</div><div class="rsv">${v}</div></div>`).join('')}</div>${interp?`<div class="st-interp">${interp}</div>`:''}</div>`;
+    const warn=msg=>{ resEl.innerHTML=`<div class="st-rbox" style="margin-top:12px"><p style="color:var(--muted);margin:0">${msg}</p></div>`; const c=document.getElementById('dl-canvas'); if(c)c.getContext('2d').clearRect(0,0,c.width,c.height); };
+
+    if(cfg.dist==='normal'||cfg.dist==='t'){
+      let pdf,cdf,inv,xmin,xmax,center;
+      if(cfg.dist==='normal'){
+        const mu=cfg.mu,sd=cfg.sd;
+        if(!isFinite(mu)||!isFinite(sd)||sd<=0)return warn('Enter a mean and a positive standard deviation.');
+        pdf=x=>normalPDF(x,mu,sd); cdf=x=>normalCDF(x,mu,sd); inv=q=>normalInv(q,mu,sd);
+        xmin=mu-4*sd; xmax=mu+4*sd; center=mu;
+      } else {
+        const df=cfg.df;
+        if(!isFinite(df)||df<1)return warn('Enter degrees of freedom ≥ 1.');
+        pdf=x=>tPDF(x,df); cdf=x=>tCDF(x,df); inv=q=>tInv(q,df);
+        xmin=-5; xmax=5; center=0;
+      }
+      const zRow=v=>cfg.dist==='normal'?[['z-score',fmt((v-cfg.mu)/cfg.sd,4)]]:[];
+      if(cfg.dir==='forward'){
+        const x=cfg.x; if(!isFinite(x))return warn('Enter a value.');
+        let prob,shade,markers=[x],interp;
+        if(cfg.region==='left'){ prob=cdf(x); shade=[[xmin,x]]; interp=`P(X ≤ ${fmt(x)}) = <b>${fmt(prob,5)}</b>.`; }
+        else if(cfg.region==='right'){ prob=1-cdf(x); shade=[[x,xmax]]; interp=`P(X ≥ ${fmt(x)}) = <b>${fmt(prob,5)}</b>.`; }
+        else if(cfg.region==='between'){ const x2=cfg.x2; if(!isFinite(x2))return warn('Enter both bounds.'); const lo=Math.min(x,x2),hi=Math.max(x,x2); prob=cdf(hi)-cdf(lo); shade=[[lo,hi]]; markers=[lo,hi]; interp=`P(${fmt(lo)} ≤ X ≤ ${fmt(hi)}) = <b>${fmt(prob,5)}</b>.`; }
+        else { const d=Math.abs(x-center),lo=center-d,hi=center+d; prob=cdf(lo)+(1-cdf(hi)); shade=[[xmin,lo],[hi,xmax]]; markers=[lo,hi]; interp=`Two-tailed area beyond ±${fmt(d)} from center = <b>${fmt(prob,5)}</b>.`; }
+        resEl.innerHTML=card([['Probability',fmt(prob,5)],['Percent',(prob*100).toFixed(3)+'%'],...(cfg.region!=='twotail'&&cfg.region!=='between'?zRow(x):[])],interp);
+        drawDistCurve(pdf,xmin,xmax,shade,markers);
+      } else {
+        const p=cfg.prob; if(!isFinite(p)||p<=0||p>=1)return warn('Enter a probability strictly between 0 and 1.');
+        let items,interp,shade,markers;
+        if(cfg.region==='left'){ const xv=inv(p); shade=[[xmin,xv]]; markers=[xv]; items=[['Value x',fmt(xv,5)],...zRow(xv)]; interp=`x with P(X ≤ x) = ${fmt(p)} is <b>${fmt(xv,5)}</b>.`; }
+        else if(cfg.region==='right'){ const xv=inv(1-p); shade=[[xv,xmax]]; markers=[xv]; items=[['Value x',fmt(xv,5)],...zRow(xv)]; interp=`x with P(X ≥ x) = ${fmt(p)} is <b>${fmt(xv,5)}</b>.`; }
+        else { const lo=inv((1-p)/2),hi=inv((1+p)/2); shade=[[lo,hi]]; markers=[lo,hi]; items=[['Lower x*',fmt(lo,5)],['Upper x*',fmt(hi,5)],[cfg.dist==='normal'?'±z*':'±t*',fmt(cfg.dist==='normal'?(hi-cfg.mu)/cfg.sd:hi,4)]]; interp=`Central ${(p*100).toFixed(1)}% lies between <b>${fmt(lo,5)}</b> and <b>${fmt(hi,5)}</b> (${((1-p)/2*100).toFixed(2)}% in each tail).`; }
+        resEl.innerHTML=card(items,interp);
+        drawDistCurve(pdf,xmin,xmax,shade,markers);
+      }
+    } else {
+      const n=Math.round(cfg.n),p=cfg.p;
+      if(!isFinite(n)||n<1)return warn('Enter number of trials n ≥ 1.');
+      if(!isFinite(p)||p<0||p>1)return warn('Enter success probability p between 0 and 1.');
+      const mean=n*p, sd=Math.sqrt(n*p*(1-p));
+      if(cfg.dir==='forward'){
+        const k=Math.round(cfg.x); if(!isFinite(k)||k<0)return warn('Enter a count k ≥ 0.');
+        let prob,hl,interp;
+        if(cfg.region==='eq'){ prob=binomPMF(k,n,p); hl=j=>j===k; interp=`P(X = ${k}) = <b>${fmt(prob,5)}</b>.`; }
+        else if(cfg.region==='le'){ prob=binomCDF(k,n,p); hl=j=>j<=k; interp=`P(X ≤ ${k}) = <b>${fmt(prob,5)}</b>.`; }
+        else if(cfg.region==='ge'){ prob=1-binomCDF(k-1,n,p); hl=j=>j>=k; interp=`P(X ≥ ${k}) = <b>${fmt(prob,5)}</b>.`; }
+        else { const k2=Math.round(cfg.x2); if(!isFinite(k2)||k2<0)return warn('Enter both counts.'); const lo=Math.min(k,k2),hi=Math.max(k,k2); prob=binomCDF(hi,n,p)-binomCDF(lo-1,n,p); hl=j=>j>=lo&&j<=hi; interp=`P(${lo} ≤ X ≤ ${hi}) = <b>${fmt(prob,5)}</b>.`; }
+        resEl.innerHTML=card([['Probability',fmt(prob,5)],['Percent',(prob*100).toFixed(3)+'%'],['Mean np',fmt(mean,4)],['SD',fmt(sd,4)]],interp);
+        drawDistBars(n,p,hl);
+      } else {
+        const pr=cfg.prob; if(!isFinite(pr)||pr<=0||pr>1)return warn('Enter a cumulative probability between 0 and 1.');
+        const k=binomInv(pr,n,p), actual=binomCDF(k,n,p);
+        resEl.innerHTML=card([['Count k',String(k)],['P(X ≤ k)',fmt(actual,5)],['Mean np',fmt(mean,4)],['SD',fmt(sd,4)]],`Smallest k with P(X ≤ k) ≥ ${fmt(pr)} is <b>${k}</b> (actual ${fmt(actual,5)}).`);
+        drawDistBars(n,p,j=>j<=k);
+      }
+    }
   }
 
   function wire(data, valid){
@@ -14241,6 +14593,7 @@ function mountStats(root) {
         const ok=d.length>=2;
         const countEl=document.getElementById('st-count');
         if(countEl)countEl.textContent=ok?d.length+' values':'paste or type below';
+        if(activeTab==='distributions') return; // lookup tab is independent of the dataset
         const contentEl=document.getElementById('st-content');
         if(contentEl){
           contentEl.innerHTML=ok?buildTab(d):buildEmpty();
@@ -14255,8 +14608,14 @@ function mountStats(root) {
         root.querySelectorAll('.st-tab').forEach(x=>x.classList.toggle('active',x===t));
         const contentEl=document.getElementById('st-content');
         if(contentEl){
-          contentEl.innerHTML=valid?buildTab(data):buildEmpty();
-          if(valid) setTimeout(()=>{ postRender(data); wireInner(data,valid); },10);
+          if(activeTab==='distributions'){
+            contentEl.innerHTML=buildDistributions();
+            setTimeout(()=>{ wireDist(); computeDist(); },10);
+          } else {
+            const cur=parseData(datasets[activeIdx].raw), curValid=cur.length>=2;
+            contentEl.innerHTML=curValid?buildTab(cur):buildEmpty();
+            if(curValid) setTimeout(()=>{ postRender(cur); wireInner(cur,curValid); },10);
+          }
         }
       });
     });
