@@ -106,11 +106,20 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
 - ✅ Data + color scale layered on the existing 118-cell grid; Browse / Electron
   / Quiz modes unchanged.
 
-### 1.6 Flashcards / Vocab → import + share-by-code
-- **Anki `.csv` import** and Quizlet paste.
-- **Deck share-by-code**: export a deck as an encoded string / URL fragment a
-  student pastes to a friend. No backend — the only sanctioned "social" feature.
-- Confirm SM-2-lite spaced repetition is exposed in the UI.
+### 1.6 Flashcards / Vocab → import + share-by-code  ✅ *shipped*
+- ✅ **Anki `.csv` import** — reads Anki's `#separator`/`#html` header lines,
+  strips HTML, honors the declared delimiter (tab/comma/semicolon/pipe), and
+  skips spreadsheet header rows. Plus a **Quizlet / plain-text paste** box with
+  selectable term/definition and card separators (auto-detected) and a live
+  card-count preview.
+- ✅ **Deck share-by-code**: a deck encodes to a compact UTF-8-safe base64url
+  string and a matching `#flashcards=…` share link. A friend pastes either under
+  Import (or opens the link) to get their own copy. No backend — the only
+  sanctioned "social" feature. SRS progress is intentionally not shared.
+- ✅ SM-2-lite spaced repetition is surfaced in the UI: the four rating buttons
+  show the **projected next interval** each choice schedules, a one-line "SM-2
+  lite" explainer appears on flip, and the editor keeps the New/Learning/Review/
+  Mature badges and a **Reset SRS** control.
 
 ### 1.7 Citation Helper → autofill + annotated mode
 - **DOI / ISBN autofill** when online; full manual entry when offline.

@@ -1433,6 +1433,66 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
   color:var(--muted);max-width:36ch;line-height:1.5;
 }
 
+/* ── Import / Share (I/O) views ── */
+.fc-io{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:16px;
+  padding:14px 2px 6px;
+  scrollbar-width:thin;scrollbar-color:var(--muted-2) transparent;
+}
+.fc-io::-webkit-scrollbar{width:6px}
+.fc-io::-webkit-scrollbar-thumb{background:var(--muted-2);border-radius:3px}
+.fc-io-sec{
+  background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:10px;
+}
+.fc-io-head{
+  font-family:var(--serif);font-weight:500;font-size:17px;letter-spacing:-.01em;
+  color:var(--ink);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.fc-io-head span{
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);font-weight:400;
+}
+.fc-io-sub{
+  font-family:var(--serif);font-style:italic;font-size:13.5px;color:var(--muted);line-height:1.5;
+}
+.fc-io-text{
+  width:100%;background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+  color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
+  padding:10px 12px;resize:vertical;transition:border-color .12s;
+}
+.fc-io-text.mono{font-family:var(--mono);font-size:12px;word-break:break-all}
+.fc-io-text:focus{border-color:var(--accent);outline:none;background:var(--paper-3)}
+.fc-io-text::placeholder{color:var(--muted-2);font-style:italic;font-family:var(--serif)}
+.fc-io-controls{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.fc-io-controls label,.fc-io-target label{
+  display:flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);
+}
+.fc-io select{
+  background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;color:var(--ink);
+  font-family:var(--sans);font-size:13px;padding:5px 8px;cursor:pointer;
+  text-transform:none;letter-spacing:0;
+}
+.fc-io select:focus{border-color:var(--accent);outline:none}
+.fc-io-count{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--accent-3);
+  margin-left:auto;white-space:nowrap;
+}
+.fc-io-count.warn{color:var(--muted)}
+.fc-io-target{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.fc-io-target .btn{margin-left:auto}
+.fc-share-note{
+  font-family:var(--serif);font-style:italic;font-size:13.5px;color:var(--muted);line-height:1.55;
+}
+
+/* SRS note under the rating buttons */
+.fc-srs-note{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted-2);text-align:center;max-width:520px;margin-top:-6px;
+}
+
 /* =========================================================
    PERIODIC TABLE TOOL
    ========================================================= */
@@ -3133,6 +3193,23 @@ function mountFlashcards(root) {
     return { interval, ef, reps, due };
   }
 
+  /* Project the next interval (days) a rating would schedule — without mutating
+     the card. Lets the UI show SM-2's actual decision on each rating button. */
+  function previewInterval(card, rating) {
+    const copy = { interval: card.interval || 0, ef: card.ef || 2.5, reps: card.reps || 0 };
+    return sm2(copy, rating).interval;
+  }
+
+  /* Human-friendly interval label */
+  function fmtDays(d) {
+    if (d <= 0)  return 'soon';
+    if (d === 1) return '1 day';
+    if (d < 30)  return d + ' days';
+    if (d < 60)  return '1 mo';
+    if (d < 365) return Math.round(d / 30) + ' mo';
+    return '1 yr';
+  }
+
   /* State */
   let S = loadState();
   let view = 'study';   // 'study' | 'manage'
@@ -3175,9 +3252,9 @@ function mountFlashcards(root) {
     <button class="btn ghost sm" id="fc-view-study">Study</button>
     <button class="btn ghost sm" id="fc-view-manage">Edit Cards</button>
     <div class="spacer"></div>
-    <button class="btn ghost sm" id="fc-import-btn">↑ Import CSV</button>
-    <button class="btn ghost sm" id="fc-export-btn">↓ Export CSV</button>
-    <input type="file" id="fc-csv-file" accept=".csv,.txt" style="display:none">
+    <button class="btn ghost sm" id="fc-view-import">↑ Import</button>
+    <button class="btn ghost sm" id="fc-view-share">↗ Share</button>
+    <input type="file" id="fc-csv-file" accept=".csv,.txt,.tsv" style="display:none">
   </div>
 
   <!-- Body -->
@@ -3188,8 +3265,8 @@ function mountFlashcards(root) {
   const body      = root.querySelector('#fc-body');
   const btnStudy  = root.querySelector('#fc-view-study');
   const btnManage = root.querySelector('#fc-view-manage');
-  const importBtn = root.querySelector('#fc-import-btn');
-  const exportBtn = root.querySelector('#fc-export-btn');
+  const btnImport = root.querySelector('#fc-view-import');
+  const btnShare  = root.querySelector('#fc-view-share');
   const csvFile   = root.querySelector('#fc-csv-file');
 
   /* ── Deck row ── */
@@ -3240,14 +3317,20 @@ function mountFlashcards(root) {
   /* ── View switcher ── */
   function setView(v) {
     view = v;
-    btnStudy.classList.toggle('accent', v === 'study');
-    btnManage.classList.toggle('accent', v === 'manage');
-    if (v === 'study') renderStudy();
-    else renderManage();
+    const btns = { study: btnStudy, manage: btnManage, import: btnImport, share: btnShare };
+    for (const [k, b] of Object.entries(btns)) b.classList.toggle('accent', k === v);
+    body._cleanup?.();
+    body._cleanup = null;
+    if (v === 'study')       renderStudy();
+    else if (v === 'manage') renderManage();
+    else if (v === 'import') renderImport();
+    else if (v === 'share')  renderShare();
   }
 
   /* ─────────────────────────── STUDY VIEW ──────────────────────────── */
   function renderStudy() {
+    body._cleanup?.();
+    body._cleanup = null;
     body.innerHTML = '';
     const deck = activeDeck();
 
@@ -3337,26 +3420,30 @@ function mountFlashcards(root) {
         <div class="fc-ratings" id="fc-ratings" style="opacity:0;pointer-events:none;transition:opacity .25s">
           <button class="fc-rating-btn again" data-rating="0">
             <span class="rb-label">Again</span>
-            <span class="rb-hint">&lt;1 day</span>
+            <span class="rb-hint">soon</span>
           </button>
           <button class="fc-rating-btn hard" data-rating="1">
             <span class="rb-label">Hard</span>
-            <span class="rb-hint">short</span>
+            <span class="rb-hint">${fmtDays(previewInterval(card, 1))}</span>
           </button>
           <button class="fc-rating-btn good" data-rating="2">
             <span class="rb-label">Good</span>
-            <span class="rb-hint">medium</span>
+            <span class="rb-hint">${fmtDays(previewInterval(card, 2))}</span>
           </button>
           <button class="fc-rating-btn easy" data-rating="3">
             <span class="rb-label">Easy</span>
-            <span class="rb-hint">long</span>
+            <span class="rb-hint">${fmtDays(previewInterval(card, 3))}</span>
           </button>
+        </div>
+        <div class="fc-srs-note" id="fc-srs-note" style="opacity:0;transition:opacity .25s">
+          SM-2 lite · your rating sets when this card comes back
         </div>
       </div>`;
 
     const stage  = body.querySelector('#fc-card-stage');
     const inner  = body.querySelector('#fc-card-inner');
     const ratings = body.querySelector('#fc-ratings');
+    const srsNote = body.querySelector('#fc-srs-note');
 
     function flip() {
       if (flipped) return;
@@ -3364,6 +3451,7 @@ function mountFlashcards(root) {
       inner.classList.add('flipped');
       ratings.style.opacity = '1';
       ratings.style.pointerEvents = 'auto';
+      if (srsNote) srsNote.style.opacity = '1';
     }
 
     stage.addEventListener('click', flip);
@@ -3614,63 +3702,316 @@ function mountFlashcards(root) {
     });
   }
 
-  /* ── CSV Import ── */
-  importBtn.addEventListener('click', () => csvFile.click());
-  csvFile.addEventListener('change', () => {
-    const file = csvFile.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const lines = e.target.result.split(/\r?\n/).filter(l => l.trim());
-      // Detect if first line is a header (contains 'front' or 'Back' insensitively)
-      let start = 0;
-      if (/^front[,\t]/i.test(lines[0]) || /^term[,\t]/i.test(lines[0])) start = 1;
+  /* ─────────────────────────── IMPORT VIEW ──────────────────────────── */
+  /* Populate a <select> with the existing decks plus a "new deck" option. */
+  function fillTargetSelect(sel) {
+    sel.innerHTML = '';
+    for (const d of S.decks) {
+      const o = document.createElement('option');
+      o.value = d.id;
+      o.textContent = `${d.name} (${d.cards.length})`;
+      if (d.id === S.activeDeck) o.selected = true;
+      sel.appendChild(o);
+    }
+    const o = document.createElement('option');
+    o.value = '__new';
+    o.textContent = '＋ New deck…';
+    if (!S.decks.length) o.selected = true;
+    sel.appendChild(o);
+  }
 
-      const parsed = [];
-      for (let i = start; i < lines.length; i++) {
-        // Support comma and tab delimiters; handle quoted fields
-        const row = parseCSVRow(lines[i]);
-        if (row.length >= 2 && (row[0].trim() || row[1].trim())) {
-          parsed.push({ id: uid(), front: row[0].trim(), back: row[1].trim() });
-        }
-      }
-      if (!parsed.length) { showToast('No cards found in CSV.'); return; }
+  /* Add parsed cards to an existing deck (by id) or a fresh one. Returns deck. */
+  function addToDeck(targetId, cards) {
+    let deck;
+    if (targetId === '__new' || !targetId) {
+      const name = prompt('New deck name:', 'Imported deck');
+      if (!name?.trim()) return null;
+      deck = { id: uid(), name: name.trim(), cards: [] };
+      S.decks.push(deck);
+      S.activeDeck = deck.id;
+    } else {
+      deck = S.decks.find(d => d.id === targetId) || activeDeck();
+      if (!deck) return null;
+    }
+    deck.cards.push(...cards);
+    save();
+    return deck;
+  }
 
-      // Offer to create new deck or add to existing
-      const deck = activeDeck();
-      const msg = deck
-        ? `Import ${parsed.length} cards into "${deck.name}"? (Cancel to create a new deck)`
-        : `Import ${parsed.length} cards into a new deck?`;
+  function renderImport() {
+    body.innerHTML = '';
+    const w = document.createElement('div');
+    w.className = 'fc-io';
+    w.innerHTML = `
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Paste a list <span>Quizlet · docs · anywhere</span></div>
+        <div class="fc-io-sub">One card per line. In Quizlet: <b>Export</b> → copy the text → paste it here.</div>
+        <textarea class="fc-io-text" id="fc-paste" rows="6" placeholder="cell&#9;the basic unit of life
+mitochondria&#9;the powerhouse of the cell"></textarea>
+        <div class="fc-io-controls">
+          <label>Term / def
+            <select id="fc-sep-term">
+              <option value="auto">Auto-detect</option>
+              <option value="tab">Tab</option>
+              <option value="comma">Comma</option>
+              <option value="dash">Dash –</option>
+            </select>
+          </label>
+          <label>Between cards
+            <select id="fc-sep-card">
+              <option value="auto">Auto-detect</option>
+              <option value="nl">New line</option>
+              <option value="blank">Blank line</option>
+              <option value="semi">Semicolon</option>
+            </select>
+          </label>
+          <span class="fc-io-count warn" id="fc-paste-count">0 cards</span>
+        </div>
+        <div class="fc-io-target">
+          <label>Into <select id="fc-paste-target"></select></label>
+          <button class="btn sm" id="fc-paste-go">Import list</button>
+        </div>
+      </div>
 
-      if (deck && confirm(msg)) {
-        deck.cards.push(...parsed);
-        save();
-      } else {
-        const name = prompt('New deck name:', file.name.replace(/\.[^.]+$/, ''));
-        if (!name?.trim()) return;
-        const d = { id: uid(), name: name.trim(), cards: parsed };
-        S.decks.push(d);
-        S.activeDeck = d.id;
-        save();
-      }
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Anki / CSV file <span>.csv · .txt · .tsv</span></div>
+        <div class="fc-io-sub">In Anki: <b>File → Export → Notes in Plain Text</b>. The first two columns become front &amp; back; <code>#separator</code> and <code>#html</code> header lines are read automatically.</div>
+        <div class="fc-io-target">
+          <button class="btn ghost sm" id="fc-file-btn" style="margin-left:auto">Choose file…</button>
+        </div>
+      </div>
+
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Import a share code <span>from a friend</span></div>
+        <div class="fc-io-sub">Paste a SkoolToolz deck code or share link — it imports as a brand-new deck.</div>
+        <textarea class="fc-io-text mono" id="fc-code-in" rows="3" placeholder="Paste deck code or link…"></textarea>
+        <div class="fc-io-target">
+          <span class="fc-io-count warn" id="fc-code-info">Waiting for a code</span>
+          <button class="btn sm" id="fc-code-go">Import code</button>
+        </div>
+      </div>`;
+    body.appendChild(w);
+
+    /* ── Paste import ── */
+    const pasteTa    = w.querySelector('#fc-paste');
+    const sepTerm    = w.querySelector('#fc-sep-term');
+    const sepCard    = w.querySelector('#fc-sep-card');
+    const pasteCount = w.querySelector('#fc-paste-count');
+    const pasteTgt   = w.querySelector('#fc-paste-target');
+    fillTargetSelect(pasteTgt);
+
+    function pastePreview() {
+      const cards = parsePaste(pasteTa.value, sepTerm.value, sepCard.value);
+      pasteCount.textContent = cards.length + (cards.length === 1 ? ' card' : ' cards');
+      pasteCount.classList.toggle('warn', cards.length === 0);
+      return cards;
+    }
+    pasteTa.addEventListener('input', pastePreview);
+    sepTerm.addEventListener('change', pastePreview);
+    sepCard.addEventListener('change', pastePreview);
+
+    w.querySelector('#fc-paste-go').addEventListener('click', () => {
+      const cards = parsePaste(pasteTa.value, sepTerm.value, sepCard.value);
+      if (!cards.length) { showToast('No cards found — check the separators.'); return; }
+      const deck = addToDeck(pasteTgt.value, cards);
+      if (!deck) return;
       renderDeckRow();
+      sessionQueue = buildQueue(deck); sessionDone = [];
       setView('manage');
-      showToast(`Imported ${parsed.length} cards.`);
-    };
-    reader.readAsText(file);
-    csvFile.value = '';
-  });
+      showToast(`Imported ${cards.length} card${cards.length !== 1 ? 's' : ''}.`);
+    });
 
-  function parseCSVRow(line) {
+    /* ── File import ── */
+    w.querySelector('#fc-file-btn').addEventListener('click', () => csvFile.click());
+
+    /* ── Share-code import ── */
+    const codeIn   = w.querySelector('#fc-code-in');
+    const codeInfo = w.querySelector('#fc-code-info');
+    function codePreview() {
+      const dk = decodeDeck(codeIn.value);
+      if (dk) {
+        codeInfo.textContent = `“${dk.name}” · ${dk.cards.length} card${dk.cards.length !== 1 ? 's' : ''}`;
+        codeInfo.classList.remove('warn');
+      } else {
+        codeInfo.textContent = codeIn.value.trim() ? 'Not a valid code' : 'Waiting for a code';
+        codeInfo.classList.add('warn');
+      }
+    }
+    codeIn.addEventListener('input', codePreview);
+    w.querySelector('#fc-code-go').addEventListener('click', () => {
+      const dk = decodeDeck(codeIn.value);
+      if (!dk) { showToast('That code could not be read.'); return; }
+      const deck = { id: uid(), name: dk.name, cards: dk.cards };
+      S.decks.push(deck); S.activeDeck = deck.id; save();
+      renderDeckRow();
+      sessionQueue = buildQueue(deck); sessionDone = [];
+      setView('manage');
+      showToast(`Imported ${dk.cards.length} card${dk.cards.length !== 1 ? 's' : ''}.`);
+    });
+  }
+
+  /* ─────────────────────────── SHARE VIEW ──────────────────────────── */
+  function renderShare() {
+    body.innerHTML = '';
+    const deck = activeDeck();
+    if (!deck || !deck.cards.length) {
+      body.innerHTML = `
+        <div class="fc-empty">
+          <div class="fc-empty-ico">↗</div>
+          <div class="fc-empty-title">Nothing to share yet.</div>
+          <div class="fc-empty-sub">${deck ? 'This deck has no cards.' : 'Create a deck first.'} Add cards, then come back for a share code.</div>
+        </div>`;
+      return;
+    }
+    const code = encodeDeck(deck);
+    const base = (location.origin && location.origin !== 'null')
+      ? location.origin + location.pathname
+      : location.href.split('#')[0];
+    const url = base + '#flashcards=' + code;
+
+    const w = document.createElement('div');
+    w.className = 'fc-io';
+    w.innerHTML = `
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Share “${escape(deck.name)}” <span>${deck.cards.length} cards</span></div>
+        <div class="fc-share-note">No account, no server — the code <i>is</i> the deck. Send it however you like; a friend pastes it under <b>Import</b> and gets their own copy. (SRS progress isn't included — everyone starts fresh.)</div>
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Share code</div>
+        <textarea class="fc-io-text mono" id="fc-share-code" rows="3" readonly>${escape(code)}</textarea>
+        <div class="fc-io-target">
+          <span class="fc-io-count">${code.length} chars</span>
+          <button class="btn sm" id="fc-copy-code">Copy code</button>
+        </div>
+      </div>
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Share link <span>opens straight into the deck</span></div>
+        <textarea class="fc-io-text mono" id="fc-share-url" rows="2" readonly>${escape(url)}</textarea>
+        <div class="fc-io-target">
+          <button class="btn ghost sm" id="fc-copy-url" style="margin-left:auto">Copy link</button>
+        </div>
+      </div>
+      <div class="fc-io-sec">
+        <div class="fc-io-head">Export file <span>backup · spreadsheet · Anki</span></div>
+        <div class="fc-io-sub">Download this deck as a CSV (front,back) you can re-import anywhere.</div>
+        <div class="fc-io-target">
+          <button class="btn ghost sm" id="fc-export-csv" style="margin-left:auto">Export CSV</button>
+        </div>
+      </div>`;
+    body.appendChild(w);
+
+    w.querySelector('#fc-copy-code').addEventListener('click', (e) => {
+      w.querySelector('#fc-share-code').select();
+      copy(code, e.currentTarget);
+    });
+    w.querySelector('#fc-copy-url').addEventListener('click', (e) => {
+      w.querySelector('#fc-share-url').select();
+      copy(url, e.currentTarget);
+    });
+    w.querySelector('#fc-export-csv').addEventListener('click', () => exportCSV(deck));
+  }
+
+  /* ── Share-by-code encode / decode (UTF-8-safe base64url, no backend) ──
+     NB: the app shadows the global escape() with an HTML-escaper, so the old
+     btoa(unescape(...)) trick can't be used here — go through TextEncoder. */
+  function b64urlEncode(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlDecode(str) {
+    let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function encodeDeck(deck) {
+    const payload = { v: 1, n: deck.name, c: deck.cards.map(c => [c.front, c.back]) };
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  }
+  function decodeDeck(input) {
+    let s = String(input || '').trim();
+    if (!s) return null;
+    // Tolerate a pasted URL or "#flashcards=" prefix — take what's after the last '='
+    if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, '');
+    if (!s) return null;
+    try {
+      const obj = JSON.parse(new TextDecoder().decode(b64urlDecode(s)));
+      if (!obj || !Array.isArray(obj.c)) return null;
+      const cards = obj.c
+        .filter(p => Array.isArray(p) && (p[0] || p[1]))
+        .map(p => ({ id: uid(), front: String(p[0] || '').trim(), back: String(p[1] || '').trim() }));
+      if (!cards.length) return null;
+      return { name: (String(obj.n || '').trim() || 'Shared deck').slice(0, 80), cards };
+    } catch { return null; }
+  }
+
+  /* ── Plain-text / Quizlet paste parser ── */
+  function parsePaste(text, termSep, cardSep) {
+    text = String(text).replace(/\r\n/g, '\n').trim();
+    if (!text) return [];
+    // Split into per-card chunks
+    let rows;
+    if (cardSep === 'blank')     rows = text.split(/\n[ \t]*\n/);
+    else if (cardSep === 'semi') rows = text.split(/;[ \t]*\n?/);
+    else if (cardSep === 'nl')   rows = text.split(/\n/);
+    else                         rows = /\n[ \t]*\n/.test(text) ? text.split(/\n[ \t]*\n/) : text.split(/\n/);
+    // Decide the term/definition separator
+    let ts = termSep;
+    if (ts === 'auto') {
+      if (text.includes('\t'))               ts = 'tab';
+      else if (rows.some(r => r.includes('\n'))) ts = 'nl';
+      else if (/^[^,\n]+,/m.test(text))      ts = 'comma';
+      else                                   ts = 'dash';
+    }
+    // Split a single chunk on the FIRST separator (so commas/dashes in the
+    // definition survive)
+    function split(chunk) {
+      chunk = chunk.trim();
+      if (!chunk) return null;
+      let idx = -1, len = 1;
+      if (ts === 'tab')        idx = chunk.search(/\t/);
+      else if (ts === 'comma') idx = chunk.indexOf(',');
+      else if (ts === 'nl')    idx = chunk.search(/\n/);
+      else { const m = chunk.match(/\s[-–—]\s/); if (m) { idx = m.index; len = m[0].length; } }
+      if (idx < 0) return null;
+      const front = chunk.slice(0, idx).replace(/\s+/g, ' ').trim();
+      const back  = chunk.slice(idx + len).replace(/\s+/g, ' ').trim();
+      return (front && back) ? [front, back] : null;
+    }
+    const out = [];
+    for (const r of rows) {
+      const p = split(r);
+      if (p) out.push({ id: uid(), front: p[0], back: p[1] });
+    }
+    return out;
+  }
+
+  /* ── CSV / Anki text parser ── */
+  function ankiSep(v) {
+    const map = { tab: '\t', comma: ',', semicolon: ';', space: ' ', pipe: '|', colon: ':' };
+    return map[String(v).trim().toLowerCase()] || (v || ',');
+  }
+  function stripTags(s) {
+    return String(s)
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(div|p|li)>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"')
+      .replace(/[ \t]+\n/g, '\n').trim();
+  }
+  function parseCSVRow(line, forcedSep) {
     const result = [];
-    let cur = '';
-    let inQ = false;
-    // Support tab-separated (Anki default) and comma-separated
-    const sep = line.includes('\t') ? '\t' : ',';
+    let cur = '', inQ = false;
+    // Honor an Anki #separator header; otherwise auto-pick tab vs comma
+    const sep = forcedSep || (line.includes('\t') ? '\t' : ',');
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (ch === '"') {
-        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
         else inQ = !inQ;
       } else if (ch === sep && !inQ) {
         result.push(cur); cur = '';
@@ -3681,27 +4022,87 @@ function mountFlashcards(root) {
     result.push(cur);
     return result;
   }
-
-  /* ── CSV Export ── */
-  exportBtn.addEventListener('click', () => {
-    const deck = activeDeck();
-    if (!deck) { showToast('No deck to export.'); return; }
-    let csv = 'front,back\n';
-    for (const c of deck.cards) {
-      const esc = (s) => '"' + String(s).replace(/"/g,'""') + '"';
-      csv += `${esc(c.front)},${esc(c.back)}\n`;
+  function importCSVText(text) {
+    const all = String(text).split(/\r?\n/);
+    let sep = null, stripHtml = false, i = 0;
+    // Read Anki's leading "#key:value" header comments
+    while (i < all.length && /^\s*#/.test(all[i])) {
+      const meta = all[i].replace(/^\s*#/, '');
+      const ci = meta.indexOf(':');
+      if (ci > -1) {
+        const key = meta.slice(0, ci).trim().toLowerCase();
+        const val = meta.slice(ci + 1).trim();
+        if (key === 'separator') sep = ankiSep(val);
+        if (key === 'html' && /^true$/i.test(val)) stripHtml = true;
+      }
+      i++;
     }
+    const lines = all.slice(i).filter(l => l.trim());
+    if (!lines.length) return [];
+    // Skip a spreadsheet header row (front,back / term,definition / …)
+    let start = 0;
+    if (/^\s*(front|term|question|word)\s*[,\t;|]/i.test(lines[0])) start = 1;
+    const out = [];
+    for (let j = start; j < lines.length; j++) {
+      const row = parseCSVRow(lines[j], sep);
+      if (row.length < 2) continue;
+      let front = (row[0] || '').trim();
+      let back  = (row[1] || '').trim();
+      if (stripHtml) { front = stripTags(front); back = stripTags(back); }
+      if (front || back) out.push({ id: uid(), front, back });
+    }
+    return out;
+  }
+
+  /* ── CSV file import ── */
+  csvFile.addEventListener('change', () => {
+    const file = csvFile.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const parsed = importCSVText(e.target.result);
+      if (!parsed.length) { showToast('No cards found in that file.'); return; }
+      const deck = activeDeck();
+      const msg = deck
+        ? `Import ${parsed.length} cards into "${deck.name}"? (Cancel to make a new deck)`
+        : `Import ${parsed.length} cards into a new deck?`;
+      let target;
+      if (deck && confirm(msg)) {
+        deck.cards.push(...parsed); save(); target = deck;
+      } else {
+        const name = prompt('New deck name:', file.name.replace(/\.[^.]+$/, ''));
+        if (!name?.trim()) { csvFile.value = ''; return; }
+        target = { id: uid(), name: name.trim(), cards: parsed };
+        S.decks.push(target); S.activeDeck = target.id; save();
+      }
+      renderDeckRow();
+      sessionQueue = buildQueue(target); sessionDone = [];
+      setView('manage');
+      showToast(`Imported ${parsed.length} cards.`);
+    };
+    reader.readAsText(file);
+    csvFile.value = '';
+  });
+
+  /* ── CSV export ── */
+  function exportCSV(deck) {
+    if (!deck || !deck.cards.length) { showToast('No cards to export.'); return; }
+    let csv = 'front,back\n';
+    const esc = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+    for (const c of deck.cards) csv += `${esc(c.front)},${esc(c.back)}\n`;
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
-    a.download = (deck.name.toLowerCase().replace(/\s+/g,'-') || 'deck') + '.csv';
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = (deck.name.toLowerCase().replace(/\s+/g, '-') || 'deck') + '.csv';
     a.click();
     URL.revokeObjectURL(a.href);
     showToast(`Exported ${deck.cards.length} cards.`);
-  });
+  }
 
   /* ── View button wiring ── */
   btnStudy.addEventListener('click', () => setView('study'));
   btnManage.addEventListener('click', () => setView('manage'));
+  btnImport.addEventListener('click', () => setView('import'));
+  btnShare.addEventListener('click', () => setView('share'));
 
   /* ── Boot ── */
   if (!S.activeDeck && S.decks.length) S.activeDeck = S.decks[0].id;
@@ -3715,6 +4116,25 @@ function mountFlashcards(root) {
   }
 
   setView('study');
+
+  // Incoming share link (#flashcards=CODE) — offer to import as a new deck
+  (function checkSharedLink() {
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0) return;
+    const dk = decodeDeck(h.slice(eq + 1));
+    if (!dk) return;
+    setTimeout(() => {
+      if (confirm(`Import shared deck "${dk.name}" (${dk.cards.length} card${dk.cards.length !== 1 ? 's' : ''})?`)) {
+        const deck = { id: uid(), name: dk.name, cards: dk.cards };
+        S.decks.push(deck); S.activeDeck = deck.id; save();
+        renderDeckRow();
+        sessionQueue = buildQueue(deck); sessionDone = [];
+        setView('study');
+        showToast(`Imported ${dk.cards.length} cards.`);
+      }
+    }, 350);
+  })();
 
   return {
     unmount() {
@@ -4500,8 +4920,8 @@ function registerTools() {
 
   /* ============== STUDY ============== */
   TOOLS.push({ id:'flashcards', shelf:'study', icon:'🃏', name:'Flashcards',
-    desc:'SRS-lite, Anki CSV import.', tag:'upgraded',
-    keywords:['cards','study','memorize','srs','anki','flashcard'], mount: mountFlashcards });
+    desc:'SRS-lite · Anki/Quizlet import · share by code.', tag:'upgraded',
+    keywords:['cards','study','memorize','srs','sm-2','anki','quizlet','vocab','flashcard','import','paste','share','deck'], mount: mountFlashcards });
   TOOLS.push({ id:'pomodoro', shelf:'study', icon:'🍅', name:'Pomodoro',
     desc:'Focus mode, cycle counter.', tag:'upgraded',
     keywords:['pomodoro','focus','timer','study'], mount: mountPomodoro });
@@ -14074,7 +14494,9 @@ function boot() {
 
   document.addEventListener('keydown', onKey);
 
-  const hash = location.hash.replace('#', '');
+  // Hash may carry a payload (e.g. a flashcards share link "#flashcards=CODE");
+  // the tool id is everything before the first '='.
+  const hash = location.hash.replace('#', '').split('=')[0];
   if (hash) { dismissSplash(); setTimeout(() => openTool(hash), 200); }
 }
 
