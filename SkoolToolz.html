@@ -475,6 +475,9 @@ main{padding:28px 28px 80px}
   font-family:var(--serif);font-weight:500;font-size:20px;
   letter-spacing:-.01em;line-height:1;margin:0;
 }
+/* Color the applet name with its category color so the open applet's
+   header matches its shelf/card. --cat-color is set on .panel[data-shelf]. */
+.panel[data-shelf] .panel-head .title{color:var(--cat-color)}
 .panel-head .title em{font-style:italic;color:var(--accent)}
 .panel-head .spacer{flex:1}
 .panel-head .panel-action{
