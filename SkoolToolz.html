@@ -5686,6 +5686,9 @@ function registerTools() {
   TOOLS.push({ id:'npr-ncr', shelf:'numbers', icon:'🎲', name:'nPr & nCr',
     desc:'Permutations & combinations.',
     keywords:['permutation','combination','choose','npr','ncr','factorial'], mount: mountNprNcr });
+  TOOLS.push({ id:'matrix', shelf:'numbers', icon:'▦', name:'Matrix Calculator',
+    desc:'Add, multiply, det, inverse, RREF with steps.', tag:'new',
+    keywords:['matrix','matrices','linear algebra','determinant','inverse','rref','row reduction','transpose','multiply','rank','trace','gaussian','elimination','solve','system','identity','ap cs'], mount: mountMatrix });
   TOOLS.push({ id:'roman', shelf:'numbers', icon:'🏛️', name:'Roman Numerals',
     desc:'Number ↔ Roman.',
     keywords:['roman','numeral','latin'], mount: mountRoman });
@@ -6341,7 +6344,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -7157,6 +7160,519 @@ function mountGcdLcm(root) {
   };
   $('#nums', root).addEventListener('input', calc);
   calc();
+}
+
+/* ========== MATRIX CALCULATOR ==========
+   Add / subtract / multiply, scalar multiply, transpose, integer powers,
+   determinant, inverse, RREF (with the row-operation steps shown), rank,
+   trace, and solve Ax = b. All arithmetic is exact over the rationals
+   (BigInt fractions) with a fraction⇄decimal display toggle. Workspace
+   autosaves to localStorage and shares by code (#matrix=…), no backend.
+   (Roadmap 2.3, Numbers shelf.) */
+function mountMatrix(root) {
+  const SKEY = 'matrix:v1';
+  const MAXDIM = 8;
+
+  /* ── exact rational arithmetic over BigInt ── */
+  const gcdB = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { [a, b] = [b, a % b]; } return a; };
+  function F(n, d = 1n) {
+    n = BigInt(n); d = BigInt(d);
+    if (d === 0n) throw new Error('division by zero');
+    if (d < 0n) { n = -n; d = -d; }
+    const g = gcdB(n, d) || 1n;
+    return { n: n / g, d: d / g };
+  }
+  const fIsZero = a => a.n === 0n;
+  const fEq  = (a, b) => a.n === b.n && a.d === b.d;
+  const fAdd = (a, b) => F(a.n * b.d + b.n * a.d, a.d * b.d);
+  const fSub = (a, b) => F(a.n * b.d - b.n * a.d, a.d * b.d);
+  const fMul = (a, b) => F(a.n * b.n, a.d * b.d);
+  const fDiv = (a, b) => { if (b.n === 0n) throw new Error('division by zero'); return F(a.n * b.d, a.d * b.n); };
+  const fNeg = a => F(-a.n, a.d);
+
+  /* parse a cell string → Frac. accepts integer, decimal, or a/b fraction. */
+  function parseCell(str) {
+    let s = String(str == null ? '' : str).trim().replace(/\s+/g, '');
+    if (s === '') return F(0n);
+    let m;
+    if ((m = s.match(/^([+-]?\d+)\/([+-]?\d+)$/))) return F(BigInt(m[1]), BigInt(m[2]));
+    if ((m = s.match(/^([+-]?)(\d*)\.(\d+)$/))) {
+      const sign = m[1] === '-' ? -1n : 1n;
+      const num = BigInt((m[2] || '0') + m[3]) * sign;
+      return F(num, 10n ** BigInt(m[3].length));
+    }
+    if (/^[+-]?\d+$/.test(s)) return F(BigInt(s));
+    throw new Error(`"${str}" isn't a number — use 3, -1.5, or 3/4.`);
+  }
+  /* Frac → display string (fraction by default, exact-ish decimal on toggle) */
+  function fToStr(f, decimal) {
+    if (!decimal) return f.d === 1n ? f.n.toString() : `${f.n}/${f.d}`;
+    const neg = f.n < 0n;
+    let n = neg ? -f.n : f.n; const d = f.d;
+    const ip = n / d; let rem = n % d;
+    if (rem === 0n) return (neg ? '-' : '') + ip.toString();
+    let out = ip.toString() + '.', digits = 0;
+    while (rem !== 0n && digits < 10) { rem *= 10n; out += (rem / d).toString(); rem %= d; digits++; }
+    out = out.replace(/0+$/, '').replace(/\.$/, '');
+    return (neg ? '-' : '') + out;
+  }
+  const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+  const sub = n => String(n).split('').map(c => SUBS[+c] ?? c).join('');
+
+  /* ── state ── */
+  const defaults = () => ({
+    a: { r: 2, c: 2, cells: [['1', '2'], ['3', '4']] },
+    b: { r: 2, c: 2, cells: [['0', '1'], ['1', '0']] },
+    scalar: '2', power: '2', decimal: false,
+  });
+  function normalize(m) {
+    m.r = Math.max(1, Math.min(MAXDIM, (m.r | 0) || 1));
+    m.c = Math.max(1, Math.min(MAXDIM, (m.c | 0) || 1));
+    const old = Array.isArray(m.cells) ? m.cells : [];
+    m.cells = Array.from({ length: m.r }, (_, i) => Array.from({ length: m.c }, (_, j) => {
+      const v = old[i] && old[i][j];
+      return typeof v === 'string' ? v.slice(0, 24) : String(v == null ? '0' : v);
+    }));
+  }
+  function load() {
+    const s = Storage.get(SKEY, null);
+    const st = (s && s.a && s.b) ? s : defaults();
+    normalize(st.a); normalize(st.b);
+    st.scalar = typeof st.scalar === 'string' ? st.scalar : '2';
+    st.power  = typeof st.power  === 'string' ? st.power  : '2';
+    st.decimal = !!st.decimal;
+    return st;
+  }
+  let state = load();
+  let lastOp = null;
+  let saveTimer = null;
+  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => Storage.set(SKEY, state), 250); };
+
+  /* ── matrix helpers ── */
+  function getF(key) {
+    const m = state[key];
+    const M = Array.from({ length: m.r }, (_, i) => Array.from({ length: m.c }, (_, j) => parseCell(m.cells[i][j])));
+    return { M, r: m.r, c: m.c };
+  }
+  const cloneM = M => M.map(r => r.slice());
+  const identity = n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => F(i === j ? 1n : 0n)));
+  function matMul(X, Y) {
+    const r = X.length, n = X[0].length, c = Y[0].length;
+    return Array.from({ length: r }, (_, i) => Array.from({ length: c }, (_, j) => {
+      let s = F(0n); for (let k = 0; k < n; k++) s = fAdd(s, fMul(X[i][k], Y[k][j])); return s;
+    }));
+  }
+  const requireSquare = A => { if (A.r !== A.c) throw new Error(`This needs a square matrix; A is ${A.r}×${A.c}.`); };
+
+  /* Gauss–Jordan → reduced row echelon form, recording each row operation. */
+  function rref(M0) {
+    const M = cloneM(M0), rows = M.length, cols = M[0].length, steps = [];
+    const snap = desc => steps.push({ desc, M: cloneM(M) });
+    let r = 0; const pivots = [];
+    for (let c = 0; c < cols && r < rows; c++) {
+      let piv = -1;
+      for (let k = r; k < rows; k++) if (!fIsZero(M[k][c])) { piv = k; break; }
+      if (piv === -1) continue;
+      if (piv !== r) { [M[r], M[piv]] = [M[piv], M[r]]; snap(`R${r + 1} ↔ R${piv + 1}`); }
+      if (!fEq(M[r][c], F(1n))) {
+        const p = M[r][c];
+        M[r] = M[r].map(x => fDiv(x, p));
+        snap(`R${r + 1} → (${fToStr(F(p.d, p.n), false)})·R${r + 1}`);
+      }
+      for (let k = 0; k < rows; k++) {
+        if (k === r || fIsZero(M[k][c])) continue;
+        const f = M[k][c];
+        M[k] = M[k].map((x, j) => fSub(x, fMul(f, M[r][j])));
+        snap(`R${k + 1} → R${k + 1} − (${fToStr(f, false)})·R${r + 1}`);
+      }
+      pivots.push(c); r++;
+    }
+    return { R: M, pivots, steps, rank: pivots.length };
+  }
+  /* Forward elimination to upper-triangular, preserving the determinant. */
+  function determinant(M0) {
+    const n = M0.length, M = cloneM(M0), steps = [];
+    const snap = desc => steps.push({ desc, M: cloneM(M) });
+    let sign = 1n, singular = false;
+    for (let c = 0; c < n; c++) {
+      let piv = -1;
+      for (let k = c; k < n; k++) if (!fIsZero(M[k][c])) { piv = k; break; }
+      if (piv === -1) { singular = true; continue; }
+      if (piv !== c) { [M[c], M[piv]] = [M[piv], M[c]]; sign = -sign; snap(`R${c + 1} ↔ R${piv + 1} (flips the sign)`); }
+      for (let k = c + 1; k < n; k++) {
+        if (fIsZero(M[k][c])) continue;
+        const f = fDiv(M[k][c], M[c][c]);
+        M[k] = M[k].map((x, j) => fSub(x, fMul(f, M[c][j])));
+        snap(`R${k + 1} → R${k + 1} − (${fToStr(f, false)})·R${c + 1}`);
+      }
+    }
+    let prod = F(1n);
+    for (let i = 0; i < n; i++) prod = fMul(prod, M[i][i]);
+    return { value: singular ? F(0n) : (sign < 0n ? fNeg(prod) : prod), steps, M };
+  }
+  /* Inverse via Gauss–Jordan on [A | I]. */
+  function inverse(M0) {
+    const n = M0.length;
+    const aug = M0.map((row, i) => row.concat(Array.from({ length: n }, (_, j) => F(i === j ? 1n : 0n))));
+    const { R, steps } = rref(aug);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++)
+      if (!fEq(R[i][j], F(i === j ? 1n : 0n))) throw new Error('Matrix is singular — it has no inverse (determinant 0).');
+    return { inv: R.map(row => row.slice(n)), steps };
+  }
+  function matPow(M, n) {
+    const size = M.length;
+    if (n === 0) return identity(size);
+    let base = M;
+    if (n < 0) { base = inverse(M).inv; n = -n; }
+    let res = identity(size);
+    for (let i = 0; i < n; i++) res = matMul(res, base);
+    return res;
+  }
+
+  /* ── rendering ── */
+  function matToHTML(M, augCol) {
+    const dec = state.decimal, cols = M[0].length;
+    const cells = M.map(row => row.map((f, ci) =>
+      `<span class="mx-cell${augCol != null && ci === augCol ? ' mx-augcol' : ''}">${escape(fToStr(f, dec))}</span>`).join('')).join('');
+    return `<span class="mx-mat"><span class="mx-br mx-br-l"></span>` +
+      `<span class="mx-cells" style="grid-template-columns:repeat(${cols},auto)">${cells}</span>` +
+      `<span class="mx-br mx-br-r"></span></span>`;
+  }
+  const matText = M => M.map(row => row.map(f => fToStr(f, state.decimal)).join('\t')).join('\n');
+  function resultMatrix(title, M, augCol) {
+    return `<div class="result"><button class="copy-btn" data-copytext="${escape(matText(M))}">Copy</button>` +
+      `<div class="result-label">${escape(title)}</div><div class="mx-out">${matToHTML(M, augCol)}</div></div>`;
+  }
+  function resultScalar(title, f, note) {
+    return `<div class="result"><button class="copy-btn" data-copytext="${escape(fToStr(f, state.decimal))}">Copy</button>` +
+      `<div class="result-label">${escape(title)}</div><div class="result-big mono">${escape(fToStr(f, state.decimal))}</div>` +
+      (note ? `<div class="result-sub">${escape(note)}</div>` : '') + `</div>`;
+  }
+  function stepsBlock(steps, augCol, intro) {
+    const items = steps.map((s, i) =>
+      `<li class="mx-step-li"><div class="mx-step-op"><span class="mx-step-n">${i + 1}</span>${escape(s.desc)}</div>` +
+      `<div class="mx-out mx-out-sm">${matToHTML(s.M, augCol)}</div></li>`).join('');
+    const body = (intro ? `<p class="help" style="margin-top:0">${escape(intro)}</p>` : '') +
+      (steps.length ? `<ol class="mx-step-list">${items}</ol>` : `<p class="result-sub">No row operations were needed.</p>`);
+    return `<div class="mx-steps-wrap"><button class="btn ghost sm mx-toggle" data-toggle="steps">Show steps</button>` +
+      `<div class="mx-steps" hidden>${body}</div></div>`;
+  }
+  const errBlock = msg => `<div class="result mx-err"><div class="result-label">Can't compute</div><div class="mx-errmsg">${escape(msg)}</div></div>`;
+
+  /* ── operations ── */
+  function runOp(op) {
+    const res = $('#mx-result', root);
+    try {
+      let html = '';
+      if (op === 'add' || op === 'sub') {
+        const A = getF('a'), B = getF('b');
+        if (A.r !== B.r || A.c !== B.c) throw new Error(`A is ${A.r}×${A.c} but B is ${B.r}×${B.c} — add/subtract needs the same size.`);
+        const M = A.M.map((row, i) => row.map((x, j) => op === 'add' ? fAdd(x, B.M[i][j]) : fSub(x, B.M[i][j])));
+        html = resultMatrix(op === 'add' ? 'A + B' : 'A − B', M);
+      } else if (op === 'mul' || op === 'mulBA') {
+        const [X, Y, lbl] = op === 'mul' ? [getF('a'), getF('b'), 'A × B'] : [getF('b'), getF('a'), 'B × A'];
+        if (X.c !== Y.r) throw new Error(`Can't do ${lbl}: the inner dimensions (${X.c} and ${Y.r}) don't match.`);
+        html = resultMatrix(lbl, matMul(X.M, Y.M));
+      } else if (op === 'scalar') {
+        const k = parseCell(state.scalar), A = getF('a');
+        html = resultMatrix(`${fToStr(k, state.decimal)} · A`, A.M.map(row => row.map(x => fMul(x, k))));
+      } else if (op === 'trans') {
+        const A = getF('a');
+        html = resultMatrix('Aᵀ', Array.from({ length: A.c }, (_, j) => Array.from({ length: A.r }, (_, i) => A.M[i][j])));
+      } else if (op === 'power') {
+        const A = getF('a'); requireSquare(A);
+        const v = String(state.power).trim();
+        if (!/^-?\d+$/.test(v)) throw new Error('Power must be a whole number.');
+        const n = parseInt(v, 10);
+        if (Math.abs(n) > 20) throw new Error('Keep the power within ±20.');
+        html = resultMatrix(`A${(n < 0 ? '⁻' : '') + sup(Math.abs(n))}`, matPow(A.M, n));
+      } else if (op === 'det') {
+        const A = getF('a'); requireSquare(A);
+        const { value, steps } = determinant(A.M);
+        html = resultScalar('det A', value) +
+          stepsBlock(steps, null, 'Row-reduce to upper-triangular form; det = ± the product of the diagonal entries (each row swap flips the sign).');
+      } else if (op === 'trace') {
+        const A = getF('a'); requireSquare(A);
+        let t = F(0n); for (let i = 0; i < A.r; i++) t = fAdd(t, A.M[i][i]);
+        html = resultScalar('tr A', t, 'Sum of the main-diagonal entries.');
+      } else if (op === 'rank') {
+        const A = getF('a');
+        const { R, steps, rank } = rref(A.M);
+        html = resultScalar('rank A', F(BigInt(rank)), 'Number of non-zero rows (pivots) in the RREF.') +
+          resultMatrix('RREF of A', R) + stepsBlock(steps);
+      } else if (op === 'rref') {
+        const A = getF('a');
+        const { R, steps, rank } = rref(A.M);
+        html = resultMatrix('RREF of A', R) +
+          `<p class="result-sub" style="margin:-8px 0 12px">rank = ${rank}</p>` + stepsBlock(steps);
+      } else if (op === 'inv') {
+        const A = getF('a'); requireSquare(A);
+        const { inv, steps } = inverse(A.M);
+        html = resultMatrix('A⁻¹', inv) +
+          stepsBlock(steps, A.c, 'Gauss–Jordan on the augmented matrix [ A | I ]. When the left block becomes I, the right block is A⁻¹.');
+      } else if (op === 'solve') {
+        const A = getF('a'), B = getF('b');
+        if (B.c !== 1 || B.r !== A.r) throw new Error(`For Ax = b, put b in B as a ${A.r}×1 column (B is currently ${B.r}×${B.c}).`);
+        const aug = A.M.map((row, i) => row.concat([B.M[i][0]]));
+        const { R, steps, pivots } = rref(aug);
+        const cc = A.c;
+        if (pivots.includes(cc)) {
+          html = `<div class="result mx-err"><div class="result-label">Ax = b</div>` +
+            `<div class="mx-errmsg">No solution — the system is inconsistent (a row reduces to 0 = nonzero).</div></div>`;
+        } else {
+          const pivotCols = pivots.filter(p => p < cc);
+          if (pivotCols.length < cc) {
+            const free = []; for (let j = 0; j < cc; j++) if (!pivotCols.includes(j)) free.push('x' + sub(j + 1));
+            html = resultMatrix('RREF of [ A | b ]', R, cc) +
+              `<p class="result-sub">Infinitely many solutions — free variable${free.length > 1 ? 's' : ''}: ${free.join(', ')}. ` +
+              `Each pivot variable is expressed in terms of the free one(s).</p>`;
+          } else {
+            const x = Array.from({ length: cc }, () => F(0n));
+            pivotCols.forEach((col, i) => { x[col] = R[i][cc]; });
+            html = resultMatrix('Solution x', x.map(v => [v])) + resultMatrix('RREF of [ A | b ]', R, cc);
+          }
+        }
+        html += stepsBlock(steps, cc, 'Gauss–Jordan on the augmented matrix [ A | b ].');
+      }
+      res.innerHTML = html;
+      res.querySelector('.result')?.classList.add('pulse');
+    } catch (e) {
+      res.innerHTML = errBlock(e.message);
+    }
+  }
+  const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+  const sup = n => String(n).split('').map(c => SUP[c] ?? c).join('');
+
+  /* ── editors ── */
+  function renderEditor(key) {
+    const m = state[key];
+    let inputs = '';
+    for (let i = 0; i < m.r; i++) for (let j = 0; j < m.c; j++)
+      inputs += `<input class="mx-in mono" data-key="${key}" data-i="${i}" data-j="${j}" value="${escape(m.cells[i][j])}" aria-label="${key.toUpperCase()} row ${i + 1} column ${j + 1}">`;
+    $(`#mx-ed-${key}`, root).innerHTML = `
+      <div class="mx-ed-head">
+        <span class="mx-ed-name">${key.toUpperCase()}</span>
+        <span class="mx-dim" role="group" aria-label="${key.toUpperCase()} size">
+          <button class="mx-step" data-dim="r" data-key="${key}" data-d="-1" aria-label="fewer rows">−</button>
+          <span class="mx-dimval">${m.r}</span>
+          <button class="mx-step" data-dim="r" data-key="${key}" data-d="1" aria-label="more rows">+</button>
+          <span class="mx-times">×</span>
+          <button class="mx-step" data-dim="c" data-key="${key}" data-d="-1" aria-label="fewer columns">−</button>
+          <span class="mx-dimval">${m.c}</span>
+          <button class="mx-step" data-dim="c" data-key="${key}" data-d="1" aria-label="more columns">+</button>
+        </span>
+      </div>
+      <div class="mx-ingrid" style="grid-template-columns:repeat(${m.c},1fr)">${inputs}</div>
+      <div class="mx-ed-actions">
+        <button class="mx-mini" data-fill="zero" data-key="${key}">Zero</button>
+        <button class="mx-mini" data-fill="ident" data-key="${key}">Identity</button>
+      </div>`;
+  }
+  function resize(key, dim, delta) {
+    const m = state[key];
+    if (dim === 'r') m.r += delta; else m.c += delta;
+    normalize(m); save(); renderEditor(key);
+  }
+  function fill(key, kind) {
+    const m = state[key];
+    if (kind === 'ident' && m.r !== m.c) { showToast('Identity needs a square matrix.'); return; }
+    for (let i = 0; i < m.r; i++) for (let j = 0; j < m.c; j++)
+      m.cells[i][j] = kind === 'ident' ? (i === j ? '1' : '0') : '0';
+    save(); renderEditor(key);
+  }
+  function doSwap() {
+    [state.a, state.b] = [state.b, state.a];
+    save(); renderEditor('a'); renderEditor('b'); $('#mx-result', root).innerHTML = ''; lastOp = null;
+  }
+
+  /* ── share-by-code (UTF-8-safe base64url, no backend) ── */
+  const b64urlEncode = bytes => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  function b64urlDecode(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeState() {
+    const pack = m => ({ r: m.r, c: m.c, d: m.cells });
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify({ v: 1, a: pack(state.a), b: pack(state.b) })));
+  }
+  function decodeState(input) {
+    let s = String(input || '').trim();
+    if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, '');
+    if (!s) return null;
+    try {
+      const o = JSON.parse(new TextDecoder().decode(b64urlDecode(s)));
+      if (!o || !o.a || !o.b) return null;
+      const unpack = m => { const out = { r: +m.r || 1, c: +m.c || 1, cells: m.d }; normalize(out); return out; };
+      return { a: unpack(o.a), b: unpack(o.b), scalar: state.scalar, power: state.power, decimal: state.decimal };
+    } catch { return null; }
+  }
+  function openShareDialog() {
+    const code = encodeState(), link = location.href.split('#')[0] + '#matrix=' + code;
+    $('#mx-result', root).innerHTML = `
+      <div class="result">
+        <div class="result-label">Share by code</div>
+        <p class="result-sub" style="margin:0 0 12px">No backend — this code is both matrices. Paste it (or the link) into Import on another device.</p>
+        <div class="field"><label>Code</label><textarea class="input mono" id="mx-sharecode" rows="3" readonly></textarea></div>
+        <div class="field"><label>Link</label><input class="input mono" id="mx-sharelink" readonly></div>
+        <div class="btn-row">
+          <button class="btn sm" data-copytext="${escape(code)}">Copy code</button>
+          <button class="btn ghost sm" data-copytext="${escape(link)}">Copy link</button>
+        </div>
+      </div>`;
+    $('#mx-sharecode', root).value = code;
+    $('#mx-sharelink', root).value = link;
+  }
+  function openImportDialog() {
+    $('#mx-result', root).innerHTML = `
+      <div class="result">
+        <div class="result-label">Import code</div>
+        <p class="result-sub" style="margin:0 0 12px">Paste a #matrix=… code or link. This replaces A and B.</p>
+        <div class="field"><textarea class="input mono" id="mx-importbox" rows="3" placeholder="Paste #matrix=… code or link here"></textarea></div>
+        <div class="btn-row"><button class="btn sm" data-act="import-go">Load</button></div>
+      </div>`;
+  }
+
+  /* ── markup ── */
+  root.innerHTML = `
+    <p class="help">Exact-fraction matrix math — add, multiply, transpose, powers, determinant, inverse, RREF, rank, trace, and solve <span class="mono">Ax = b</span>. The row-reduction work is shown step by step. Enter whole numbers, decimals, or fractions like <span class="mono">3/4</span>.</p>
+    <div class="mx-editors">
+      <div class="mx-ed" id="mx-ed-a"></div>
+      <div class="mx-ed" id="mx-ed-b"></div>
+    </div>
+    <div class="mx-ops">
+      <div class="mx-opgroup"><span class="mx-opgroup-l">A &amp; B</span>
+        <button class="btn sm" data-op="add">A + B</button>
+        <button class="btn sm" data-op="sub">A − B</button>
+        <button class="btn sm" data-op="mul">A × B</button>
+        <button class="btn sm" data-op="mulBA">B × A</button>
+      </div>
+      <div class="mx-opgroup"><span class="mx-opgroup-l">A only</span>
+        <button class="btn sm" data-op="det">det A</button>
+        <button class="btn sm" data-op="inv">A⁻¹</button>
+        <button class="btn sm" data-op="rref">RREF A</button>
+        <button class="btn sm" data-op="trans">Aᵀ</button>
+        <button class="btn sm" data-op="rank">rank A</button>
+        <button class="btn sm" data-op="trace">tr A</button>
+      </div>
+      <div class="mx-opgroup"><span class="mx-opgroup-l">Scalar · power</span>
+        <input class="mx-num mono" id="mx-scalar" value="${escape(state.scalar)}" aria-label="scalar k">
+        <button class="btn sm" data-op="scalar">k · A</button>
+        <input class="mx-num mono" id="mx-power" value="${escape(state.power)}" aria-label="power n">
+        <button class="btn sm" data-op="power">Aⁿ</button>
+      </div>
+      <div class="mx-opgroup"><span class="mx-opgroup-l">System</span>
+        <button class="btn sm" data-op="solve">Solve Ax = b</button>
+        <span class="result-sub" style="margin:0">b = column matrix B</span>
+      </div>
+    </div>
+    <div id="mx-result"></div>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn ghost sm" data-act="swap">Swap A ↔ B</button>
+      <button class="btn ghost sm" data-act="share">Share by code</button>
+      <button class="btn ghost sm" data-act="import">Import code</button>
+      <label class="mx-dec"><input type="checkbox" id="mx-decimal"${state.decimal ? ' checked' : ''}> Decimals</label>
+    </div>`;
+  renderEditor('a'); renderEditor('b');
+
+  /* ── events (delegated; the body node is replaced on close so these drop) ── */
+  root.addEventListener('input', e => {
+    const inp = e.target.closest('.mx-in');
+    if (inp) { state[inp.dataset.key].cells[+inp.dataset.i][+inp.dataset.j] = inp.value.slice(0, 24); save(); return; }
+    if (e.target.id === 'mx-scalar') { state.scalar = e.target.value; save(); }
+    else if (e.target.id === 'mx-power') { state.power = e.target.value; save(); }
+  });
+  root.addEventListener('change', e => {
+    if (e.target.id === 'mx-decimal') { state.decimal = e.target.checked; save(); if (lastOp) runOp(lastOp); }
+  });
+  root.addEventListener('click', e => {
+    let b;
+    if ((b = e.target.closest('[data-copytext]'))) { copy(b.getAttribute('data-copytext') || '', b); return; }
+    if ((b = e.target.closest('.mx-step'))) { resize(b.dataset.key, b.dataset.dim, +b.dataset.d); return; }
+    if ((b = e.target.closest('.mx-mini'))) { fill(b.dataset.key, b.dataset.fill); return; }
+    if ((b = e.target.closest('[data-op]'))) { lastOp = b.dataset.op; runOp(b.dataset.op); return; }
+    if ((b = e.target.closest('[data-toggle="steps"]'))) {
+      const wrap = b.parentElement.querySelector('.mx-steps');
+      const hidden = wrap.hasAttribute('hidden');
+      if (hidden) { wrap.removeAttribute('hidden'); b.textContent = 'Hide steps'; }
+      else { wrap.setAttribute('hidden', ''); b.textContent = 'Show steps'; }
+      return;
+    }
+    if ((b = e.target.closest('[data-act]'))) {
+      const a = b.dataset.act;
+      if (a === 'swap') doSwap();
+      else if (a === 'share') openShareDialog();
+      else if (a === 'import') openImportDialog();
+      else if (a === 'import-go') {
+        const data = decodeState($('#mx-importbox', root).value);
+        if (!data) { showToast('That code didn’t decode.'); return; }
+        state = data; save(); renderEditor('a'); renderEditor('b'); $('#mx-result', root).innerHTML = ''; lastOp = null;
+        showToast('Imported matrices.');
+      }
+    }
+  });
+
+  /* ── one-time scoped styles ── */
+  if (!document.getElementById('mx-style')) {
+    const st = document.createElement('style');
+    st.id = 'mx-style';
+    st.textContent = `
+      .mx-editors{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0 6px}
+      @media (max-width:620px){.mx-editors{grid-template-columns:1fr}}
+      .mx-ed{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:12px}
+      .mx-ed-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+      .mx-ed-name{font-family:var(--serif);font-size:20px;color:var(--accent)}
+      .mx-dim{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+      .mx-step{width:24px;height:24px;border:1px solid var(--rule);border-radius:2px;color:var(--ink);background:var(--paper-3);font-family:var(--mono);font-size:14px;line-height:1;cursor:pointer}
+      .mx-step:hover{border-color:var(--accent);color:var(--accent)}
+      .mx-dimval{min-width:14px;text-align:center}
+      .mx-times{opacity:.55;padding:0 2px}
+      .mx-ingrid{display:grid;gap:6px}
+      .mx-in{font-family:var(--mono);font-size:14px;text-align:center;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;color:var(--ink);padding:8px 4px;min-width:0;width:100%}
+      .mx-in:focus{outline:none;border-color:var(--accent);background:var(--paper)}
+      .mx-ed-actions{display:flex;gap:8px;margin-top:10px}
+      .mx-mini{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:transparent;border:1px solid var(--rule);border-radius:2px;padding:5px 9px;cursor:pointer}
+      .mx-mini:hover{color:var(--ink);border-color:var(--ink-2)}
+      .mx-ops{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+      .mx-opgroup{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+      .mx-opgroup-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);min-width:96px}
+      @media (max-width:520px){.mx-opgroup-l{min-width:0;width:100%}}
+      .mx-num{width:64px;font-family:var(--mono);font-size:14px;text-align:center;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;color:var(--ink);padding:8px 6px}
+      .mx-num:focus{outline:none;border-color:var(--accent)}
+      .mx-dec{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+      .mx-out{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+      .mx-mat{display:inline-flex;align-items:stretch;margin:2px 0}
+      .mx-br{width:7px;border:2px solid var(--ink-2)}
+      .mx-br-l{border-right:none;border-radius:3px 0 0 3px;margin-right:6px}
+      .mx-br-r{border-left:none;border-radius:0 3px 3px 0;margin-left:6px}
+      .mx-cells{display:grid;gap:6px 16px;align-items:center;padding:4px 2px}
+      .mx-cell{font-family:var(--mono);font-size:15px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+      .mx-cell.mx-augcol{border-left:1px dashed var(--muted-2);padding-left:14px}
+      .mx-out-sm .mx-cell{font-size:13px}
+      .mx-out-sm .mx-br{width:5px}
+      .mx-steps-wrap{margin-top:4px}
+      .mx-steps{margin-top:12px}
+      .mx-step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+      .mx-step-li{border-left:2px solid var(--accent-soft);padding-left:14px}
+      .mx-step-op{font-family:var(--mono);font-size:12px;color:var(--ink-2);margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .mx-step-n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:10px}
+      .mx-err .mx-errmsg{font-family:var(--sans);font-size:14px;color:var(--ink-2);line-height:1.5}
+    `;
+    document.head.appendChild(st);
+  }
+
+  /* ── incoming share link (#matrix=CODE) ── */
+  (function checkSharedLink() {
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0 || !/matrix/i.test(h.slice(0, eq))) return;
+    const data = decodeState(h.slice(eq + 1));
+    if (!data) return;
+    setTimeout(() => {
+      if (confirm('Load the shared matrices into the calculator? This replaces A and B.')) {
+        state = data; save(); renderEditor('a'); renderEditor('b'); showToast('Loaded shared matrices.');
+      }
+    }, 350);
+  })();
+
+  return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
 }
 
 /* ========== ESSAY PLANNER ========== */
