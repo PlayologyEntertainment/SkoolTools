@@ -4905,7 +4905,7 @@ function registerTools() {
     desc:'MLA · APA · Chicago. DOI/ISBN autofill + annotated bibliography.', tag:'upgraded',
     keywords:['cite','mla','apa','chicago','reference','bibliography','doi','isbn','annotated'], mount: mountCitation });
   TOOLS.push({ id:'essay', shelf:'words', icon:'📑', name:'Essay Planner',
-    desc:'Thesis, outline, sources, word goal.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist'], mount: mountEssay });
+    desc:'Outline-to-draft scaffold, sources, export.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist','scaffold','evidence','transition','topic sentence','print','pdf'], mount: mountEssay });
   TOOLS.push({ id:'vocab', shelf:'words', icon:'🗂️', name:'Vocabulary Builder',
     desc:'Build word lists, quiz with SRS.', tag:'new', keywords:['vocab','sat','act','ap','words','definitions','quiz','srs','spelling'], mount: mountVocab });
   TOOLS.push({ id:'lang', shelf:'words', icon:'🗣️', name:'Language Drill',
@@ -6352,11 +6352,22 @@ function mountEssay(root) {
        wordDraft: 0,      // user pastes draft to count
        outline: [{ id, text, level, note }],
        sources: [{ id, label, type, url, note }],
-       transitions: [],   // suggested; user can dismiss
+       scaffold: {        // outline-to-draft structural skeleton (1.8)
+         hook: '', context: '',
+         body: [{ id, transition, topic, evidence: [{ id, quote, source, analysis }] }],
+         restate: '', closing: '',
+       },
      }
   */
   const SKEY = 'essay:state';
   const uid = () => Math.random().toString(36).slice(2, 9);
+  const evSlot   = () => ({ id: uid(), quote: '', source: '', analysis: '' });
+  const bodyPara = () => ({ id: uid(), transition: '', topic: '', evidence: [evSlot()] });
+  const scaffoldDefaults = () => ({
+    hook: '', context: '',
+    body: [bodyPara(), bodyPara(), bodyPara()],
+    restate: '', closing: '',
+  });
 
   const defaults = () => ({
     title: '',
@@ -6372,9 +6383,22 @@ function mountEssay(root) {
       { id: uid(), text: 'Conclusion', level: 1, note: '' },
     ],
     sources: [],
+    scaffold: scaffoldDefaults(),
   });
 
   let state = Storage.get(SKEY, null) || defaults();
+  // Migrate older saved essays that predate the scaffold (1.8).
+  if (!state.scaffold || typeof state.scaffold !== 'object') state.scaffold = scaffoldDefaults();
+  if (!Array.isArray(state.scaffold.body) || !state.scaffold.body.length) state.scaffold.body = [bodyPara()];
+  state.scaffold.body.forEach(p => {
+    if (!Array.isArray(p.evidence) || !p.evidence.length) p.evidence = [evSlot()];
+    if (typeof p.transition !== 'string') p.transition = '';
+    if (typeof p.topic !== 'string') p.topic = '';
+  });
+  if (typeof state.scaffold.hook    !== 'string') state.scaffold.hook = '';
+  if (typeof state.scaffold.context !== 'string') state.scaffold.context = '';
+  if (typeof state.scaffold.restate !== 'string') state.scaffold.restate = '';
+  if (typeof state.scaffold.closing !== 'string') state.scaffold.closing = '';
   const save = () => Storage.set(SKEY, state);
 
   // ---- Transitions by essay type ----
@@ -6403,7 +6427,7 @@ function mountEssay(root) {
   };
 
   // ---- Tabs ----
-  const TABS = ['thesis', 'outline', 'sources', 'draft', 'checklist'];
+  const TABS = ['thesis', 'outline', 'scaffold', 'sources', 'draft', 'checklist'];
   let curTab = 'thesis';
   let editingOutlineId = null;
 
@@ -6609,6 +6633,100 @@ function mountEssay(root) {
         transform:rotate(-45deg);
       }
       .ep-check-item.done .ep-chk ~ span{text-decoration:line-through;color:var(--muted)}
+
+      /* Scaffold (outline-to-draft) */
+      .ep-sc-intro,.ep-sc-para,.ep-sc-concl{
+        background:var(--paper-2);border:1px solid var(--rule);
+        border-radius:3px;padding:14px 16px;margin-bottom:14px;
+      }
+      .ep-sc-sec-label{
+        font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+        color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:8px;
+      }
+      .ep-sc-thesis-echo{
+        font-family:var(--serif);font-size:15px;font-style:italic;line-height:1.5;
+        color:var(--ink-2);background:var(--paper-3);border-left:2px solid var(--accent);
+        padding:8px 12px;border-radius:0 2px 2px 0;margin-bottom:10px;
+      }
+      .ep-sc-thesis-echo.empty{color:var(--muted-2)}
+      .ep-sc-field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+      .ep-sc-field:last-child{margin-bottom:0}
+      .ep-sc-field label{
+        font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+      }
+      .ep-sc-ta,.ep-sc-inp{
+        background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+        color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;
+        padding:8px 10px;outline:none;width:100%;
+      }
+      .ep-sc-ta{resize:vertical;min-height:46px}
+      .ep-sc-ta:focus,.ep-sc-inp:focus{border-color:var(--accent)}
+      .ep-sc-ta::placeholder,.ep-sc-inp::placeholder{color:var(--muted-2);font-style:italic}
+      .ep-sc-para-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+      .ep-sc-para-num{
+        font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+        color:var(--accent);flex:1;
+      }
+      .ep-sc-para-actions{display:flex;gap:2px;flex-shrink:0}
+      .ep-sc-trans-sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+      .ep-sc-trans-chip{
+        font-family:var(--serif);font-style:italic;font-size:13px;
+        background:var(--paper);border:1px solid var(--rule);
+        padding:3px 9px;border-radius:2px;cursor:pointer;color:var(--ink-2);
+        transition:background .1s,border-color .1s;
+      }
+      .ep-sc-trans-chip:hover{background:var(--paper-3);border-color:var(--ink-2)}
+      .ep-sc-ev{
+        border-left:2px solid var(--rule-2);padding:10px 0 2px 12px;margin:12px 0 0;
+      }
+      .ep-sc-ev-head{
+        font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+        color:var(--muted);display:flex;align-items:center;gap:8px;margin-bottom:8px;
+      }
+      .ep-sc-ev-head .ep-sc-ev-num{flex:1;color:var(--accent-4)}
+      .ep-sc-ev-row{display:flex;gap:8px;flex-wrap:wrap}
+      .ep-sc-ev-row .ep-sc-field{flex:1;min-width:160px}
+      .ep-sc-add-ev{margin-top:10px}
+      .ep-sc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+      .ep-sc-help{
+        font-family:var(--sans);font-size:13px;color:var(--muted);
+        line-height:1.5;margin:0 0 16px;
+      }
+
+      /* Print / PDF menu */
+      .ep-print-wrap{position:relative}
+      .ep-print-menu{
+        position:absolute;top:calc(100% + 4px);right:0;z-index:6;
+        background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;
+        box-shadow:var(--shadow-card);display:flex;flex-direction:column;min-width:160px;overflow:hidden;
+      }
+      .ep-print-menu[hidden]{display:none}
+      .ep-print-menu button{
+        font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+        text-align:left;padding:9px 12px;background:none;border:none;color:var(--ink-2);cursor:pointer;
+        transition:background .1s,color .1s;
+      }
+      .ep-print-menu button:hover{background:var(--paper-3);color:var(--ink)}
+
+      /* Print container (populated on demand) */
+      .ep-print{display:none}
+      @media print{
+        .panel-backdrop,.panel-head,.panel-foot,.toast{display:none!important}
+        .panel{position:static!important;transform:none!important;box-shadow:none!important;border:none!important;max-height:none!important;width:100%!important;background:#fff!important}
+        .panel-body{overflow:visible!important;background:#fff!important;padding:0!important}
+        .ep-shell > *:not(.ep-print){display:none!important}
+        .ep-print{display:block!important;color:#000;font-family:Georgia,'Times New Roman',serif;padding:.25in 0}
+        .ep-print h1{font-size:22px;margin:0 0 4px}
+        .ep-print h2{font-size:14px;margin:18px 0 7px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #ccc;padding-bottom:3px}
+        .ep-print h3{font-size:13px;margin:12px 0 4px}
+        .ep-print .ep-cp-meta{font-size:11px;color:#444;margin:0 0 14px;text-transform:uppercase;letter-spacing:.1em}
+        .ep-print p{font-size:13px;line-height:1.55;margin:0 0 8px}
+        .ep-print blockquote{font-size:13px;line-height:1.5;margin:0 0 8px 1.4em;color:#222;border-left:2px solid #bbb;padding-left:10px}
+        .ep-print ul,.ep-print ol{margin:0 0 10px 1.4em;padding:0}
+        .ep-print li{font-size:13px;line-height:1.5;margin:0 0 3px}
+        .ep-print .ep-cp-ph{color:#888;font-style:italic}
+        @page{margin:.75in}
+      }
     </style>
 
     <div class="ep-shell">
@@ -6623,6 +6741,13 @@ function mountEssay(root) {
         </select>
         <button class="btn ghost sm" id="ep-reset-btn">New essay</button>
         <button class="btn ghost sm" id="ep-export-btn">Export .md</button>
+        <div class="ep-print-wrap">
+          <button class="btn ghost sm" id="ep-print-btn" aria-haspopup="true" aria-expanded="false">Print / PDF ▾</button>
+          <div class="ep-print-menu" id="ep-print-menu" role="menu" hidden>
+            <button data-print="plan" role="menuitem">Full plan</button>
+            <button data-print="skeleton" role="menuitem">Draft skeleton</button>
+          </div>
+        </div>
       </div>
 
       <!-- Word goal progress -->
@@ -6632,6 +6757,7 @@ function mountEssay(root) {
       <div class="ep-tabs">
         <button class="ep-tab active" data-tab="thesis">Thesis</button>
         <button class="ep-tab" data-tab="outline">Outline</button>
+        <button class="ep-tab" data-tab="scaffold">Scaffold</button>
         <button class="ep-tab" data-tab="sources">Sources</button>
         <button class="ep-tab" data-tab="draft">Draft check</button>
         <button class="ep-tab" data-tab="checklist">Checklist</button>
@@ -6639,6 +6765,9 @@ function mountEssay(root) {
 
       <!-- Tab panels -->
       <div id="ep-panels"></div>
+
+      <!-- Print container (populated on demand) -->
+      <div class="ep-print" aria-hidden="true"></div>
     </div>
   `;
 
@@ -7026,12 +7155,294 @@ function mountEssay(root) {
     });
   };
 
+  // ---- Helpers shared by scaffold / export / print ----
+  const slug = () => (state.title || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  const downloadFile = (name, content, type) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    showToast('Exported ' + name.split('.').pop().toUpperCase());
+  };
+  const findPara = (id) => state.scaffold.body.find(p => p.id === id);
+  const findEv = (pid, eid) => { const p = findPara(pid); return p ? p.evidence.find(e => e.id === eid) : null; };
+
+  // ---- Outline-to-draft: assemble a Markdown skeleton (structural only) ----
+  const buildSkeleton = () => {
+    const sc = state.scaffold;
+    const ph = (t) => `[${t}]`;
+    let md = `# ${state.title || 'Untitled Essay'} — draft skeleton\n\n`;
+    md += `## Introduction\n\n`;
+    md += `${sc.hook ? sc.hook.trim() : ph('Hook — grab the reader')} ${sc.context ? sc.context.trim() : ph('Context / background')}\n\n`;
+    md += `${state.thesis ? state.thesis.trim() : ph('Thesis — your central claim')}\n\n`;
+    sc.body.forEach((p, pi) => {
+      md += `## Body paragraph ${pi + 1}\n\n`;
+      const lead = (p.transition ? p.transition.trim() + ' ' : '') +
+                   (p.topic ? p.topic.trim() : ph('Topic sentence — one clear main idea'));
+      md += `${lead}\n\n`;
+      p.evidence.forEach(ev => {
+        md += `> ${ev.quote ? ev.quote.trim() : ph('Evidence — quote or paraphrase')}`;
+        if (ev.source) md += ` (${ev.source.trim()})`;
+        md += `\n\n`;
+        md += `${ev.analysis ? ev.analysis.trim() : ph('Analysis — explain how this supports the topic sentence')}\n\n`;
+      });
+    });
+    md += `## Conclusion\n\n`;
+    md += `${sc.restate ? sc.restate.trim() : ph('Restate your thesis in fresh words')}\n\n`;
+    md += `${sc.closing ? sc.closing.trim() : ph('Closing thought — the broader significance')}\n`;
+    return md;
+  };
+
+  // ---- Scaffold tab (outline-to-draft) ----
+  const renderParaHTML = (p, pi, trans) => `
+    <div class="ep-sc-para" data-pid="${p.id}">
+      <div class="ep-sc-para-head">
+        <span class="ep-sc-para-num">Body ¶ ${pi + 1}</span>
+        <div class="ep-sc-para-actions">
+          <button class="ep-ol-btn" data-pup="${p.id}" title="Move up">↑</button>
+          <button class="ep-ol-btn" data-pdown="${p.id}" title="Move down">↓</button>
+          <button class="ep-ol-btn danger" data-pdel="${p.id}" title="Delete paragraph">✕</button>
+        </div>
+      </div>
+      <div class="ep-sc-field">
+        <label>Transition into this paragraph</label>
+        <input class="ep-sc-inp" data-sctrans="${p.id}" value="${escape(p.transition)}" placeholder="e.g. Furthermore, …">
+        <div class="ep-sc-trans-sug">
+          ${trans.map(t => `<button class="ep-sc-trans-chip" data-settrans="${p.id}" data-val="${escape(t)}">${escape(t)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="ep-sc-field">
+        <label>Topic sentence — one clear main idea</label>
+        <textarea class="ep-sc-ta" data-sctopic="${p.id}" placeholder="The single point this paragraph proves…">${escape(p.topic)}</textarea>
+      </div>
+      ${p.evidence.map((ev, ei) => `
+        <div class="ep-sc-ev" data-eid="${ev.id}">
+          <div class="ep-sc-ev-head">
+            <span class="ep-sc-ev-num">Evidence ${ei + 1}</span>
+            <button class="ep-ol-btn danger" data-evdel="${p.id}:${ev.id}" title="Remove evidence">✕</button>
+          </div>
+          <div class="ep-sc-field">
+            <label>Quote or paraphrase</label>
+            <textarea class="ep-sc-ta" data-evquote="${p.id}:${ev.id}" placeholder="The fact, quotation, or data point…">${escape(ev.quote)}</textarea>
+          </div>
+          <div class="ep-sc-ev-row">
+            <div class="ep-sc-field">
+              <label>Source</label>
+              <input class="ep-sc-inp" list="ep-sc-srclist" data-evsource="${p.id}:${ev.id}" value="${escape(ev.source)}" placeholder="Link a source…">
+            </div>
+            <div class="ep-sc-field" style="flex:2">
+              <label>Analysis — how it supports the topic sentence</label>
+              <textarea class="ep-sc-ta" data-evanalysis="${p.id}:${ev.id}" placeholder="Explain the connection in your own words…">${escape(ev.analysis)}</textarea>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+      <div class="ep-sc-add-ev">
+        <button class="btn ghost sm" data-addev="${p.id}">+ Evidence slot</button>
+      </div>
+    </div>
+  `;
+
+  const renderScaffold = () => {
+    const panel = $('#ep-panels', root);
+    const sc = state.scaffold;
+    const trans = (TRANSITIONS[state.type] || TRANSITIONS['argumentative']).slice(0, 8);
+    const srcOpts = state.sources.map(s => `<option value="${escape(s.label)}"></option>`).join('');
+    panel.innerHTML = `
+      <p class="ep-sc-help">Build your essay's skeleton paragraph by paragraph — a <b>topic sentence</b>, the <b>evidence</b> that backs it, and how you <b>explain</b> that evidence. Structure only; it never writes your prose. When it's roughed in, assemble it into a draft starting point at the bottom.</p>
+
+      <datalist id="ep-sc-srclist">${srcOpts}</datalist>
+
+      <div class="ep-sc-intro">
+        <div class="ep-sc-sec-label">Introduction</div>
+        <div class="ep-sc-thesis-echo ${state.thesis ? '' : 'empty'}">${state.thesis ? escape(state.thesis) : 'No thesis yet — set it on the Thesis tab.'}</div>
+        <div class="ep-sc-field">
+          <label>Hook — grab the reader</label>
+          <textarea class="ep-sc-ta" data-sc="hook" placeholder="A question, surprising fact, or vivid image…">${escape(sc.hook)}</textarea>
+        </div>
+        <div class="ep-sc-field">
+          <label>Context / background</label>
+          <textarea class="ep-sc-ta" data-sc="context" placeholder="What the reader needs before the thesis…">${escape(sc.context)}</textarea>
+        </div>
+      </div>
+
+      <div id="ep-sc-body">
+        ${sc.body.map((p, pi) => renderParaHTML(p, pi, trans)).join('')}
+      </div>
+      <div class="ep-sc-actions">
+        <button class="btn ghost sm" id="ep-sc-add-para">+ Body paragraph</button>
+      </div>
+
+      <div class="ep-sc-concl" style="margin-top:14px">
+        <div class="ep-sc-sec-label">Conclusion</div>
+        <div class="ep-sc-field">
+          <label>Restate the thesis (fresh words)</label>
+          <textarea class="ep-sc-ta" data-sc="restate" placeholder="Remind the reader of your claim without repeating it verbatim…">${escape(sc.restate)}</textarea>
+        </div>
+        <div class="ep-sc-field">
+          <label>Closing thought — the bigger picture</label>
+          <textarea class="ep-sc-ta" data-sc="closing" placeholder="Why it matters / what comes next…">${escape(sc.closing)}</textarea>
+        </div>
+      </div>
+
+      <div class="ep-sc-actions" style="margin-top:18px;border-top:1px solid var(--rule);padding-top:16px">
+        <button class="btn accent sm" id="ep-sc-copy">Copy draft skeleton</button>
+        <button class="btn ghost sm" id="ep-sc-export">Export skeleton .md</button>
+      </div>
+    `;
+
+    // Text fields update state without re-rendering (keep focus/caret).
+    $$('[data-sc]', panel).forEach(el => el.addEventListener('input', () => {
+      state.scaffold[el.dataset.sc] = el.value; save();
+    }));
+    $$('[data-sctrans]', panel).forEach(el => el.addEventListener('input', () => {
+      const p = findPara(el.dataset.sctrans); if (p) { p.transition = el.value; save(); }
+    }));
+    $$('[data-sctopic]', panel).forEach(el => el.addEventListener('input', () => {
+      const p = findPara(el.dataset.sctopic); if (p) { p.topic = el.value; save(); }
+    }));
+    $$('[data-evquote]', panel).forEach(el => el.addEventListener('input', () => {
+      const [pid, eid] = el.dataset.evquote.split(':'); const ev = findEv(pid, eid); if (ev) { ev.quote = el.value; save(); }
+    }));
+    $$('[data-evsource]', panel).forEach(el => el.addEventListener('input', () => {
+      const [pid, eid] = el.dataset.evsource.split(':'); const ev = findEv(pid, eid); if (ev) { ev.source = el.value; save(); }
+    }));
+    $$('[data-evanalysis]', panel).forEach(el => el.addEventListener('input', () => {
+      const [pid, eid] = el.dataset.evanalysis.split(':'); const ev = findEv(pid, eid); if (ev) { ev.analysis = el.value; save(); }
+    }));
+
+    // Suggested-transition chips fill the input in place (no re-render).
+    $$('[data-settrans]', panel).forEach(chip => chip.addEventListener('click', () => {
+      const p = findPara(chip.dataset.settrans);
+      if (!p) return;
+      p.transition = chip.dataset.val; save();
+      const inp = panel.querySelector(`[data-sctrans="${p.id}"]`);
+      if (inp) inp.value = p.transition;
+    }));
+
+    // Structural buttons (bound directly to fresh elements — no delegation stacking).
+    $$('[data-addev]', panel).forEach(b => b.addEventListener('click', () => {
+      const p = findPara(b.dataset.addev); if (p) { p.evidence.push(evSlot()); save(); renderScaffold(); }
+    }));
+    $$('[data-evdel]', panel).forEach(b => b.addEventListener('click', () => {
+      const [pid, eid] = b.dataset.evdel.split(':'); const p = findPara(pid);
+      if (!p) return;
+      if (p.evidence.length <= 1) { showToast('Each paragraph keeps at least one evidence slot.'); return; }
+      p.evidence = p.evidence.filter(x => x.id !== eid); save(); renderScaffold();
+    }));
+    $$('[data-pup]', panel).forEach(b => b.addEventListener('click', () => {
+      const arr = state.scaffold.body, i = arr.findIndex(p => p.id === b.dataset.pup);
+      if (i > 0) { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; save(); renderScaffold(); }
+    }));
+    $$('[data-pdown]', panel).forEach(b => b.addEventListener('click', () => {
+      const arr = state.scaffold.body, i = arr.findIndex(p => p.id === b.dataset.pdown);
+      if (i >= 0 && i < arr.length - 1) { [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]]; save(); renderScaffold(); }
+    }));
+    $$('[data-pdel]', panel).forEach(b => b.addEventListener('click', () => {
+      if (state.scaffold.body.length <= 1) { showToast('Keep at least one body paragraph.'); return; }
+      state.scaffold.body = state.scaffold.body.filter(p => p.id !== b.dataset.pdel); save(); renderScaffold();
+    }));
+    $('#ep-sc-add-para', panel)?.addEventListener('click', () => {
+      state.scaffold.body.push(bodyPara()); save(); renderScaffold();
+      const paras = $$('.ep-sc-para', panel);
+      paras[paras.length - 1]?.scrollIntoView({ block: 'nearest' });
+    });
+    $('#ep-sc-copy', panel)?.addEventListener('click', () => copy(buildSkeleton(), $('#ep-sc-copy', panel)));
+    $('#ep-sc-export', panel)?.addEventListener('click', () => {
+      downloadFile((slug() || 'essay') + '-skeleton.md', buildSkeleton(), 'text/markdown');
+    });
+  };
+
+  // ---- Print builders (populate the hidden .ep-print container, then print) ----
+  function buildPrintPlan() {
+    const e = escape;
+    const sc = state.scaffold;
+    let h = `<h1>${e(state.title) || 'Untitled Essay'}</h1>`;
+    h += `<p class="ep-cp-meta">${e(state.type)} essay${state.wordGoal ? ' · ' + state.wordGoal + '-word goal' : ''}</p>`;
+    if (state.thesis) h += `<h2>Thesis</h2><p>${e(state.thesis)}</p>`;
+    if (state.outline.some(it => it.text || it.note)) {
+      h += `<h2>Outline</h2><ul>`;
+      state.outline.forEach(it => {
+        const pad = '&nbsp;'.repeat((it.level - 1) * 4);
+        h += `<li>${pad}${e(it.text) || '(untitled)'}${it.note ? ` — <span style="color:#555">${e(it.note)}</span>` : ''}</li>`;
+      });
+      h += `</ul>`;
+    }
+    const scHas = sc.hook || sc.context || sc.restate || sc.closing ||
+      sc.body.some(p => p.topic || p.transition || p.evidence.some(ev => ev.quote || ev.analysis || ev.source));
+    if (scHas) {
+      h += `<h2>Paragraph scaffold</h2><h3>Introduction</h3>`;
+      if (sc.hook) h += `<p>${e(sc.hook)}</p>`;
+      if (sc.context) h += `<p>${e(sc.context)}</p>`;
+      if (state.thesis) h += `<p><em>Thesis:</em> ${e(state.thesis)}</p>`;
+      sc.body.forEach((p, pi) => {
+        h += `<h3>Body paragraph ${pi + 1}</h3>`;
+        const lead = [p.transition, p.topic].filter(Boolean).join(' ');
+        if (lead) h += `<p>${e(lead)}</p>`;
+        p.evidence.forEach(ev => {
+          if (ev.quote || ev.source) h += `<blockquote>${e(ev.quote) || '[evidence]'}${ev.source ? ` <span style="color:#555">(${e(ev.source)})</span>` : ''}</blockquote>`;
+          if (ev.analysis) h += `<p>${e(ev.analysis)}</p>`;
+        });
+      });
+      if (sc.restate || sc.closing) {
+        h += `<h3>Conclusion</h3>`;
+        if (sc.restate) h += `<p>${e(sc.restate)}</p>`;
+        if (sc.closing) h += `<p>${e(sc.closing)}</p>`;
+      }
+    }
+    if (state.sources.length) {
+      h += `<h2>Sources</h2><ol>`;
+      state.sources.forEach(s => {
+        h += `<li>${e(s.label)}${s.type ? ` (${e(s.type)})` : ''}${s.url ? ` — ${e(s.url)}` : ''}${s.note ? `<br><span style="color:#555">${e(s.note)}</span>` : ''}</li>`;
+      });
+      h += `</ol>`;
+    }
+    const checked = Storage.get(CKEY, []);
+    h += `<h2>Checklist</h2>`;
+    CHECKLIST.forEach((g, gi) => {
+      h += `<h3>${e(g.group)}</h3><ul>`;
+      g.items.forEach((item, ii) => {
+        h += `<li>${checked.includes(`${gi}-${ii}`) ? '☑' : '☐'} ${e(item)}</li>`;
+      });
+      h += `</ul>`;
+    });
+    return h;
+  }
+  function buildPrintSkeleton() {
+    const e = escape;
+    const ph = (t) => `<span class="ep-cp-ph">[${t}]</span>`;
+    const sc = state.scaffold;
+    let h = `<h1>${e(state.title) || 'Untitled Essay'} — draft skeleton</h1>`;
+    h += `<h2>Introduction</h2>`;
+    h += `<p>${sc.hook ? e(sc.hook) : ph('Hook — grab the reader')} ${sc.context ? e(sc.context) : ph('Context / background')}</p>`;
+    h += `<p>${state.thesis ? e(state.thesis) : ph('Thesis — your central claim')}</p>`;
+    sc.body.forEach((p, pi) => {
+      h += `<h2>Body paragraph ${pi + 1}</h2>`;
+      const lead = (p.transition ? e(p.transition) + ' ' : '') + (p.topic ? e(p.topic) : ph('Topic sentence — one clear main idea'));
+      h += `<p>${lead}</p>`;
+      p.evidence.forEach(ev => {
+        h += `<blockquote>${ev.quote ? e(ev.quote) : ph('Evidence — quote or paraphrase')}${ev.source ? ` (${e(ev.source)})` : ''}</blockquote>`;
+        h += `<p>${ev.analysis ? e(ev.analysis) : ph('Analysis — explain how this supports the topic sentence')}</p>`;
+      });
+    });
+    h += `<h2>Conclusion</h2>`;
+    h += `<p>${sc.restate ? e(sc.restate) : ph('Restate your thesis in fresh words')}</p>`;
+    h += `<p>${sc.closing ? e(sc.closing) : ph('Closing thought — the broader significance')}</p>`;
+    return h;
+  }
+  const doPrint = (which) => {
+    $('.ep-print', root).innerHTML = which === 'skeleton' ? buildPrintSkeleton() : buildPrintPlan();
+    window.print();
+  };
+
   // ---- Tab switching ----
   const renderTab = (tab) => {
     curTab = tab;
     $$('.ep-tab', root).forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'thesis')    renderThesis();
     else if (tab === 'outline')   renderOutline();
+    else if (tab === 'scaffold')  renderScaffold();
     else if (tab === 'sources')   renderSources();
     else if (tab === 'draft')     renderDraft();
     else if (tab === 'checklist') renderChecklist();
@@ -7078,6 +7489,35 @@ function mountEssay(root) {
         return s;
       }).join('\n') + '\n\n';
     }
+    const sc = state.scaffold;
+    const scHas = sc.hook || sc.context || sc.restate || sc.closing ||
+      sc.body.some(p => p.topic || p.transition || p.evidence.some(ev => ev.quote || ev.analysis || ev.source));
+    if (scHas) {
+      md += `## Paragraph scaffold\n\n`;
+      md += `### Introduction\n\n`;
+      if (sc.hook) md += `- **Hook:** ${sc.hook}\n`;
+      if (sc.context) md += `- **Context:** ${sc.context}\n`;
+      if (state.thesis) md += `- **Thesis:** ${state.thesis}\n`;
+      md += `\n`;
+      sc.body.forEach((p, pi) => {
+        md += `### Body paragraph ${pi + 1}\n\n`;
+        if (p.transition) md += `- **Transition:** ${p.transition}\n`;
+        if (p.topic) md += `- **Topic sentence:** ${p.topic}\n`;
+        p.evidence.forEach((ev, ei) => {
+          if (ev.quote || ev.source || ev.analysis) {
+            md += `- **Evidence ${ei + 1}:** ${ev.quote || ''}${ev.source ? ` _(${ev.source})_` : ''}\n`;
+            if (ev.analysis) md += `  - _Analysis:_ ${ev.analysis}\n`;
+          }
+        });
+        md += `\n`;
+      });
+      if (sc.restate || sc.closing) {
+        md += `### Conclusion\n\n`;
+        if (sc.restate) md += `- **Restate:** ${sc.restate}\n`;
+        if (sc.closing) md += `- **Closing:** ${sc.closing}\n`;
+        md += `\n`;
+      }
+    }
     if (state.sources.length) {
       md += `## Sources\n\n`;
       md += state.sources.map((s,i) => {
@@ -7087,13 +7527,27 @@ function mountEssay(root) {
         return line;
       }).join('\n\n') + '\n\n';
     }
-    const blob = new Blob([md], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (state.title || 'essay-plan').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.md';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-    showToast('Exported as .md');
+    downloadFile((slug() || 'essay-plan') + '.md', md, 'text/markdown');
+  });
+
+  // ---- Print / PDF menu ----
+  const printMenu = $('#ep-print-menu', root);
+  const printBtn = $('#ep-print-btn', root);
+  const closePrintMenu = () => { printMenu.hidden = true; printBtn.setAttribute('aria-expanded', 'false'); };
+  printBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = printMenu.hidden;
+    printMenu.hidden = !open;
+    printBtn.setAttribute('aria-expanded', String(open));
+  });
+  printMenu?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-print]');
+    if (!b) return;
+    closePrintMenu();
+    doPrint(b.dataset.print);
+  });
+  document.addEventListener('click', (e) => {
+    if (!printMenu.hidden && !e.target.closest('.ep-print-wrap')) closePrintMenu();
   });
 
   // ---- Init ----
