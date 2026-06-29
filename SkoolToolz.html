@@ -5689,6 +5689,9 @@ function registerTools() {
   TOOLS.push({ id:'matrix', shelf:'numbers', icon:'▦', name:'Matrix Calculator',
     desc:'Add, multiply, det, inverse, RREF with steps.', tag:'new',
     keywords:['matrix','matrices','linear algebra','determinant','inverse','rref','row reduction','transpose','multiply','rank','trace','gaussian','elimination','solve','system','identity','ap cs'], mount: mountMatrix });
+  TOOLS.push({ id:'truthtable', shelf:'numbers', icon:'⊤', name:'Truth Table',
+    desc:'Truth tables, equivalence, DNF/CNF.', tag:'new',
+    keywords:['truth table','logic','boolean','proposition','propositional','tautology','contradiction','contingent','satisfiable','equivalence','equivalent','dnf','cnf','normal form','minterm','maxterm','implication','conditional','biconditional','xor','nand','nor','and','or','not','negation','conjunction','disjunction','discrete math','cs','philosophy','logic gates'], mount: mountTruthTable });
   TOOLS.push({ id:'roman', shelf:'numbers', icon:'🏛️', name:'Roman Numerals',
     desc:'Number ↔ Roman.',
     keywords:['roman','numeral','latin'], mount: mountRoman });
@@ -6344,7 +6347,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -7668,6 +7671,570 @@ function mountMatrix(root) {
     setTimeout(() => {
       if (confirm('Load the shared matrices into the calculator? This replaces A and B.')) {
         state = data; save(); renderEditor('a'); renderEditor('b'); showToast('Loaded shared matrices.');
+      }
+    }, 350);
+  })();
+
+  return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
+}
+
+/* ========== TRUTH TABLE / LOGIC ==========
+   Parse a propositional-logic expression (words, logic symbols, programming,
+   or ASCII shorthand — all interchangeable), then generate its full truth
+   table with intermediate subexpression columns, classify it (tautology /
+   contradiction / contingent), derive disjunctive & conjunctive normal forms
+   (DNF/CNF) from the table, and check two expressions for logical equivalence.
+   No eval — a hand-written tokenizer + precedence-climbing parser build an AST.
+   Workspace autosaves to localStorage and shares by code (#truthtable=…), no
+   backend. (Roadmap 2.4, Numbers shelf.) */
+function mountTruthTable(root) {
+  const SKEY = 'truthtable:v1';
+  const MAXVARS = 12;            // 2^12 = 4096 rows — a hard ceiling on table size
+
+  /* ── operator metadata (canonical display symbol + precedence) ──
+     Precedence high→low: ¬ (6) · ∧/↑ (5) · ⊕/⊙ (4) · ∨/↓ (3) · → (2) · ↔ (1).
+     Parentheses always override. → is right-associative; the rest left.   */
+  const OPSYM  = { AND:'∧', NAND:'↑', XOR:'⊕', XNOR:'⊙', OR:'∨', NOR:'↓', IMP:'→', IFF:'↔' };
+  const OPPREC = { AND:5,   NAND:5,   XOR:4,   XNOR:4,   OR:3,   NOR:3,   IMP:2,   IFF:1   };
+  const RIGHT  = { IMP:true };
+
+  /* ── tokenizer ── */
+  const UNI = {   // single-character operators (incl. unicode)
+    '¬':'NOT','~':'NOT','!':'NOT',
+    '∧':'AND','&':'AND','*':'AND','·':'AND','⋅':'AND',
+    '∨':'OR','|':'OR','+':'OR',
+    '⊕':'XOR','^':'XOR','≢':'XOR',
+    '⊙':'XNOR','≡':'IFF',
+    '↑':'NAND','↓':'NOR',
+    '→':'IMP','⇒':'IMP','⊃':'IMP',
+    '↔':'IFF','⇔':'IFF',
+    '(':'LP',')':'RP',
+    "'":'POSTNOT',
+  };
+  const WORDS = {
+    NOT:'NOT', AND:'AND', OR:'OR', XOR:'XOR', NAND:'NAND', NOR:'NOR', XNOR:'XNOR',
+    IMPLIES:'IMP', IMP:'IMP', THEN:'IMP', IFF:'IFF', BICOND:'IFF', EQUIV:'IFF',
+    TRUE:'CT', FALSE:'CF',
+  };
+  function tokenize(src) {
+    const toks = [];
+    let i = 0;
+    const s = String(src);
+    while (i < s.length) {
+      const c = s[i];
+      if (/\s/.test(c)) { i++; continue; }
+      // multi-character ASCII operators (longest first)
+      const three = s.substr(i, 3), two = s.substr(i, 2);
+      if (three === '<->' || three === '<=>') { toks.push({ t:'IFF' }); i += 3; continue; }
+      if (two === '->' || two === '=>') { toks.push({ t:'IMP' }); i += 2; continue; }
+      if (two === '&&') { toks.push({ t:'AND' }); i += 2; continue; }
+      if (two === '||') { toks.push({ t:'OR' }); i += 2; continue; }
+      // constants 1/0
+      if (c === '1') { toks.push({ t:'CT' }); i++; continue; }
+      if (c === '0') { toks.push({ t:'CF' }); i++; continue; }
+      // single-character operators / parens
+      if (UNI[c]) { toks.push({ t:UNI[c] }); i++; continue; }
+      // identifier: variable or word-operator (or T/F constants)
+      if (/[A-Za-z_]/.test(c)) {
+        let j = i + 1;
+        while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) j++;
+        const word = s.slice(i, j);
+        const up = word.toUpperCase();
+        if (WORDS[up]) toks.push({ t: WORDS[up] });
+        else if (word === 'T') toks.push({ t:'CT' });
+        else if (word === 'F') toks.push({ t:'CF' });
+        else toks.push({ t:'VAR', name: word });
+        i = j; continue;
+      }
+      throw new Error(`Unexpected character “${c}”.`);
+    }
+    return toks;
+  }
+
+  /* ── parser (precedence climbing) → AST ──
+     node = {type:'var',name} | {type:'const',val} | {type:'not',x} | {type:'bin',op,l,r} */
+  function parse(src) {
+    const toks = tokenize(src);
+    let p = 0;
+    const peek = () => toks[p];
+    const eat  = () => toks[p++];
+    function primary() {
+      const tk = peek();
+      if (!tk) throw new Error('Unexpected end — the expression is incomplete.');
+      if (tk.t === 'NOT') { eat(); return postfix({ type:'not', x: primary() }); }
+      if (tk.t === 'LP') {
+        eat();
+        const e = expr(0);
+        if (!peek() || peek().t !== 'RP') throw new Error('Missing a closing “)”.');
+        eat();
+        return postfix(e);
+      }
+      if (tk.t === 'VAR') { eat(); return postfix({ type:'var', name: tk.name }); }
+      if (tk.t === 'CT') { eat(); return postfix({ type:'const', val:true }); }
+      if (tk.t === 'CF') { eat(); return postfix({ type:'const', val:false }); }
+      if (tk.t === 'RP') throw new Error('Unmatched “)”.');
+      throw new Error(`Expected a variable or “(” but found an operator.`);
+    }
+    // postfix complement: A' means ¬A (digital-logic notation)
+    function postfix(node) {
+      while (peek() && peek().t === 'POSTNOT') { eat(); node = { type:'not', x: node }; }
+      return node;
+    }
+    function expr(minPrec) {
+      let left = primary();
+      while (peek() && OPPREC[peek().t] != null && OPPREC[peek().t] >= minPrec) {
+        const op = eat().t;
+        const prec = OPPREC[op];
+        const nextMin = RIGHT[op] ? prec : prec + 1;
+        const right = expr(nextMin);
+        left = { type:'bin', op, l: left, r: right };
+      }
+      return left;
+    }
+    if (toks.length === 0) throw new Error('Empty expression.');
+    const ast = expr(0);
+    if (p < toks.length) throw new Error('Unexpected extra input — check your operators and parentheses.');
+    return ast;
+  }
+
+  /* ── evaluate AST under an assignment {varName: bool} ── */
+  function ev(n, a) {
+    switch (n.type) {
+      case 'var':   return !!a[n.name];
+      case 'const': return n.val;
+      case 'not':   return !ev(n.x, a);
+      case 'bin': {
+        const x = ev(n.l, a), y = ev(n.r, a);
+        switch (n.op) {
+          case 'AND':  return x && y;
+          case 'OR':   return x || y;
+          case 'XOR':  return x !== y;
+          case 'NAND': return !(x && y);
+          case 'NOR':  return !(x || y);
+          case 'XNOR': return x === y;
+          case 'IMP':  return !x || y;
+          case 'IFF':  return x === y;
+        }
+      }
+    }
+    return false;
+  }
+
+  /* ── canonical string (minimal parens) — also used to dedupe subexpressions ── */
+  const precOf = n => n.type === 'bin' ? OPPREC[n.op] : n.type === 'not' ? 6 : 7;
+  function toStr(n) {
+    if (n.type === 'var')   return n.name;
+    if (n.type === 'const') return n.val ? 'T' : 'F';
+    if (n.type === 'not')   { const s = toStr(n.x); return '¬' + (precOf(n.x) < 6 ? `(${s})` : s); }
+    const p = OPPREC[n.op], ls = toStr(n.l), rs = toStr(n.r);
+    const lp = precOf(n.l) < p || (RIGHT[n.op] && precOf(n.l) === p);
+    const rp = precOf(n.r) < p || (!RIGHT[n.op] && precOf(n.r) === p);
+    return `${lp ? `(${ls})` : ls} ${OPSYM[n.op]} ${rp ? `(${rs})` : rs}`;
+  }
+
+  /* ── collect variables (alphabetical) and compound subexpressions (simple→full) ── */
+  function collectVars(n, set) {
+    if (n.type === 'var') set.add(n.name);
+    else if (n.type === 'not') collectVars(n.x, set);
+    else if (n.type === 'bin') { collectVars(n.l, set); collectVars(n.r, set); }
+  }
+  const sortVars = arr => arr.slice().sort((a, b) =>
+    a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : (a < b ? -1 : a > b ? 1 : 0));
+  function nodeSize(n) {
+    if (n.type === 'not') return 1 + nodeSize(n.x);
+    if (n.type === 'bin') return 1 + nodeSize(n.l) + nodeSize(n.r);
+    return 1;
+  }
+  function collectSubs(root) {
+    const map = new Map();   // canonical string → node (compound nodes only)
+    (function walk(n) {
+      if (n.type === 'not') { walk(n.x); }
+      else if (n.type === 'bin') { walk(n.l); walk(n.r); }
+      if (n.type === 'not' || n.type === 'bin') { const k = toStr(n); if (!map.has(k)) map.set(k, n); }
+    })(root);
+    return [...map.values()].sort((a, b) => nodeSize(a) - nodeSize(b) || toStr(a).length - toStr(b).length);
+  }
+
+  /* ── build all assignments; row 0 = all-true, standard textbook order ── */
+  function assignments(vars) {
+    const N = vars.length, total = 1 << N, rows = [];
+    for (let i = 0; i < total; i++) {
+      const a = {};
+      for (let k = 0; k < N; k++) a[vars[k]] = ((i >> (N - 1 - k)) & 1) === 0;
+      rows.push(a);
+    }
+    return rows;
+  }
+
+  /* ── normal forms from the truth table of the root column ── */
+  function normalForms(vars, rows, rootCol) {
+    const TF = rootCol;
+    const trueRows = rows.filter((_, i) => TF[i]);
+    const falseRows = rows.filter((_, i) => !TF[i]);
+    let dnf, cnf;
+    if (trueRows.length === 0) dnf = 'F';
+    else if (falseRows.length === 0) dnf = 'T';
+    else {
+      const terms = trueRows.map(a => vars.map(v => (a[v] ? v : '¬' + v)).join(' ∧ '));
+      dnf = terms.map(t => (vars.length > 1 && terms.length > 1) ? `(${t})` : t).join(' ∨ ');
+    }
+    if (falseRows.length === 0) cnf = 'T';
+    else if (trueRows.length === 0) cnf = 'F';
+    else {
+      const terms = falseRows.map(a => vars.map(v => (a[v] ? '¬' + v : v)).join(' ∨ '));
+      cnf = terms.map(t => (vars.length > 1 && terms.length > 1) ? `(${t})` : t).join(' ∧ ');
+    }
+    return { dnf, cnf };
+  }
+
+  /* ── state ── */
+  const defaults = () => ({ expr: '(P ∧ Q) → R', expr2: '', showSub: true, numbers: false });
+  function load() {
+    const s = Storage.get(SKEY, null);
+    const d = defaults();
+    if (!s || typeof s !== 'object') return d;
+    return {
+      expr:    typeof s.expr  === 'string' ? s.expr  : d.expr,
+      expr2:   typeof s.expr2 === 'string' ? s.expr2 : d.expr2,
+      showSub: s.showSub !== false,
+      numbers: !!s.numbers,
+    };
+  }
+  let state = load();
+  let saveTimer = null;
+  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => Storage.set(SKEY, state), 250); };
+
+  /* ── render helpers ── */
+  const cellTF = b => state.numbers
+    ? `<span class="tt-cell ${b ? 'tt-t' : 'tt-f'}">${b ? '1' : '0'}</span>`
+    : `<span class="tt-cell ${b ? 'tt-t' : 'tt-f'}">${b ? 'T' : 'F'}</span>`;
+  const plain = b => state.numbers ? (b ? '1' : '0') : (b ? 'T' : 'F');
+
+  function buildTable(ast) {
+    const vset = new Set();
+    collectVars(ast, vset);
+    let vars = sortVars([...vset]);
+    if (vars.length === 0) {
+      // constant expression — no variables; show single value
+      const val = ev(ast, {});
+      const kind = val ? 'Tautology' : 'Contradiction';
+      return { html: `<div class="tt-classify tt-${val ? 'taut' : 'contra'}">${kind} <span class="tt-cnt">· constant ${plain(val)}</span></div>`, ok:true, constant:true };
+    }
+    if (vars.length > MAXVARS)
+      return { html: errBlock(`That’s ${vars.length} variables — ${1 << vars.length} rows. Keep it to ${MAXVARS} or fewer (${1 << MAXVARS} rows max).`), ok:false };
+
+    const rows = assignments(vars);
+    const subs = collectSubs(ast);
+    const root = subs.length ? subs[subs.length - 1] : null;
+    // columns shown after the variables
+    const cols = state.showSub
+      ? subs.map(n => ({ label: toStr(n), node: n, isRoot: n === root }))
+      : (root ? [{ label: toStr(root), node: root, isRoot: true }] : []);
+
+    // precompute every column
+    const colVals = cols.map(c => rows.map(a => ev(c.node, a)));
+    const rootIdx = cols.findIndex(c => c.isRoot);
+    const rootCol = rootIdx >= 0 ? colVals[rootIdx] : rows.map(a => ev(ast, a));
+
+    // classification
+    const trues = rootCol.filter(Boolean).length, total = rootCol.length;
+    let cls, clsLabel;
+    if (trues === total) { cls = 'taut'; clsLabel = 'Tautology'; }
+    else if (trues === 0) { cls = 'contra'; clsLabel = 'Contradiction'; }
+    else { cls = 'cont'; clsLabel = 'Contingent'; }
+    const classifyHTML =
+      `<div class="tt-classify tt-${cls}">${clsLabel}` +
+      `<span class="tt-cnt">· true in ${trues} of ${total} rows${cls === 'cont' ? ` · ${trues > 0 ? 'satisfiable' : ''}` : ''}</span></div>`;
+
+    // header
+    const head =
+      vars.map(v => `<th class="tt-var">${escape(v)}</th>`).join('') +
+      cols.map((c, ci) => `<th class="tt-expr-h${ci === 0 ? ' tt-firstexpr' : ''}${c.isRoot ? ' tt-root' : ''}">${escape(c.label)}</th>`).join('');
+    // body
+    const body = rows.map((a, ri) => {
+      const vc = vars.map(v => `<td class="tt-varcell">${cellTF(a[v])}</td>`).join('');
+      const ec = cols.map((c, ci) => `<td class="${ci === 0 ? 'tt-firstexpr ' : ''}${c.isRoot ? 'tt-rootcol' : ''}">${cellTF(colVals[ci][ri])}</td>`).join('');
+      return `<tr>${vc}${ec}</tr>`;
+    }).join('');
+
+    // plain-text version for copy (TSV)
+    const tHead = [...vars, ...cols.map(c => c.label)].join('\t');
+    const tBody = rows.map((a, ri) =>
+      [...vars.map(v => plain(a[v])), ...cols.map((c, ci) => plain(colVals[ci][ri]))].join('\t')).join('\n');
+    const tsv = tHead + '\n' + tBody;
+
+    // normal forms
+    const { dnf, cnf } = normalForms(vars, rows, rootCol);
+    const nfHTML =
+      `<div class="tt-nf">
+        <div class="tt-nf-row"><span class="tt-nf-l">DNF</span><span class="tt-nf-v mono">${escape(dnf)}</span>
+          <button class="copy-btn tt-nf-copy" data-copytext="${escape(dnf)}">Copy</button></div>
+        <div class="tt-nf-row"><span class="tt-nf-l">CNF</span><span class="tt-nf-v mono">${escape(cnf)}</span>
+          <button class="copy-btn tt-nf-copy" data-copytext="${escape(cnf)}">Copy</button></div>
+        <p class="tt-nf-note">DNF = OR of the rows where the expression is true (sum of products). CNF = AND of clauses ruling out the false rows (product of sums).</p>
+      </div>`;
+
+    const tableHTML =
+      `<div class="result tt-tablecard">
+        <button class="copy-btn" data-copytext="${escape(tsv)}">Copy</button>
+        <div class="result-label">Truth table</div>
+        <div class="tt-scroll"><table class="tt-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+      </div>`;
+
+    return { html: classifyHTML + tableHTML + nfHTML, ok:true };
+  }
+
+  function errBlock(msg) {
+    return `<div class="result tt-err"><div class="result-label">Can’t parse that</div><div class="tt-errmsg">${escape(msg)}</div></div>`;
+  }
+
+  /* ── equivalence check (two expressions) ── */
+  function buildCompare() {
+    const box = $('#tt-compare', root);
+    if (!box) return;
+    const e2 = state.expr2.trim();
+    if (!e2) { box.innerHTML = ''; return; }
+    let a1, a2;
+    try { a1 = parse(state.expr); } catch { box.innerHTML = `<div class="tt-cmp tt-cmp-warn">Fix the first expression above to compare.</div>`; return; }
+    try { a2 = parse(e2); } catch (err) { box.innerHTML = `<div class="tt-cmp tt-cmp-warn">Second expression: ${escape(err.message)}</div>`; return; }
+    const vset = new Set();
+    collectVars(a1, vset); collectVars(a2, vset);
+    const vars = sortVars([...vset]);
+    if (vars.length > MAXVARS) { box.innerHTML = `<div class="tt-cmp tt-cmp-warn">Too many variables across both expressions (${vars.length}).</div>`; return; }
+    const rows = vars.length ? assignments(vars) : [{}];
+    let diff = -1, diffCount = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (ev(a1, rows[i]) !== ev(a2, rows[i])) { if (diff < 0) diff = i; diffCount++; }
+    }
+    if (diff < 0) {
+      box.innerHTML =
+        `<div class="tt-cmp tt-cmp-yes">✓ Logically equivalent</div>
+         <p class="tt-cmp-note mono">${escape(toStr(a1))} ≡ ${escape(toStr(a2))} — identical in all ${rows.length} row${rows.length === 1 ? '' : 's'}. Their biconditional is a tautology.</p>`;
+    } else {
+      const a = rows[diff];
+      const where = vars.length ? vars.map(v => `${v}=${plain(a[v])}`).join(', ') : 'the constant case';
+      box.innerHTML =
+        `<div class="tt-cmp tt-cmp-no">✗ Not equivalent</div>
+         <p class="tt-cmp-note mono">Differ in ${diffCount} of ${rows.length} rows. First at ${escape(where)}: left = ${plain(ev(a1, a))}, right = ${plain(ev(a2, a))}.</p>`;
+    }
+  }
+
+  /* ── main render ── */
+  function render() {
+    const res = $('#tt-result', root);
+    if (!res) return;
+    const src = state.expr.trim();
+    if (!src) { res.innerHTML = `<p class="tt-empty">Type an expression to see its truth table.</p>`; buildCompare(); return; }
+    try {
+      const ast = parse(src);
+      res.innerHTML = buildTable(ast).html;
+    } catch (e) {
+      res.innerHTML = errBlock(e.message);
+    }
+    buildCompare();
+  }
+
+  /* ── share-by-code (UTF-8-safe base64url, no backend) ── */
+  const b64urlEncode = bytes => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  function b64urlDecode(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeState() {
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify({ v: 1, e: state.expr, e2: state.expr2 })));
+  }
+  function decodeState(input) {
+    let s = String(input || '').trim();
+    if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, '');
+    if (!s) return null;
+    try {
+      const o = JSON.parse(new TextDecoder().decode(b64urlDecode(s)));
+      if (!o || typeof o.e !== 'string') return null;
+      return { expr: o.e, expr2: typeof o.e2 === 'string' ? o.e2 : '' };
+    } catch { return null; }
+  }
+  function openShareDialog() {
+    const code = encodeState(), link = location.href.split('#')[0] + '#truthtable=' + code;
+    $('#tt-result', root).innerHTML = `
+      <div class="result">
+        <div class="result-label">Share by code</div>
+        <p class="result-sub" style="margin:0 0 12px">No backend — this code is both expressions. Paste it (or the link) into Import on another device.</p>
+        <div class="field"><label>Code</label><textarea class="input mono" id="tt-sharecode" rows="3" readonly></textarea></div>
+        <div class="field"><label>Link</label><input class="input mono" id="tt-sharelink" readonly></div>
+        <div class="btn-row">
+          <button class="btn sm" data-copytext="${escape(code)}">Copy code</button>
+          <button class="btn ghost sm" data-copytext="${escape(link)}">Copy link</button>
+          <button class="btn ghost sm" data-act="back">Back to table</button>
+        </div>
+      </div>`;
+    $('#tt-sharecode', root).value = code;
+    $('#tt-sharelink', root).value = link;
+  }
+  function openImportDialog() {
+    $('#tt-result', root).innerHTML = `
+      <div class="result">
+        <div class="result-label">Import code</div>
+        <p class="result-sub" style="margin:0 0 12px">Paste a #truthtable=… code or link. This replaces both expressions.</p>
+        <div class="field"><textarea class="input mono" id="tt-importbox" rows="3" placeholder="Paste #truthtable=… code or link here"></textarea></div>
+        <div class="btn-row"><button class="btn sm" data-act="import-go">Load</button><button class="btn ghost sm" data-act="back">Cancel</button></div>
+      </div>`;
+  }
+  function applyImport(data) {
+    state.expr = data.expr; state.expr2 = data.expr2;
+    $('#tt-expr', root).value = state.expr;
+    $('#tt-expr2', root).value = state.expr2;
+    if (state.expr2 && $('#tt-compare-wrap', root)) $('#tt-compare-wrap', root).open = true;
+    save(); render();
+  }
+
+  /* ── markup ── */
+  const EXAMPLES = ['P → Q', '¬(P ∧ Q)', '(P ∨ Q) ∧ ¬R', 'P ↔ Q', 'P ⊕ Q', '(P → Q) ∧ (Q → R)'];
+  const PALETTE = ['¬', '∧', '∨', '⊕', '→', '↔', '↑', '↓', '(', ')'];
+  root.innerHTML = `
+    <p class="help">Build a truth table from a logic expression. Type it any way you like — words (<span class="mono">AND OR NOT XOR</span>), symbols (<span class="mono">∧ ∨ ¬ → ↔</span>), programming (<span class="mono">&amp;&amp; || ! ^</span>), or ASCII (<span class="mono">&amp; | ~ -&gt; &lt;-&gt;</span>). Variables are letters like <span class="mono">P, Q, R</span>; <span class="mono">T</span>/<span class="mono">F</span> (or <span class="mono">1</span>/<span class="mono">0</span>) are constants.</p>
+    <div class="tt-palette" id="tt-palette" role="group" aria-label="Insert a logic symbol">
+      ${PALETTE.map(s => `<button class="tt-sym" data-ins="${escape(s)}" type="button">${escape(s)}</button>`).join('')}
+    </div>
+    <div class="field">
+      <label for="tt-expr">Expression</label>
+      <input class="input mono" id="tt-expr" value="${escape(state.expr)}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="e.g. (P ∧ Q) → R">
+    </div>
+    <div class="tt-examples" aria-label="Examples">
+      <span class="tt-ex-l">Try:</span>
+      ${EXAMPLES.map(e => `<button class="tt-ex" data-ex="${escape(e)}" type="button">${escape(e)}</button>`).join('')}
+    </div>
+    <div class="tt-opts">
+      <label class="tt-opt"><input type="checkbox" id="tt-sub"${state.showSub ? ' checked' : ''}> Subexpression columns</label>
+      <label class="tt-opt"><input type="checkbox" id="tt-num"${state.numbers ? ' checked' : ''}> Show 1 / 0</label>
+    </div>
+    <div id="tt-result" aria-live="polite"></div>
+    <details class="tt-compare-box" id="tt-compare-wrap"${state.expr2 ? ' open' : ''}>
+      <summary>Compare two expressions (equivalence)</summary>
+      <div class="field" style="margin-top:12px">
+        <label for="tt-expr2">Second expression</label>
+        <input class="input mono" id="tt-expr2" value="${escape(state.expr2)}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="e.g. ¬P ∨ Q">
+      </div>
+      <div id="tt-compare"></div>
+    </details>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn ghost sm" data-act="share">Share by code</button>
+      <button class="btn ghost sm" data-act="import">Import code</button>
+    </div>
+    <p class="tt-foot">Operator precedence, high → low: <span class="mono">¬</span> · <span class="mono">∧ ↑</span> · <span class="mono">⊕ ⊙</span> · <span class="mono">∨ ↓</span> · <span class="mono">→</span> · <span class="mono">↔</span>. <span class="mono">→</span> is right-associative; use parentheses when in doubt. <span class="mono">A'</span> means ¬A.</p>`;
+
+  /* track the last-focused expression field so the palette inserts in the right place */
+  let activeField = $('#tt-expr', root);
+  function insertSymbol(sym) {
+    const inp = activeField || $('#tt-expr', root);
+    const a = inp.selectionStart ?? inp.value.length, b = inp.selectionEnd ?? inp.value.length;
+    const pad = /[A-Za-z0-9_)]$/.test(inp.value.slice(0, a)) && sym !== ')' && sym !== '(' ? ' ' : '';
+    const ins = (sym === '(' || sym === ')') ? sym : pad + sym + ' ';
+    inp.value = inp.value.slice(0, a) + ins + inp.value.slice(b);
+    const pos = a + ins.length;
+    inp.focus(); inp.setSelectionRange(pos, pos);
+    if (inp.id === 'tt-expr2') state.expr2 = inp.value; else state.expr = inp.value;
+    save(); render();
+  }
+
+  /* ── events (delegated; the body node is replaced on close so these drop) ── */
+  root.addEventListener('focusin', e => {
+    if (e.target.id === 'tt-expr' || e.target.id === 'tt-expr2') activeField = e.target;
+  });
+  root.addEventListener('input', e => {
+    if (e.target.id === 'tt-expr')  { state.expr  = e.target.value; save(); render(); }
+    else if (e.target.id === 'tt-expr2') { state.expr2 = e.target.value; save(); render(); }
+  });
+  root.addEventListener('change', e => {
+    if (e.target.id === 'tt-sub') { state.showSub = e.target.checked; save(); render(); }
+    else if (e.target.id === 'tt-num') { state.numbers = e.target.checked; save(); render(); }
+  });
+  root.addEventListener('click', e => {
+    let b;
+    if ((b = e.target.closest('[data-copytext]'))) { copy(b.getAttribute('data-copytext') || '', b); return; }
+    if ((b = e.target.closest('[data-ins]'))) { insertSymbol(b.getAttribute('data-ins')); return; }
+    if ((b = e.target.closest('[data-ex]'))) {
+      state.expr = b.getAttribute('data-ex');
+      $('#tt-expr', root).value = state.expr;
+      save(); render(); return;
+    }
+    if ((b = e.target.closest('[data-act]'))) {
+      const a = b.dataset.act;
+      if (a === 'share') openShareDialog();
+      else if (a === 'import') openImportDialog();
+      else if (a === 'back') render();
+      else if (a === 'import-go') {
+        const data = decodeState($('#tt-importbox', root).value);
+        if (!data) { showToast('That code didn’t decode.'); return; }
+        applyImport(data); showToast('Imported expressions.');
+      }
+    }
+  });
+
+  /* ── one-time scoped styles ── */
+  if (!document.getElementById('tt-style')) {
+    const st = document.createElement('style');
+    st.id = 'tt-style';
+    st.textContent = `
+      .tt-palette{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+      .tt-sym{font-family:var(--mono);font-size:16px;line-height:1;min-width:38px;height:38px;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+      .tt-sym:hover{border-color:var(--accent);color:var(--accent)}
+      .tt-examples{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 4px}
+      .tt-ex-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+      .tt-ex{font-family:var(--mono);font-size:13px;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);padding:5px 9px;cursor:pointer}
+      .tt-ex:hover{color:var(--ink);border-color:var(--ink-2)}
+      .tt-opts{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0 4px}
+      .tt-opt{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);cursor:pointer}
+      .tt-empty{color:var(--muted);font-size:14px;margin:18px 0}
+      .tt-classify{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-family:var(--serif);font-size:22px;margin:16px 0 10px;padding:8px 14px;border-radius:3px;border:1px solid var(--rule);background:var(--paper-2)}
+      .tt-classify.tt-taut{color:var(--accent-3);border-color:color-mix(in srgb,var(--accent-3) 45%,transparent)}
+      .tt-classify.tt-contra{color:var(--pink);border-color:color-mix(in srgb,var(--pink) 45%,transparent)}
+      .tt-classify.tt-cont{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+      .tt-cnt{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+      .tt-tablecard{padding-top:14px}
+      .tt-scroll{overflow-x:auto;margin-top:6px;border:1px solid var(--rule);border-radius:3px}
+      .tt-table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13.5px}
+      .tt-table th,.tt-table td{padding:6px 12px;text-align:center;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+      .tt-table thead th{position:sticky;top:0;background:var(--paper-2);border-bottom:1px solid var(--rule);color:var(--ink-2);font-weight:500}
+      .tt-table th.tt-var{color:var(--purple)}
+      .tt-table th.tt-expr-h{color:var(--ink-2)}
+      .tt-table .tt-firstexpr{border-left:2px solid var(--rule)}
+      .tt-table th.tt-root{color:var(--accent);background:var(--accent-soft)}
+      .tt-table td.tt-rootcol{background:color-mix(in srgb,var(--accent-soft) 60%,transparent)}
+      .tt-table tbody tr:hover td{background:var(--paper-2)}
+      .tt-table tbody tr:hover td.tt-rootcol{background:var(--accent-soft)}
+      .tt-cell.tt-t{color:var(--accent-3)}
+      .tt-cell.tt-f{color:var(--muted)}
+      .tt-nf{margin:14px 0 4px;display:flex;flex-direction:column;gap:8px}
+      .tt-nf-row{position:relative;display:flex;align-items:baseline;gap:10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:10px 14px;padding-right:64px}
+      .tt-nf-l{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted);min-width:30px}
+      .tt-nf-v{font-size:14px;color:var(--ink);word-break:break-word}
+      .tt-nf-copy{position:absolute;top:8px;right:8px}
+      .tt-nf-note{font-size:12.5px;color:var(--muted);margin:2px 0 0;line-height:1.5}
+      .tt-compare-box{margin-top:18px;border:1px solid var(--rule);border-radius:3px;padding:12px 14px;background:var(--paper-2)}
+      .tt-compare-box summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+      .tt-compare-box summary:hover{color:var(--ink)}
+      .tt-cmp{font-family:var(--serif);font-size:19px;margin-top:12px}
+      .tt-cmp-yes{color:var(--accent-3)}
+      .tt-cmp-no{color:var(--pink)}
+      .tt-cmp-warn{color:var(--orange);font-family:var(--sans);font-size:13.5px;margin-top:12px}
+      .tt-cmp-note{font-size:12.5px;color:var(--muted);margin:4px 0 0;line-height:1.5;word-break:break-word}
+      .tt-err .tt-errmsg{font-family:var(--sans);font-size:14px;color:var(--ink-2);line-height:1.5}
+      .tt-foot{font-size:12px;color:var(--muted);line-height:1.6;margin-top:16px}
+    `;
+    document.head.appendChild(st);
+  }
+
+  /* ── first paint ── */
+  render();
+
+  /* ── incoming share link (#truthtable=CODE) ── */
+  (function checkSharedLink() {
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0 || !/truthtable/i.test(h.slice(0, eq))) return;
+    const data = decodeState(h.slice(eq + 1));
+    if (!data) return;
+    setTimeout(() => {
+      if (confirm('Load the shared expression(s) into the truth table? This replaces what’s here.')) {
+        applyImport(data); showToast('Loaded shared expression.');
       }
     }, 350);
   })();
