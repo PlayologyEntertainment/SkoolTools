@@ -94,9 +94,17 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
   the known/unknown species via one tap.
 - ✅ Builds on the existing Moles / Molarity / pH / Gas-law / Stoich modules.
 
-### 1.5 Periodic Table → trend overlays
-- Heat-map overlays for electronegativity, atomic radius, ionization energy.
-- Cheap to add (data + color scale on existing grid); very "studyable."
+### 1.5 Periodic Table → trend overlays  ✅ *shipped*
+- ✅ New **Trends** mode with **heat-map overlays** for electronegativity
+  (Pauling), atomic radius (covalent), and first ionization energy — switchable
+  via a property selector, with a live color-scale legend (min/max + units).
+- ✅ Elements without measured data (noble-gas EN, most synthetics) render as a
+  striped "no data" cell rather than a misleading color.
+- ✅ Trend-aware detail panel (value, high→low rank, all three properties, and a
+  plain-language "increases →, decreases ↓" note); the three properties are also
+  surfaced in Browse-mode element details.
+- ✅ Data + color scale layered on the existing 118-cell grid; Browse / Electron
+  / Quiz modes unchanged.
 
 ### 1.6 Flashcards / Vocab → import + share-by-code
 - **Anki `.csv` import** and Quizlet paste.
