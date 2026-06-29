@@ -4232,7 +4232,7 @@ function registerTools() {
   TOOLS.push({ id:'periodic', shelf:'lab', icon:'🧪', name:'Periodic Table',
     desc:'All 118, quiz mode.', keywords:['element','chemistry','atom','periodic','symbol'], mount: mountPeriodic });
   TOOLS.push({ id:'chem', shelf:'lab', icon:'⚗️', name:'Chemistry Helpers',
-    desc:'Moles, pH, stoich, gas laws.', tag:'upgraded', keywords:['mole','ph','stoich','chemistry','molarity','gas','heat','percent','composition','molar','mass','dilution'],
+    desc:'Balancer, titration, moles, pH, stoich.', tag:'upgraded', keywords:['mole','ph','stoich','chemistry','molarity','gas','heat','percent','composition','molar','mass','dilution','balance','equation','balancer','titration','limiting','reagent','yield','acid','base','equivalence'],
     mount: mountChem });
   TOOLS.push({ id:'physics', shelf:'lab', icon:'🧲', name:'Physics Solver',
     desc:'Rearrange & solve with units.', tag:'upgraded', keywords:['physics','equation','solve','kinematics','force','energy','wave','ohm','coulomb','momentum','circular','projectile'], mount: mountPhysics });
@@ -8601,13 +8601,117 @@ function mountChem(root) {
 
   const pulse = el => { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); };
 
+  const sub = s => String(s).replace(/(\d+)/g, m => m.replace(/\d/g, d => '₀₁₂₃₄₅₆₇₈₉'[d]));
+  const pretty = f => sub(f);
+
+  /* ---- Count atoms per element in a formula (any valid symbol, no MM needed) ---- */
+  function countAtoms(formula) {
+    let f = formula.trim().replace(/\s+/g, '');
+    let i = 0;
+    function group() {
+      const local = {};
+      while (i < f.length) {
+        const ch = f[i];
+        if (ch === ')' || ch === ']') break;
+        if (ch === '(' || ch === '[') {
+          i++;
+          const inner = group();
+          i++; // skip closing bracket
+          let ns = ''; while (i < f.length && /\d/.test(f[i])) ns += f[i++];
+          const mult = ns ? parseInt(ns) : 1;
+          for (const [k,v] of Object.entries(inner)) local[k] = (local[k]||0) + v*mult;
+        } else if (/[A-Z]/.test(ch)) {
+          let sym = ch; i++;
+          while (i < f.length && /[a-z]/.test(f[i])) sym += f[i++];
+          let ns = ''; while (i < f.length && /\d/.test(f[i])) ns += f[i++];
+          local[sym] = (local[sym]||0) + (ns ? parseInt(ns) : 1);
+        } else {
+          throw new Error(`Unexpected character "${ch}" in ${formula}`);
+        }
+      }
+      return local;
+    }
+    const out = group();
+    if (i !== f.length) throw new Error(`Unbalanced parentheses in ${formula}`);
+    if (Object.keys(out).length === 0) throw new Error(`Empty formula`);
+    return out;
+  }
+
+  /* ---- Exact-fraction helpers for the null-space balancer ---- */
+  const igcd = (a,b) => { a=Math.abs(a); b=Math.abs(b); while(b){ [a,b]=[b,a%b]; } return a||1; };
+  const ilcm = (a,b) => Math.abs(a/igcd(a,b)*b);
+  function fr(n, d=1){ if(d===0) throw new Error('div0'); if(d<0){n=-n;d=-d;} const g=igcd(n,d)||1; return [n/g, d/g]; }
+  const frAdd = (a,b)=>fr(a[0]*b[1]+b[0]*a[1], a[1]*b[1]);
+  const frSub = (a,b)=>fr(a[0]*b[1]-b[0]*a[1], a[1]*b[1]);
+  const frMul = (a,b)=>fr(a[0]*b[0], a[1]*b[1]);
+  const frDiv = (a,b)=>fr(a[0]*b[1], a[1]*b[0]);
+
+  /* ---- Balance: species = [{formula, counts, side:1|-1}] ; returns integer coeffs or throws ---- */
+  function balanceEquation(reactants, products) {
+    const species = [
+      ...reactants.map(s => ({ ...s, side: 1 })),
+      ...products.map(s => ({ ...s, side: -1 })),
+    ];
+    const elements = [...new Set(species.flatMap(s => Object.keys(s.counts)))];
+    if (species.length < 2) throw new Error('Need at least two species.');
+    // Build matrix A (elements × species) of fractions; reactants +, products −
+    const A = elements.map(el =>
+      species.map(s => fr((s.counts[el]||0) * s.side, 1))
+    );
+    const rows = A.length, cols = species.length;
+    // Gaussian elimination → RREF over rationals
+    const M = A.map(r => r.slice());
+    const pivotCol = [];
+    let r = 0;
+    for (let c = 0; c < cols && r < rows; c++) {
+      let piv = -1;
+      for (let k = r; k < rows; k++) if (M[k][c][0] !== 0) { piv = k; break; }
+      if (piv === -1) continue;
+      [M[r], M[piv]] = [M[piv], M[r]];
+      const inv = M[r][c];
+      for (let c2 = 0; c2 < cols; c2++) M[r][c2] = frDiv(M[r][c2], inv);
+      for (let k = 0; k < rows; k++) {
+        if (k === r || M[k][c][0] === 0) continue;
+        const factor = M[k][c];
+        for (let c2 = 0; c2 < cols; c2++) M[k][c2] = frSub(M[k][c2], frMul(factor, M[r][c2]));
+      }
+      pivotCol.push(c); r++;
+    }
+    const pivots = new Set(pivotCol);
+    const free = [];
+    for (let c = 0; c < cols; c++) if (!pivots.has(c)) free.push(c);
+    if (free.length === 0) throw new Error('No solution — check the formulas.');
+    if (free.length > 1) throw new Error('Underdetermined (multiple independent reactions). Balance them separately.');
+    const fc = free[0];
+    // Set free var = 1, back out pivots
+    const x = new Array(cols).fill(null).map(()=>fr(0,1));
+    x[fc] = fr(1,1);
+    for (let i2 = 0; i2 < pivotCol.length; i2++) {
+      const c = pivotCol[i2];
+      x[c] = frSub(fr(0,1), M[i2][fc]); // pivot = -(coeff of free var)
+    }
+    // Scale to smallest positive integers
+    let L = 1; x.forEach(v => { L = ilcm(L, v[1]); });
+    let ints = x.map(v => v[0] * (L / v[1]));
+    let G = 0; ints.forEach(v => { G = igcd(G, v); }); G = G || 1;
+    ints = ints.map(v => v / G);
+    if (ints.some(v => v < 0)) ints = ints.map(v => -v);
+    if (ints.some(v => v <= 0)) throw new Error('Could not find all-positive coefficients.');
+    return { coeffs: ints, elements, species };
+  }
+
+  /* ---- Shared: last balanced equation (feeds Stoichiometry tab) ---- */
+  let lastBalanced = null;
+
   /* ---- Tab bodies ---- */
   const TABS = [
     { id:'moles',  label:'Moles ↔ Mass ↔ Particles' },
     { id:'molarity', label:'Molarity & Dilution' },
     { id:'ph',     label:'pH Scale' },
     { id:'gas',    label:'Gas Laws' },
+    { id:'balancer', label:'Equation Balancer' },
     { id:'stoich', label:'Stoichiometry' },
+    { id:'titration', label:'Limiting Reagent & Titration' },
     { id:'heat',   label:'Heat & Specific Heat' },
     { id:'percent',label:'Percent Composition' },
   ];
@@ -8671,6 +8775,8 @@ function mountChem(root) {
         margin:10px 0;color:var(--ink-2);min-height:40px;
         white-space:pre-wrap;word-break:break-all;
       }
+      .lr-grid{display:grid;grid-template-columns:1.6fr .8fr 1fr .8fr;gap:10px;margin-bottom:6px}
+      @media(max-width:420px){.lr-grid{grid-template-columns:1fr 1fr}}
     </style>
     <div class="chem-tabs">
       ${TABS.map((t,i)=>`<button class="chem-tab${i===0?' active':''}" data-tab="${t.id}">${t.label}</button>`).join('')}
@@ -9221,10 +9327,133 @@ function mountChem(root) {
       });
     },
 
+    /* ========================= EQUATION BALANCER ========================= */
+    balancer() {
+      body().innerHTML = `
+        <p class="help">Enter an unbalanced equation — coefficients are found by the matrix / null-space method, with the work shown. Use <span class="mono">+</span> between species and <span class="mono">-&gt;</span> (or <span class="mono">=</span>) between sides.</p>
+        <div class="chem-compound-list" id="bal-examples"></div>
+        <div class="field">
+          <label>Equation</label>
+          <input class="input mono" id="bal-in" placeholder="C2H6 + O2 -> CO2 + H2O" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="calc-bal">Balance</button>
+          <button class="btn ghost sm" id="reset-bal">Clear</button>
+        </div>
+        <div class="result" id="bal-out" style="display:none">
+          <button class="copy-btn" id="cp-bal">Copy</button>
+          <div class="result-label">Balanced Equation</div>
+          <div id="bal-eq" style="font-family:var(--mono);font-size:18px;line-height:1.7;color:var(--ink);margin:2px 0 12px"></div>
+          <div id="bal-steps" style="font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink-2)"></div>
+          <div class="btn-row" style="margin-top:14px;margin-bottom:0">
+            <button class="btn sm" id="bal-to-stoich">Use in Stoichiometry →</button>
+          </div>
+        </div>
+      `;
+
+      const EXAMPLES = [
+        'C2H6 + O2 -> CO2 + H2O',
+        'Fe + O2 -> Fe2O3',
+        'KMnO4 + HCl -> KCl + MnCl2 + H2O + Cl2',
+        'Al + H2SO4 -> Al2(SO4)3 + H2',
+        'C3H8 + O2 -> CO2 + H2O',
+        'NH3 + O2 -> NO + H2O',
+      ];
+      const exWrap = $('#bal-examples', body());
+      EXAMPLES.forEach(ex => {
+        const b = document.createElement('button');
+        b.className='chem-compound'; b.textContent=pretty(ex.replace(/->/g,'→'));
+        b.onclick=()=>{ $('#bal-in',body()).value=ex; doBalance(); };
+        exWrap.appendChild(b);
+      });
+
+      const parseSide = side => side.split('+').map(s=>s.trim()).filter(Boolean).map(tok=>{
+        // strip any leading coefficient the user typed (we recompute it)
+        const m = tok.match(/^(\d+)\s*(.+)$/);
+        const formula = (m ? m[2] : tok).trim();
+        return { formula, counts: countAtoms(formula) };
+      });
+
+      const doBalance = () => {
+        const raw = $('#bal-in', body()).value.trim();
+        if (!raw) { showToast('Enter an equation.'); return; }
+        const parts = raw.split(/->|=>|→|⇌|=/);
+        if (parts.length !== 2) { showToast('Use one arrow ( -> or = ) between reactants and products.'); return; }
+        let reactants, products, result;
+        try {
+          reactants = parseSide(parts[0]);
+          products  = parseSide(parts[1]);
+          if (!reactants.length || !products.length) throw new Error('Both sides need at least one species.');
+          result = balanceEquation(reactants, products);
+        } catch(e) { showToast(e.message); return; }
+
+        const { coeffs, elements } = result;
+        const nR = reactants.length;
+        const term = (formula, c) => `${c>1?c:''}${pretty(formula)}`;
+        const lhs = reactants.map((s,i)=>term(s.formula, coeffs[i])).join(' + ');
+        const rhs = products.map((s,i)=>term(s.formula, coeffs[nR+i])).join(' + ');
+        const eqHtml = `${lhs} → ${rhs}`;
+        $('#bal-eq', body()).innerHTML = eqHtml;
+
+        // Steps: element matrix + per-element equations + verification
+        const allSp = [...reactants, ...products];
+        const vars = allSp.map((_,i)=> i<26 ? String.fromCharCode(97+i) : 'x'+(i+1));
+        const matRows = elements.map(el => {
+          const cells = allSp.map((s)=> (s.counts[el]||0));
+          return `<tr><td><b>${el}</b></td>${cells.map((v,i)=>`<td style="text-align:center">${i<nR?'':'−'}${v}</td>`).join('')}<td style="text-align:center;color:var(--muted)">= 0</td></tr>`;
+        }).join('');
+        const eqLines = elements.map(el => {
+          const L = reactants.map((s,i)=>{ const n=s.counts[el]||0; return n?`${n>1?n:''}${vars[i]}`:null; }).filter(Boolean).join(' + ') || '0';
+          const R = products.map((s,i)=>{ const n=s.counts[el]||0; return n?`${n>1?n:''}${vars[nR+i]}`:null; }).filter(Boolean).join(' + ') || '0';
+          return `<div><span style="color:var(--accent)">${el}:</span> ${L} = ${R}</div>`;
+        }).join('');
+        const solLine = allSp.map((s,i)=>`${vars[i]} = ${coeffs[i]}`).join(',  ');
+        const verify = elements.map(el=>{
+          const lc = reactants.reduce((t,s,i)=>t+(s.counts[el]||0)*coeffs[i],0);
+          const rc = products.reduce((t,s,i)=>t+(s.counts[el]||0)*coeffs[nR+i],0);
+          return `<div><span style="color:var(--accent)">${el}:</span> ${lc} on each side ${lc===rc?'✓':'✗'}</div>`;
+        }).join('');
+
+        $('#bal-steps', body()).innerHTML = `
+          <div class="chem-section-label" style="margin-top:0">1 · Atom-count matrix (reactants +, products −)</div>
+          <table class="data" style="font-size:11.5px">
+            <thead><tr><th>El</th>${allSp.map((s,i)=>`<th style="text-align:center">${i<nR?'':'−'}${pretty(s.formula)}</th>`).join('')}<th></th></tr></thead>
+            <tbody>${matRows}</tbody>
+          </table>
+          <div class="chem-section-label">2 · Conservation per element (coeffs ${vars.join(', ')})</div>
+          <div style="line-height:1.9">${eqLines}</div>
+          <div class="chem-section-label">3 · Null-space solution → smallest integers</div>
+          <div>${solLine}</div>
+          <div class="chem-section-label">4 · Verify atom balance</div>
+          ${verify}
+        `;
+
+        // store for the Stoichiometry hand-off
+        lastBalanced = {
+          eqHtml,
+          species: allSp.map((s,i)=>({ formula:s.formula, coeff:coeffs[i], side: i<nR?'reactant':'product' })),
+        };
+
+        const out = $('#bal-out', body()); out.style.display=''; pulse(out);
+      };
+
+      $('#calc-bal', body()).addEventListener('click', doBalance);
+      $('#bal-in', body()).addEventListener('keydown', e=>{ if(e.key==='Enter') doBalance(); });
+      $('#reset-bal', body()).addEventListener('click', ()=>{
+        $('#bal-in',body()).value=''; $('#bal-out',body()).style.display='none';
+      });
+      $('#cp-bal', body()).addEventListener('click', ()=>{
+        const txt = $('#bal-eq',body()).innerText + '\n\n' + $('#bal-steps',body()).innerText;
+        copy(txt, $('#cp-bal',body()));
+      });
+      $('#bal-to-stoich', body()).addEventListener('click', ()=>{ if(lastBalanced) switchTab('stoich'); });
+    },
+
     /* ========================= STOICHIOMETRY ========================= */
     stoich() {
       body().innerHTML = `
         <p class="help">Given moles of a reactant or product, find moles of another. Uses the balanced equation's mole ratio.</p>
+        <div id="s-from-bal"></div>
         <div class="grid-2">
           <div class="field">
             <label>Known substance — formula (e.g. O2)</label>
@@ -9282,6 +9511,283 @@ function mountChem(root) {
         $('#stoich-out',body()).style.display='none';
       });
       $('#cp-stoich',body()).addEventListener('click',()=>copy($('#stoich-text',body()).innerText,$('#cp-stoich',body())));
+
+      /* Balancer hand-off: chips that prefill known / unknown with the right coefficient */
+      const fromBal = $('#s-from-bal', body());
+      if (lastBalanced) {
+        const chip = (sp,target) =>
+          `<button class="chem-compound" data-fill="${target}" data-f="${sp.formula}" data-c="${sp.coeff}">${sp.coeff>1?sp.coeff:''}${pretty(sp.formula)}</button>`;
+        fromBal.innerHTML = `
+          <div class="chem-section-label" style="margin-top:0">From balancer — ${lastBalanced.eqHtml}</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin:0 0 4px">Set as known ↓</div>
+          <div class="chem-compound-list">${lastBalanced.species.map(s=>chip(s,'k')).join('')}</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin:6px 0 4px">Set as unknown ↓</div>
+          <div class="chem-compound-list">${lastBalanced.species.map(s=>chip(s,'u')).join('')}</div>
+        `;
+        fromBal.addEventListener('click', e => {
+          const b = e.target.closest('[data-fill]'); if(!b) return;
+          const isK = b.dataset.fill==='k';
+          $(isK?'#s-known-f':'#s-unk-f', body()).value = b.dataset.f;
+          $(isK?'#s-coeff-k':'#s-coeff-u', body()).value = b.dataset.c;
+        });
+        // Sensible default: first reactant as known, first product as unknown
+        const firstR = lastBalanced.species.find(s=>s.side==='reactant');
+        const firstP = lastBalanced.species.find(s=>s.side==='product');
+        if (firstR && !$('#s-known-f',body()).value){ $('#s-known-f',body()).value=firstR.formula; $('#s-coeff-k',body()).value=firstR.coeff; }
+        if (firstP && !$('#s-unk-f',body()).value){ $('#s-unk-f',body()).value=firstP.formula; $('#s-coeff-u',body()).value=firstP.coeff; }
+      }
+    },
+
+    /* ========================= LIMITING REAGENT & TITRATION ========================= */
+    titration() {
+      body().innerHTML = `
+        <div class="gas-toggle" id="titr-mode">
+          <button class="active" data-tm="limiting">Limiting Reagent</button>
+          <button data-tm="acidbase">Acid–Base Titration</button>
+        </div>
+        <div id="titr-body"></div>
+      `;
+      const tb = () => $('#titr-body', body());
+
+      /* ---------- LIMITING REAGENT ---------- */
+      function renderLimiting() {
+        tb().innerHTML = `
+          <p class="help">Find which reactant runs out first, the theoretical yield of a product, and how much excess is left over. Enter each amount in moles or grams.</p>
+          <div id="lr-frombal"></div>
+          <div class="chem-section-label" style="margin-top:0">Reactant A</div>
+          <div class="lr-grid">
+            <div class="field"><label>Formula</label><input class="input mono" id="lr-af" placeholder="N2" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label>Coeff.</label><input class="input mono" id="lr-ac" type="number" min="1" step="1" value="1"></div>
+            <div class="field"><label>Amount</label><input class="input mono" id="lr-aa" type="number" min="0" step="any" placeholder="14"></div>
+            <div class="field"><label>Unit</label><select class="input mono" id="lr-au"><option value="g">g</option><option value="mol">mol</option></select></div>
+          </div>
+          <div class="chem-section-label">Reactant B</div>
+          <div class="lr-grid">
+            <div class="field"><label>Formula</label><input class="input mono" id="lr-bf" placeholder="H2" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label>Coeff.</label><input class="input mono" id="lr-bc" type="number" min="1" step="1" value="3"></div>
+            <div class="field"><label>Amount</label><input class="input mono" id="lr-ba" type="number" min="0" step="any" placeholder="3"></div>
+            <div class="field"><label>Unit</label><select class="input mono" id="lr-bu"><option value="g">g</option><option value="mol">mol</option></select></div>
+          </div>
+          <div class="chem-section-label">Product (for theoretical yield) — optional</div>
+          <div class="grid-2">
+            <div class="field"><label>Formula</label><input class="input mono" id="lr-pf" placeholder="NH3" autocomplete="off" spellcheck="false"></div>
+            <div class="field"><label>Coefficient</label><input class="input mono" id="lr-pc" type="number" min="1" step="1" value="2"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="calc-lr">Calculate</button>
+            <button class="btn ghost sm" id="reset-lr">Clear</button>
+          </div>
+          <div class="result" id="lr-out" style="display:none">
+            <button class="copy-btn" id="cp-lr">Copy</button>
+            <div class="result-label">Limiting Reagent</div>
+            <div id="lr-text" style="font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--ink)"></div>
+          </div>
+        `;
+
+        /* Load from balancer */
+        const fb = $('#lr-frombal', tb());
+        if (lastBalanced) {
+          const reactants = lastBalanced.species.filter(s=>s.side==='reactant');
+          const products  = lastBalanced.species.filter(s=>s.side==='product');
+          if (reactants.length >= 1) {
+            const btn = document.createElement('button');
+            btn.className='btn ghost sm'; btn.style.marginBottom='8px';
+            btn.textContent='⟵ Load from balancer';
+            btn.onclick = () => {
+              const set=(f,c,sp)=>{ if(!sp)return; $(f,tb()).value=sp.formula; $(c,tb()).value=sp.coeff; };
+              set('#lr-af','#lr-ac',reactants[0]);
+              set('#lr-bf','#lr-bc',reactants[1]||reactants[0]);
+              set('#lr-pf','#lr-pc',products[0]);
+            };
+            fb.appendChild(btn);
+            fb.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px">Balanced: ${lastBalanced.eqHtml}</div>`);
+          }
+        }
+
+        const getMol = (pre) => {
+          const f=$('#lr-'+pre+'f',tb()).value.trim();
+          const c=parseFloat($('#lr-'+pre+'c',tb()).value);
+          const amt=parseFloat($('#lr-'+pre+'a',tb()).value);
+          const unit=$('#lr-'+pre+'u',tb()).value;
+          if(!f) return {err:'Enter a formula for reactant '+pre.toUpperCase()+'.'};
+          if(!isFinite(c)||c<1) return {err:'Coefficient for '+pre.toUpperCase()+' must be ≥ 1.'};
+          if(!isFinite(amt)||amt<0) return {err:'Enter an amount for reactant '+pre.toUpperCase()+'.'};
+          let M=null;
+          try { M=parseMolar(f); } catch(e) { if(unit==='g') return {err:'Need a known formula for '+pre.toUpperCase()+' to use grams: '+e.message}; }
+          const mol = unit==='mol' ? amt : amt/M;
+          return { f, c, mol, M, unit, amt };
+        };
+
+        $('#calc-lr', tb()).addEventListener('click', () => {
+          const A=getMol('a'), B=getMol('b');
+          if(A.err){showToast(A.err);return;} if(B.err){showToast(B.err);return;}
+          const rA=A.mol/A.c, rB=B.mol/B.c;
+          const lim = rA<=rB ? A : B, exc = rA<=rB ? B : A;
+          const limR = Math.min(rA,rB);                       // "reaction extent" per coeff
+          const excUsedMol = limR*exc.c;
+          const excLeftMol = exc.mol - excUsedMol;
+          let html = `Moles A (${pretty(A.f)}): <b>${fmtC(A.mol,4)} mol</b>${A.unit==='g'?` (from ${fmtC(A.amt,4)} g)`:''}<br>`;
+          html += `Moles B (${pretty(B.f)}): <b>${fmtC(B.mol,4)} mol</b>${B.unit==='g'?` (from ${fmtC(B.amt,4)} g)`:''}<br><br>`;
+          html += `Ratio mol÷coeff — ${pretty(A.f)}: ${fmtC(rA,4)},  ${pretty(B.f)}: ${fmtC(rB,4)}<br>`;
+          html += `Smaller ratio ⇒ <b style="color:var(--accent)">${pretty(lim.f)} is limiting</b>.<br><br>`;
+          html += `Excess ${pretty(exc.f)} used: <b>${fmtC(excUsedMol,4)} mol</b>; left over: <b>${fmtC(excLeftMol,4)} mol</b>`;
+          if(exc.M) html += ` (${fmtC(excLeftMol*exc.M,4)} g)`;
+          html += `<br>`;
+          const pf=$('#lr-pf',tb()).value.trim(), pc=parseFloat($('#lr-pc',tb()).value);
+          if(pf && isFinite(pc) && pc>=1){
+            const prodMol = limR*pc;
+            html += `<br>Theoretical yield ${pretty(pf)}: <b>${fmtC(prodMol,4)} mol</b>`;
+            try { const Mp=parseMolar(pf); html += ` = <b>${fmtC(prodMol*Mp,4)} g</b>`; } catch(e){}
+          }
+          $('#lr-text',tb()).innerHTML=html;
+          const out=$('#lr-out',tb()); out.style.display=''; pulse(out);
+        });
+        $('#reset-lr', tb()).addEventListener('click', ()=>{
+          ['af','aa','bf','ba','pf'].forEach(k=>$('#lr-'+k,tb()).value='');
+          $('#lr-out',tb()).style.display='none';
+        });
+        $('#cp-lr', tb()).addEventListener('click', ()=>copy($('#lr-text',tb()).innerText,$('#cp-lr',tb())));
+      }
+
+      /* ---------- ACID–BASE TITRATION ---------- */
+      function renderAcidBase() {
+        tb().innerHTML = `
+          <p class="help">Plot the titration curve (pH vs volume of titrant) and find the equivalence point. The titrant is the matching strong reagent.</p>
+          <div class="grid-2">
+            <div class="field">
+              <label>Analyte (in the flask)</label>
+              <select class="input mono" id="ab-type">
+                <option value="sa">Strong acid</option>
+                <option value="wa">Weak acid</option>
+                <option value="sb">Strong base</option>
+                <option value="wb">Weak base</option>
+              </select>
+            </div>
+            <div class="field" id="ab-pk-wrap" style="display:none">
+              <label id="ab-pk-lbl">pKa</label>
+              <input class="input mono" id="ab-pk" type="number" step="any" placeholder="4.76">
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="field"><label>Analyte conc. (M)</label><input class="input mono" id="ab-ca" type="number" min="0" step="any" placeholder="0.10"></div>
+            <div class="field"><label>Analyte volume (mL)</label><input class="input mono" id="ab-va" type="number" min="0" step="any" placeholder="25"></div>
+            <div class="field"><label>Titrant conc. (M)</label><input class="input mono" id="ab-cb" type="number" min="0" step="any" placeholder="0.10"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="calc-ab">Plot curve</button>
+            <button class="btn ghost sm" id="reset-ab">Clear</button>
+          </div>
+          <div class="result" id="ab-out" style="display:none">
+            <div class="result-label">Titration Curve</div>
+            <canvas id="titr-canvas" height="220" style="width:100%;max-height:220px;margin:4px 0 10px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-3)"></canvas>
+            <div id="ab-text" style="font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--ink)"></div>
+          </div>
+        `;
+
+        const pkWrap=$('#ab-pk-wrap',tb()), pkLbl=$('#ab-pk-lbl',tb());
+        const syncType=()=>{
+          const t=$('#ab-type',tb()).value;
+          const weak = t==='wa'||t==='wb';
+          pkWrap.style.display = weak?'':'none';
+          pkLbl.textContent = t==='wb'?'pKb':'pKa';
+        };
+        $('#ab-type',tb()).addEventListener('change', syncType); syncType();
+
+        /* pH model — analyte titrated with the matching strong reagent (1:1 monoprotic) */
+        function makePH(cfg){
+          const Kw=1e-14, {type,Ca,Va,Cb,pk}=cfg;
+          const n0=Ca*Va/1000;                 // mol analyte
+          const acidAnalyte = type==='sa'||type==='wa';
+          return function(V){                  // V = mL titrant
+            const nt=Cb*V/1000;                // mol titrant added
+            const Vt=(Va+V)/1000;              // total L
+            let pH;
+            if(type==='sa'){
+              const d=(n0-nt)/Vt;
+              pH = d>0 ? -Math.log10(d) : d<0 ? 14+Math.log10(-d) : 7;
+            } else if(type==='sb'){
+              const d=(n0-nt)/Vt;
+              pH = d>0 ? 14+Math.log10(d) : d<0 ? -Math.log10(-d) : 7;
+            } else if(type==='wa'){
+              const Ka=Math.pow(10,-pk);
+              if(nt<=0){ pH=-Math.log10(Math.sqrt(Ka*(n0/Vt))); }
+              else if(nt<n0){ pH=pk+Math.log10(nt/(n0-nt)); }
+              else if(nt===n0){ const Kb=Kw/Ka, c=n0/Vt; pH=14+Math.log10(Math.sqrt(Kb*c)); }
+              else { pH=14+Math.log10((nt-n0)/Vt); }
+            } else { // wb
+              const Kb=Math.pow(10,-pk);
+              if(nt<=0){ pH=14+Math.log10(Math.sqrt(Kb*(n0/Vt))); }
+              else if(nt<n0){ const pOH=pk+Math.log10(nt/(n0-nt)); pH=14-pOH; }
+              else if(nt===n0){ const Ka=Kw/Kb, c=n0/Vt; pH=-Math.log10(Math.sqrt(Ka*c)); }
+              else { pH=-Math.log10((nt-n0)/Vt); }
+            }
+            return Math.max(0, Math.min(14, pH));
+          };
+        }
+
+        function drawCurve(phFn, Veq, Vmax, type, pH_eq, pk){
+          const canvas=$('#titr-canvas',tb()); if(!canvas) return;
+          const dpr=window.devicePixelRatio||1;
+          canvas.width=canvas.offsetWidth*dpr; canvas.height=220*dpr;
+          const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+          const W=canvas.offsetWidth, H=220, padl=30, padr=12, padt=12, padb=24, N=300;
+          const px=v=>padl+(v/Vmax)*(W-padl-padr);
+          const py=p=>H-padb-(p/14)*(H-padt-padb);
+          // grid + axis labels (pH 0,7,14)
+          ctx.strokeStyle='rgba(240,233,218,0.10)'; ctx.lineWidth=1; ctx.fillStyle='rgba(131,124,112,0.9)'; ctx.font='10px monospace';
+          [0,7,14].forEach(p=>{ ctx.beginPath(); ctx.moveTo(padl,py(p)); ctx.lineTo(W-padr,py(p)); ctx.stroke(); ctx.textAlign='right'; ctx.fillText(String(p),padl-4,py(p)+3); });
+          // equivalence markers
+          ctx.strokeStyle='#2FE4E4'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+          ctx.beginPath(); ctx.moveTo(px(Veq),padt); ctx.lineTo(px(Veq),H-padb); ctx.stroke();
+          if(type==='wa'||type==='wb'){ ctx.beginPath(); ctx.moveTo(px(Veq/2),padt); ctx.lineTo(px(Veq/2),H-padb); ctx.stroke(); }
+          ctx.setLineDash([]);
+          // curve
+          ctx.strokeStyle='#FF5A3D'; ctx.lineWidth=2; ctx.beginPath();
+          for(let i=0;i<=N;i++){ const v=Vmax*i/N, X=px(v), Y=py(phFn(v)); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }
+          ctx.stroke();
+          // equivalence dot
+          ctx.fillStyle='#2FE4E4'; ctx.beginPath(); ctx.arc(px(Veq),py(pH_eq),3.5,0,7); ctx.fill();
+          // x labels
+          ctx.fillStyle='rgba(131,124,112,0.9)'; ctx.textAlign='center';
+          ctx.fillText('0',px(0),H-8);
+          ctx.fillText(fmtC(Veq,3)+' mL (eq)',px(Veq),H-8);
+          ctx.textAlign='start';
+        }
+
+        $('#calc-ab',tb()).addEventListener('click', ()=>{
+          const type=$('#ab-type',tb()).value;
+          const Ca=parseFloat($('#ab-ca',tb()).value), Va=parseFloat($('#ab-va',tb()).value), Cb=parseFloat($('#ab-cb',tb()).value);
+          const pk=parseFloat($('#ab-pk',tb()).value);
+          if(![Ca,Va,Cb].every(v=>isFinite(v)&&v>0)){showToast('Enter positive concentration and volume values.');return;}
+          if((type==='wa'||type==='wb') && !(isFinite(pk)&&pk>0)){showToast('Enter the '+(type==='wb'?'pKb':'pKa')+' for the weak analyte.');return;}
+          const Veq = Ca*Va/Cb;                       // mL
+          const Vmax = Math.max(Veq*2, Veq+5);
+          const phFn = makePH({type,Ca,Va,Cb,pk});
+          const pH_eq = phFn(Veq);
+          drawCurve(phFn, Veq, Vmax, type, pH_eq, pk);
+          let ind = pH_eq<6 ? 'methyl red / methyl orange' : pH_eq>8 ? 'phenolphthalein' : 'bromothymol blue';
+          let html = `Equivalence volume: <b>${fmtC(Veq,4)} mL</b> of titrant<br>`;
+          html += `pH at equivalence: <b>${fmtC(pH_eq,3)}</b><br>`;
+          html += `Initial pH (0 mL): <b>${fmtC(phFn(0),3)}</b><br>`;
+          if(type==='wa') html += `Half-equivalence (${fmtC(Veq/2,3)} mL): pH = pKa = <b>${fmtC(pk,3)}</b> (buffer region)<br>`;
+          if(type==='wb') html += `Half-equivalence (${fmtC(Veq/2,3)} mL): pOH = pKb, pH = <b>${fmtC(14-pk,3)}</b> (buffer region)<br>`;
+          html += `Suggested indicator: <b>${ind}</b>`;
+          $('#ab-text',tb()).innerHTML=html;
+          const out=$('#ab-out',tb()); out.style.display=''; pulse(out);
+          requestAnimationFrame(()=>drawCurve(phFn, Veq, Vmax, type, pH_eq, pk)); // redraw after layout
+        });
+        $('#reset-ab',tb()).addEventListener('click', ()=>{
+          ['ca','va','cb','pk'].forEach(k=>$('#ab-'+k,tb()).value='');
+          $('#ab-out',tb()).style.display='none';
+        });
+      }
+
+      renderLimiting();
+      $('#titr-mode', body()).addEventListener('click', e=>{
+        const t=e.target.closest('[data-tm]'); if(!t) return;
+        $$('[data-tm]',body()).forEach(x=>x.classList.toggle('active',x===t));
+        if(t.dataset.tm==='limiting') renderLimiting(); else renderAcidBase();
+      });
     },
 
     /* ========================= HEAT ========================= */
@@ -9506,15 +10012,20 @@ function mountChem(root) {
 
   /* ---- Tab switching ---- */
   let curTab = 'moles';
+  function switchTab(id) {
+    if (!renders[id] || id === curTab) {
+      if (id === curTab) return;
+    }
+    curTab = id;
+    $$('.chem-tab', root).forEach(x => x.classList.toggle('active', x.dataset.tab === id));
+    renders[id]();
+  }
   renders[curTab]();
 
   root.addEventListener('click', e => {
     const t = e.target.closest('.chem-tab');
     if (!t || !t.dataset.tab) return;
-    if (t.dataset.tab === curTab) return;
-    curTab = t.dataset.tab;
-    $$('.chem-tab', root).forEach(x => x.classList.toggle('active', x === t));
-    renders[curTab]();
+    switchTab(t.dataset.tab);
   });
 }
 

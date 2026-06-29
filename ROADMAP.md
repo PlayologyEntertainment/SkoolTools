@@ -80,10 +80,19 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
   one/two-tailed selector and a **CI for the difference of means** (paste-from-
   spreadsheet input already supported).
 
-### 1.4 Chemistry Helpers → balancer & titration
-- **Equation balancer** via the matrix/null-space method, with steps shown.
-- **Limiting-reagent / titration** walk-through.
-- Builds on the existing Moles / Molarity / pH / Gas-law / Stoich modules.
+### 1.4 Chemistry Helpers → balancer & titration  ✅ *shipped*
+- ✅ **Equation balancer** via the matrix/null-space method (exact-fraction
+  Gaussian elimination), with the atom-count matrix, per-element conservation
+  equations, solved coefficients, and atom-balance verification all shown.
+- ✅ **Limiting-reagent** walk-through: identifies the limiting reactant, excess
+  remaining (mol + g), and theoretical yield of a chosen product. Accepts mol
+  or g input.
+- ✅ **Acid–base titration** with a plotted **pH-vs-volume curve** (strong/weak
+  acid & base), equivalence + half-equivalence markers, equivalence pH, and a
+  suggested indicator.
+- ✅ Balancer **auto-feeds the Stoichiometry tab** — solved coefficients prefill
+  the known/unknown species via one tap.
+- ✅ Builds on the existing Moles / Molarity / pH / Gas-law / Stoich modules.
 
 ### 1.5 Periodic Table → trend overlays
 - Heat-map overlays for electronegativity, atomic radius, ionization energy.
