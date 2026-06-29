@@ -121,9 +121,19 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
   lite" explainer appears on flip, and the editor keeps the New/Learning/Review/
   Mature badges and a **Reset SRS** control.
 
-### 1.7 Citation Helper → autofill + annotated mode
-- **DOI / ISBN autofill** when online; full manual entry when offline.
-- **Annotated bibliography** mode (note field per source).
+### 1.7 Citation Helper → autofill + annotated mode  ✅ *shipped*
+- ✅ **DOI / ISBN autofill** via an explicit, on-demand "Look up" — DOI through
+  **Crossref**, ISBN through **Open Library** with a **Google Books** fallback.
+  No auto-fetch: the lookup only fires on click, with a one-line disclosure that
+  this is the *only* time the tool touches the network. Offline (or no match)
+  falls straight back to full manual entry.
+- ✅ **Annotated bibliography** mode: build citations and **+ Add to
+  bibliography** to a saved, reorderable list (↑/↓, Sort A–Z, Edit, Remove),
+  each entry carrying its own annotation note. One shared style applies across
+  the whole list; everything persists in localStorage.
+- ✅ **Export**: Copy all, download **.md** (annotations as block-quotes) and
+  **.txt** (hanging-indent), plus a print-friendly **Print / PDF** view — no
+  backend, no account.
 
 ### 1.8 Notes / Essay Planner → outline-to-draft scaffolding
 - Structural (not AI) scaffold: thesis → topic sentences → evidence slots →
