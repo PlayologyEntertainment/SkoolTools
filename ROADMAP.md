@@ -249,9 +249,23 @@ deterministic and offline:
   accidentals); a small triangle-wave synth plays scales/chords/keys.
 - ✅ Autosaves to localStorage and **shares by code** (`#music=…`), no backend.
 
-### 2.7 Exam Cheat-Sheet Builder  *(Words/Toolbox)*  ⬜ *not started*
-Compose a one-page allowed formula sheet from the Formula Reference; print to
-PDF. Maps to real exam policies (a permitted, integrity-safe use).
+### 2.7 Exam Cheat-Sheet Builder  *(Toolbox)*  ✅ *shipped*
+Compose a one-page allowed formula sheet, then print to PDF. Maps to real exam
+policies (a permitted, integrity-safe use).
+- ✅ Builds from the **shared Formula Reference library** (lifted to module scope
+  as `FREF_FORMULAS` so the Reference and the Builder are one source of truth)
+  **plus the student's own custom formulas / notes** — searchable, category-
+  filterable, checkbox-picked.
+- ✅ **One-tap subject presets** (Algebra, Geometry, Trig, AP Calc, AP Physics,
+  Chemistry, AP Stats) bulk-select a sensible set you then trim.
+- ✅ **Full layout controls** on a live WYSIWYG paper preview: sheet title,
+  course/exam label, **1/2/3 columns**, **compact/normal/roomy** density,
+  **Letter/A4** page size, **portrait/landscape**, and show/hide notes &
+  variables. Formulas render through the shared lazy-loaded KaTeX path (raw-text
+  fallback offline).
+- ✅ **Print / PDF** (the preview *is* the print artifact, sized via a dynamic
+  `@page` rule), **.md export**, **localStorage autosave**, and **share-by-code**
+  (`#cheatsheet=…` code + link, no backend).
 
 ---
 
@@ -298,13 +312,13 @@ revisit after Phase 2.
 | Phase | Theme | Items | Status |
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
-| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | 🟡 6 / 7 shipped (Cheat-Sheet open) |
+| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
 | 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | ⬜ not started |
 
-**Status as of 2026-06-29:** Phase 1 is complete. Phase 2 has six of seven
-tools shipped; only the **Exam Cheat-Sheet Builder (2.7)** remains. Phase 3
-(the Test Prep, Accessibility & Focus, and optional CS shelves) has not been
-started.
+**Status as of 2026-06-29:** Phases 1 and 2 are complete — all eight Phase 1
+deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
+Builder, 2.7**) are shipped. Phase 3 (the Test Prep, Accessibility & Focus, and
+optional CS shelves) has not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.

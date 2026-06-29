@@ -5795,6 +5795,9 @@ function registerTools() {
   TOOLS.push({ id:'music', shelf:'toolbox', icon:'🎵', name:'Music Theory',
     desc:'Scales, intervals, chords, keys, metronome — on a staff.', tag:'new',
     keywords:['music','theory','scale','scales','mode','major','minor','pentatonic','blues','dorian','interval','intervals','chord','chords','triad','seventh','key','key signature','circle of fifths','staff','notation','treble','bass','clef','metronome','tempo','bpm','sharp','flat','accidental','note','pitch','degree','tap tempo'], mount: mountMusic });
+  TOOLS.push({ id:'cheatsheet', shelf:'toolbox', icon:'🗒️', name:'Cheat-Sheet Builder',
+    desc:'Compose a one-page formula sheet; print to PDF.', tag:'new',
+    keywords:['cheat sheet','cheatsheet','formula sheet','exam','test','reference','one page','print','pdf','allowed','notes','study','formulas','equations','crib'], mount: mountCheatSheet });
 }
 
 /* ========== CALCULUS SOLVER ==========
@@ -6355,7 +6358,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -18609,6 +18612,352 @@ function mountGraphing(root) {
 
 registerTools();
 
+/* ── Shared formula library ─────────────────────────────────────────
+   Source of truth for both the Formula Reference (mountFormulas) and the
+   Exam Cheat-Sheet Builder (mountCheatSheet). Defined at module scope so
+   either tool can open first without depending on the other. */
+/* Each formula: { cat, name, latex, raw (plain fallback), note, vars[] } */
+// Each formula: { id, cat, name, latex, raw (plain fallback), note, vars[] }
+const FREF_FORMULAS = [
+
+  /* ─── ALGEBRA ─── */
+  { cat:'algebra', name:'Quadratic Formula',
+    latex:'x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}',
+    raw: 'x = (-b ± √(b²-4ac)) / 2a',
+    note:'Roots of ax² + bx + c = 0. Discriminant b²−4ac determines root type.',
+    vars:['a','b','c — coefficients'] },
+
+  { cat:'algebra', name:'Slope-Intercept Form',
+    latex:'y = mx + b',
+    raw:'y = mx + b',
+    note:'m is slope, b is y-intercept.',
+    vars:['m — slope','b — y-intercept'] },
+
+  { cat:'algebra', name:'Point-Slope Form',
+    latex:'y - y_1 = m(x - x_1)',
+    raw:'y − y₁ = m(x − x₁)',
+    note:'Line through (x₁, y₁) with slope m.',
+    vars:['m — slope','(x₁,y₁) — point on line'] },
+
+  { cat:'algebra', name:'Distance Formula',
+    latex:'d = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}',
+    raw:'d = √((x₂−x₁)² + (y₂−y₁)²)',
+    note:'Distance between two points in the plane.',
+    vars:['(x₁,y₁)','(x₂,y₂) — two points'] },
+
+  { cat:'algebra', name:'Midpoint Formula',
+    latex:'M = \\left(\\dfrac{x_1+x_2}{2},\\, \\dfrac{y_1+y_2}{2}\\right)',
+    raw:'M = ((x₁+x₂)/2, (y₁+y₂)/2)',
+    note:'Midpoint of a line segment.',
+    vars:['(x₁,y₁)','(x₂,y₂) — endpoints'] },
+
+  { cat:'algebra', name:'FOIL / Difference of Squares',
+    latex:'(a+b)(a-b) = a^2 - b^2',
+    raw:'(a+b)(a−b) = a²−b²',
+    note:'Also: (a+b)² = a²+2ab+b², (a−b)² = a²−2ab+b²',
+    vars:['a, b — any expressions'] },
+
+  { cat:'algebra', name:'Laws of Exponents',
+    latex:'a^m \\cdot a^n = a^{m+n}, \\quad \\dfrac{a^m}{a^n} = a^{m-n}, \\quad (a^m)^n = a^{mn}',
+    raw:'aᵐ·aⁿ = aᵐ⁺ⁿ, aᵐ/aⁿ = aᵐ⁻ⁿ, (aᵐ)ⁿ = aᵐⁿ',
+    note:'Also: a⁰ = 1, a⁻ⁿ = 1/aⁿ (a ≠ 0)',
+    vars:['a — base','m,n — exponents'] },
+
+  { cat:'algebra', name:'Logarithm Rules',
+    latex:'\\log_b(xy) = \\log_b x + \\log_b y,\\quad \\log_b\\!\\tfrac{x}{y} = \\log_b x - \\log_b y',
+    raw:'logb(xy) = logb(x) + logb(y); logb(x/y) = logb(x) − logb(y)',
+    note:'Power rule: logb(xⁿ) = n·logb(x). Change of base: logb(x) = ln(x)/ln(b)',
+    vars:['b — base (b>0, b≠1)','x,y > 0'] },
+
+  { cat:'algebra', name:'Arithmetic Sequence',
+    latex:'a_n = a_1 + (n-1)d, \\quad S_n = \\dfrac{n}{2}(a_1 + a_n)',
+    raw:'aₙ = a₁ + (n−1)d, Sₙ = n/2·(a₁+aₙ)',
+    note:'d is the common difference.',
+    vars:['a₁ — first term','d — common difference','n — term count'] },
+
+  { cat:'algebra', name:'Geometric Sequence',
+    latex:'a_n = a_1 r^{n-1}, \\quad S_n = \\dfrac{a_1(1-r^n)}{1-r}',
+    raw:'aₙ = a₁·rⁿ⁻¹, Sₙ = a₁(1−rⁿ)/(1−r)',
+    note:'Infinite sum (|r|<1): S = a₁/(1−r)',
+    vars:['a₁ — first term','r — common ratio'] },
+
+  /* ─── GEOMETRY ─── */
+  { cat:'geometry', name:'Area — Rectangle',
+    latex:'A = l \\times w',
+    raw:'A = l × w',
+    note:'Length times width.',
+    vars:['l — length','w — width'] },
+
+  { cat:'geometry', name:'Area — Triangle',
+    latex:'A = \\dfrac{1}{2} b h',
+    raw:'A = ½bh',
+    note:'Base times height, divided by two.',
+    vars:['b — base','h — perpendicular height'] },
+
+  { cat:'geometry', name:'Area — Circle',
+    latex:'A = \\pi r^2, \\quad C = 2\\pi r',
+    raw:'A = πr², C = 2πr',
+    note:'A is area, C is circumference.',
+    vars:['r — radius'] },
+
+  { cat:'geometry', name:'Pythagorean Theorem',
+    latex:'a^2 + b^2 = c^2',
+    raw:'a² + b² = c²',
+    note:'For right triangles; c is the hypotenuse.',
+    vars:['a,b — legs','c — hypotenuse'] },
+
+  { cat:'geometry', name:'Law of Sines',
+    latex:'\\dfrac{a}{\\sin A} = \\dfrac{b}{\\sin B} = \\dfrac{c}{\\sin C}',
+    raw:'a/sinA = b/sinB = c/sinC',
+    note:'Works for any triangle. Side lowercase, opposite angle uppercase.',
+    vars:['a,b,c — sides','A,B,C — opposite angles'] },
+
+  { cat:'geometry', name:'Law of Cosines',
+    latex:'c^2 = a^2 + b^2 - 2ab\\cos C',
+    raw:'c² = a² + b² − 2ab·cos C',
+    note:'Generalises Pythagoras. Use when you know two sides and the included angle.',
+    vars:['a,b,c — sides','C — angle opposite c'] },
+
+  { cat:'geometry', name:'Volume — Sphere',
+    latex:'V = \\dfrac{4}{3}\\pi r^3, \\quad SA = 4\\pi r^2',
+    raw:'V = 4/3·πr³, SA = 4πr²',
+    note:'V is volume, SA is surface area.',
+    vars:['r — radius'] },
+
+  { cat:'geometry', name:'Volume — Cylinder',
+    latex:'V = \\pi r^2 h, \\quad SA = 2\\pi r h + 2\\pi r^2',
+    raw:'V = πr²h, SA = 2πrh + 2πr²',
+    vars:['r — radius','h — height'] },
+
+  { cat:'geometry', name:'Volume — Cone',
+    latex:'V = \\dfrac{1}{3}\\pi r^2 h, \\quad l = \\sqrt{r^2+h^2}',
+    raw:'V = ⅓πr²h, slant l = √(r²+h²)',
+    vars:['r — base radius','h — height','l — slant height'] },
+
+  { cat:'geometry', name:'Heron\'s Formula',
+    latex:'A = \\sqrt{s(s-a)(s-b)(s-c)}, \\quad s = \\dfrac{a+b+c}{2}',
+    raw:'A = √(s(s−a)(s−b)(s−c)), s = (a+b+c)/2',
+    note:'Area of any triangle given three sides.',
+    vars:['a,b,c — sides','s — semi-perimeter'] },
+
+  /* ─── TRIGONOMETRY ─── */
+  { cat:'trig', name:'SOH-CAH-TOA',
+    latex:'\\sin\\theta = \\frac{\\text{opp}}{\\text{hyp}},\\quad \\cos\\theta = \\frac{\\text{adj}}{\\text{hyp}},\\quad \\tan\\theta = \\frac{\\text{opp}}{\\text{adj}}',
+    raw:'sin θ = opp/hyp, cos θ = adj/hyp, tan θ = opp/adj',
+    note:'For right triangles only.',
+    vars:['θ — angle','opp/adj/hyp — opposite, adjacent, hypotenuse'] },
+
+  { cat:'trig', name:'Pythagorean Identity',
+    latex:'\\sin^2\\theta + \\cos^2\\theta = 1',
+    raw:'sin²θ + cos²θ = 1',
+    note:'Also: 1 + tan²θ = sec²θ; 1 + cot²θ = csc²θ',
+    vars:['θ — any angle'] },
+
+  { cat:'trig', name:'Double Angle Formulas',
+    latex:'\\sin 2\\theta = 2\\sin\\theta\\cos\\theta,\\quad \\cos 2\\theta = \\cos^2\\theta - \\sin^2\\theta',
+    raw:'sin 2θ = 2sinθcosθ, cos 2θ = cos²θ − sin²θ',
+    note:'Also: cos 2θ = 2cos²θ−1 = 1−2sin²θ',
+    vars:['θ — angle'] },
+
+  { cat:'trig', name:'Sum & Difference',
+    latex:'\\sin(A\\pm B) = \\sin A\\cos B \\pm \\cos A\\sin B',
+    raw:'sin(A±B) = sinA cosB ± cosA sinB',
+    note:'cos(A±B) = cosA cosB ∓ sinA sinB',
+    vars:['A, B — angles'] },
+
+  { cat:'trig', name:'Unit Circle Key Values',
+    latex:'\\sin 30°=\\tfrac{1}{2},\\; \\cos 30°=\\tfrac{\\sqrt{3}}{2},\\; \\tan 45°=1,\\; \\sin 90°=1',
+    raw:'sin30°=½, cos30°=√3/2, tan45°=1, sin90°=1',
+    note:'Full unit circle: 0,30,45,60,90 degrees (0,π/6,π/4,π/3,π/2 rad)',
+    vars:[] },
+
+  { cat:'trig', name:'Radians ↔ Degrees',
+    latex:'\\text{rad} = \\text{deg} \\times \\dfrac{\\pi}{180}, \\quad \\text{deg} = \\text{rad} \\times \\dfrac{180}{\\pi}',
+    raw:'rad = deg × π/180, deg = rad × 180/π',
+    vars:[] },
+
+  /* ─── CALCULUS ─── */
+  { cat:'calculus', name:'Limit Definition of Derivative',
+    latex:'f\'(x) = \\lim_{h \\to 0} \\dfrac{f(x+h)-f(x)}{h}',
+    raw:"f'(x) = lim[h→0] (f(x+h)−f(x))/h",
+    note:'The instantaneous rate of change.',
+    vars:['f — function','h → 0 — infinitesimal increment'] },
+
+  { cat:'calculus', name:'Power Rule',
+    latex:'\\dfrac{d}{dx}[x^n] = nx^{n-1}',
+    raw:'d/dx[xⁿ] = nxⁿ⁻¹',
+    note:'Applies for any real n.',
+    vars:['n — exponent'] },
+
+  { cat:'calculus', name:'Chain Rule',
+    latex:'\\dfrac{d}{dx}[f(g(x))] = f\'(g(x)) \\cdot g\'(x)',
+    raw:"d/dx[f(g(x))] = f'(g(x)) · g'(x)",
+    note:'For composite functions.',
+    vars:["f, g — functions"] },
+
+  { cat:'calculus', name:'Product & Quotient Rule',
+    latex:'(uv)\' = u\'v + uv\', \\quad \\left(\\dfrac{u}{v}\\right)\' = \\dfrac{u\'v - uv\'}{v^2}',
+    raw:"(uv)' = u'v + uv', (u/v)' = (u'v − uv')/v²",
+    vars:['u, v — differentiable functions'] },
+
+  { cat:'calculus', name:'Common Derivatives',
+    latex:'\\tfrac{d}{dx}\\sin x = \\cos x,\\quad \\tfrac{d}{dx}e^x = e^x,\\quad \\tfrac{d}{dx}\\ln x = \\tfrac{1}{x}',
+    raw:'d/dx sin x = cos x, d/dx eˣ = eˣ, d/dx ln x = 1/x',
+    note:'Also: d/dx cos x = −sin x, d/dx tan x = sec²x',
+    vars:[] },
+
+  { cat:'calculus', name:'Fundamental Theorem',
+    latex:'\\int_a^b f(x)\\,dx = F(b) - F(a) \\quad \\text{where } F\'=f',
+    raw:'∫[a to b] f(x)dx = F(b)−F(a), where F\'=f',
+    note:'Links differentiation and integration.',
+    vars:['F — antiderivative of f','a,b — limits'] },
+
+  { cat:'calculus', name:'Common Integrals',
+    latex:'\\int x^n\\,dx = \\dfrac{x^{n+1}}{n+1}+C,\\quad \\int e^x\\,dx = e^x+C,\\quad \\int \\tfrac{1}{x}\\,dx = \\ln|x|+C',
+    raw:'∫xⁿdx = xⁿ⁺¹/(n+1)+C, ∫eˣdx = eˣ+C, ∫1/x dx = ln|x|+C',
+    note:'C is the constant of integration.',
+    vars:[] },
+
+  { cat:'calculus', name:'Substitution Rule',
+    latex:'\\int f(g(x))g\'(x)\\,dx = \\int f(u)\\,du,\\quad u = g(x)',
+    raw:"∫f(g(x))g'(x)dx = ∫f(u)du, u = g(x)",
+    note:'The integration analogue of the chain rule.',
+    vars:['u — substitution variable'] },
+
+  /* ─── PHYSICS ─── */
+  { cat:'physics', name:'Kinematics (Big 4)',
+    latex:'v = v_0 + at,\\quad x = x_0 + v_0 t + \\tfrac{1}{2}at^2,\\quad v^2 = v_0^2 + 2a\\Delta x',
+    raw:'v = v₀ + at, x = x₀ + v₀t + ½at², v² = v₀² + 2aΔx',
+    note:'Constant acceleration only.',
+    vars:['v₀ — initial velocity','a — acceleration','t — time','x — displacement'] },
+
+  { cat:'physics', name:'Newton\'s Second Law',
+    latex:'F = ma',
+    raw:'F = ma',
+    note:'Net force equals mass times acceleration.',
+    vars:['F — force (N)','m — mass (kg)','a — acceleration (m/s²)'] },
+
+  { cat:'physics', name:'Work & Energy',
+    latex:'W = Fd\\cos\\theta,\\quad KE = \\tfrac{1}{2}mv^2,\\quad PE = mgh',
+    raw:'W = Fd cosθ, KE = ½mv², PE = mgh',
+    note:'Energy is conserved: KE + PE = const (no friction).',
+    vars:['F — force','d — displacement','m — mass','g ≈ 9.8 m/s²','h — height'] },
+
+  { cat:'physics', name:'Gravitational Force',
+    latex:'F = G\\dfrac{m_1 m_2}{r^2}, \\quad G = 6.674\\times10^{-11}',
+    raw:'F = G·m₁m₂/r², G ≈ 6.674×10⁻¹¹ N·m²/kg²',
+    note:'Universal law of gravitation.',
+    vars:['m₁,m₂ — masses (kg)','r — distance (m)'] },
+
+  { cat:'physics', name:'Ohm\'s Law & Power',
+    latex:'V = IR, \\quad P = IV = \\dfrac{V^2}{R} = I^2R',
+    raw:'V = IR, P = IV = V²/R = I²R',
+    note:'V in volts, I in amps, R in ohms, P in watts.',
+    vars:['V — voltage','I — current','R — resistance','P — power'] },
+
+  { cat:'physics', name:'Wave Equation',
+    latex:'v = f\\lambda, \\quad f = \\dfrac{1}{T}',
+    raw:'v = fλ, f = 1/T',
+    note:'Speed equals frequency times wavelength.',
+    vars:['v — wave speed','f — frequency (Hz)','λ — wavelength (m)','T — period (s)'] },
+
+  { cat:'physics', name:'Ideal Gas Law',
+    latex:'PV = nRT, \\quad R = 8.314\\,\\text{J/mol·K}',
+    raw:'PV = nRT, R = 8.314 J/(mol·K)',
+    note:'Also useful: P₁V₁/T₁ = P₂V₂/T₂ (combined gas law)',
+    vars:['P — pressure (Pa)','V — volume (m³)','n — moles','T — temperature (K)'] },
+
+  { cat:'physics', name:'Coulomb\'s Law',
+    latex:'F = k\\dfrac{q_1 q_2}{r^2}, \\quad k = 8.99\\times10^9',
+    raw:'F = k·q₁q₂/r², k ≈ 8.99×10⁹ N·m²/C²',
+    note:'Force between two point charges.',
+    vars:['q₁,q₂ — charges (C)','r — distance (m)'] },
+
+  /* ─── CHEMISTRY ─── */
+  { cat:'chemistry', name:'Mole Relationships',
+    latex:'n = \\dfrac{m}{M} = \\dfrac{N}{N_A},\\quad N_A = 6.022\\times10^{23}',
+    raw:'n = m/M = N/Nₐ, Nₐ = 6.022×10²³ mol⁻¹',
+    note:'n moles, m mass (g), M molar mass (g/mol), N number of particles.',
+    vars:['n — moles','m — mass','M — molar mass','Nₐ — Avogadro\'s number'] },
+
+  { cat:'chemistry', name:'Molarity & Dilution',
+    latex:'c = \\dfrac{n}{V},\\quad c_1V_1 = c_2V_2',
+    raw:'c = n/V, c₁V₁ = c₂V₂',
+    note:'c in mol/L (M), V in litres.',
+    vars:['c — concentration','n — moles','V — volume (L)'] },
+
+  { cat:'chemistry', name:'pH Scale',
+    latex:'\\text{pH} = -\\log[\\text{H}^+],\\quad [\\text{H}^+][\\text{OH}^-] = 10^{-14}',
+    raw:'pH = −log[H⁺], [H⁺][OH⁻] = 10⁻¹⁴',
+    note:'pH + pOH = 14 at 25°C.',
+    vars:['[H⁺] — hydrogen ion concentration (mol/L)'] },
+
+  { cat:'chemistry', name:'Ideal Gas (Chem)',
+    latex:'PV = nRT,\\quad \\text{STP}: 1\\,\\text{mol} = 22.4\\,\\text{L}',
+    raw:'PV = nRT, at STP: 1 mol = 22.4 L',
+    note:'R = 0.08206 L·atm/(mol·K) when P in atm.',
+    vars:['P — pressure','V — volume','n — moles','T — temperature (K)'] },
+
+  { cat:'chemistry', name:'Percent Composition',
+    latex:'\\%\\text{ element} = \\dfrac{\\text{mass of element}}{\\text{molar mass of compound}}\\times100',
+    raw:'% element = (mass of element / molar mass) × 100',
+    vars:[] },
+
+  { cat:'chemistry', name:'Heat & Specific Heat',
+    latex:'q = mc\\Delta T,\\quad c_{\\text{water}}=4.18\\,\\text{J/(g·°C)}',
+    raw:'q = mcΔT, c_water = 4.18 J/(g·°C)',
+    note:'q in joules, m in grams, c in J/(g·°C), ΔT in °C or K.',
+    vars:['q — heat','m — mass','c — specific heat','ΔT — temperature change'] },
+
+  /* ─── STATISTICS ─── */
+  { cat:'stats', name:'Mean, Median, Mode',
+    latex:'\\bar{x} = \\dfrac{\\sum x_i}{n}',
+    raw:'x̄ = Σxᵢ/n',
+    note:'Mean = sum/count. Median = middle value. Mode = most frequent.',
+    vars:['xᵢ — data values','n — count'] },
+
+  { cat:'stats', name:'Standard Deviation',
+    latex:'s = \\sqrt{\\dfrac{\\sum(x_i - \\bar{x})^2}{n-1}}, \\quad \\sigma = \\sqrt{\\dfrac{\\sum(x_i-\\mu)^2}{N}}',
+    raw:'s = √(Σ(xᵢ−x̄)²/(n−1)), σ = √(Σ(xᵢ−μ)²/N)',
+    note:'s uses n−1 (sample), σ uses N (population).',
+    vars:['x̄/μ — mean','n/N — sample/population size'] },
+
+  { cat:'stats', name:'Combinations & Permutations',
+    latex:'\\binom{n}{k} = \\dfrac{n!}{k!(n-k)!}, \\quad P(n,k) = \\dfrac{n!}{(n-k)!}',
+    raw:'C(n,k) = n!/(k!(n−k)!), P(n,k) = n!/(n−k)!',
+    note:'C = choose (order irrelevant), P = arrange (order matters).',
+    vars:['n — total items','k — chosen items'] },
+
+  { cat:'stats', name:'Probability Basics',
+    latex:'P(A\\cup B) = P(A)+P(B)-P(A\\cap B)',
+    raw:'P(A∪B) = P(A)+P(B)−P(A∩B)',
+    note:'P(A|B) = P(A∩B)/P(B). Independent: P(A∩B) = P(A)·P(B)',
+    vars:['A,B — events'] },
+
+  { cat:'stats', name:'Z-Score',
+    latex:'z = \\dfrac{x - \\mu}{\\sigma}',
+    raw:'z = (x − μ)/σ',
+    note:'Number of standard deviations from the mean.',
+    vars:['x — data value','μ — mean','σ — standard deviation'] },
+
+  { cat:'stats', name:'Linear Regression',
+    latex:'\\hat{y} = b_0 + b_1 x, \\quad b_1 = \\dfrac{\\sum(x_i-\\bar{x})(y_i-\\bar{y})}{\\sum(x_i-\\bar{x})^2}',
+    raw:'ŷ = b₀ + b₁x, b₁ = Σ(xᵢ−x̄)(yᵢ−ȳ)/Σ(xᵢ−x̄)²',
+    note:'b₀ = ȳ − b₁x̄ (y-intercept)',
+    vars:['b₀ — intercept','b₁ — slope','x̄,ȳ — sample means'] },
+];
+
+/* Category metadata (id, label, accent color). */
+const FREF_CATS = [
+  { id:'algebra',   label:'Algebra',     color:'var(--accent)' },
+  { id:'geometry',  label:'Geometry',    color:'var(--accent-4)' },
+  { id:'trig',      label:'Trig',        color:'var(--purple)' },
+  { id:'calculus',  label:'Calculus',    color:'var(--pink)' },
+  { id:'physics',   label:'Physics',     color:'var(--accent-3)' },
+  { id:'chemistry', label:'Chemistry',   color:'var(--accent-2)' },
+  { id:'stats',     label:'Statistics',  color:'#5BC9D6' },
+];
+
 /* ========== FORMULA REFERENCE ========== */
 function mountFormulas(root) {
 
@@ -18657,347 +19006,9 @@ function mountFormulas(root) {
     el.textContent = latex;
   }
 
-  /* ── Formula data ── */
-  // Each formula: { id, cat, name, latex, raw (plain fallback), note, vars[] }
-  const FORMULAS = [
-
-    /* ─── ALGEBRA ─── */
-    { cat:'algebra', name:'Quadratic Formula',
-      latex:'x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}',
-      raw: 'x = (-b ± √(b²-4ac)) / 2a',
-      note:'Roots of ax² + bx + c = 0. Discriminant b²−4ac determines root type.',
-      vars:['a','b','c — coefficients'] },
-
-    { cat:'algebra', name:'Slope-Intercept Form',
-      latex:'y = mx + b',
-      raw:'y = mx + b',
-      note:'m is slope, b is y-intercept.',
-      vars:['m — slope','b — y-intercept'] },
-
-    { cat:'algebra', name:'Point-Slope Form',
-      latex:'y - y_1 = m(x - x_1)',
-      raw:'y − y₁ = m(x − x₁)',
-      note:'Line through (x₁, y₁) with slope m.',
-      vars:['m — slope','(x₁,y₁) — point on line'] },
-
-    { cat:'algebra', name:'Distance Formula',
-      latex:'d = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}',
-      raw:'d = √((x₂−x₁)² + (y₂−y₁)²)',
-      note:'Distance between two points in the plane.',
-      vars:['(x₁,y₁)','(x₂,y₂) — two points'] },
-
-    { cat:'algebra', name:'Midpoint Formula',
-      latex:'M = \\left(\\dfrac{x_1+x_2}{2},\\, \\dfrac{y_1+y_2}{2}\\right)',
-      raw:'M = ((x₁+x₂)/2, (y₁+y₂)/2)',
-      note:'Midpoint of a line segment.',
-      vars:['(x₁,y₁)','(x₂,y₂) — endpoints'] },
-
-    { cat:'algebra', name:'FOIL / Difference of Squares',
-      latex:'(a+b)(a-b) = a^2 - b^2',
-      raw:'(a+b)(a−b) = a²−b²',
-      note:'Also: (a+b)² = a²+2ab+b², (a−b)² = a²−2ab+b²',
-      vars:['a, b — any expressions'] },
-
-    { cat:'algebra', name:'Laws of Exponents',
-      latex:'a^m \\cdot a^n = a^{m+n}, \\quad \\dfrac{a^m}{a^n} = a^{m-n}, \\quad (a^m)^n = a^{mn}',
-      raw:'aᵐ·aⁿ = aᵐ⁺ⁿ, aᵐ/aⁿ = aᵐ⁻ⁿ, (aᵐ)ⁿ = aᵐⁿ',
-      note:'Also: a⁰ = 1, a⁻ⁿ = 1/aⁿ (a ≠ 0)',
-      vars:['a — base','m,n — exponents'] },
-
-    { cat:'algebra', name:'Logarithm Rules',
-      latex:'\\log_b(xy) = \\log_b x + \\log_b y,\\quad \\log_b\\!\\tfrac{x}{y} = \\log_b x - \\log_b y',
-      raw:'logb(xy) = logb(x) + logb(y); logb(x/y) = logb(x) − logb(y)',
-      note:'Power rule: logb(xⁿ) = n·logb(x). Change of base: logb(x) = ln(x)/ln(b)',
-      vars:['b — base (b>0, b≠1)','x,y > 0'] },
-
-    { cat:'algebra', name:'Arithmetic Sequence',
-      latex:'a_n = a_1 + (n-1)d, \\quad S_n = \\dfrac{n}{2}(a_1 + a_n)',
-      raw:'aₙ = a₁ + (n−1)d, Sₙ = n/2·(a₁+aₙ)',
-      note:'d is the common difference.',
-      vars:['a₁ — first term','d — common difference','n — term count'] },
-
-    { cat:'algebra', name:'Geometric Sequence',
-      latex:'a_n = a_1 r^{n-1}, \\quad S_n = \\dfrac{a_1(1-r^n)}{1-r}',
-      raw:'aₙ = a₁·rⁿ⁻¹, Sₙ = a₁(1−rⁿ)/(1−r)',
-      note:'Infinite sum (|r|<1): S = a₁/(1−r)',
-      vars:['a₁ — first term','r — common ratio'] },
-
-    /* ─── GEOMETRY ─── */
-    { cat:'geometry', name:'Area — Rectangle',
-      latex:'A = l \\times w',
-      raw:'A = l × w',
-      note:'Length times width.',
-      vars:['l — length','w — width'] },
-
-    { cat:'geometry', name:'Area — Triangle',
-      latex:'A = \\dfrac{1}{2} b h',
-      raw:'A = ½bh',
-      note:'Base times height, divided by two.',
-      vars:['b — base','h — perpendicular height'] },
-
-    { cat:'geometry', name:'Area — Circle',
-      latex:'A = \\pi r^2, \\quad C = 2\\pi r',
-      raw:'A = πr², C = 2πr',
-      note:'A is area, C is circumference.',
-      vars:['r — radius'] },
-
-    { cat:'geometry', name:'Pythagorean Theorem',
-      latex:'a^2 + b^2 = c^2',
-      raw:'a² + b² = c²',
-      note:'For right triangles; c is the hypotenuse.',
-      vars:['a,b — legs','c — hypotenuse'] },
-
-    { cat:'geometry', name:'Law of Sines',
-      latex:'\\dfrac{a}{\\sin A} = \\dfrac{b}{\\sin B} = \\dfrac{c}{\\sin C}',
-      raw:'a/sinA = b/sinB = c/sinC',
-      note:'Works for any triangle. Side lowercase, opposite angle uppercase.',
-      vars:['a,b,c — sides','A,B,C — opposite angles'] },
-
-    { cat:'geometry', name:'Law of Cosines',
-      latex:'c^2 = a^2 + b^2 - 2ab\\cos C',
-      raw:'c² = a² + b² − 2ab·cos C',
-      note:'Generalises Pythagoras. Use when you know two sides and the included angle.',
-      vars:['a,b,c — sides','C — angle opposite c'] },
-
-    { cat:'geometry', name:'Volume — Sphere',
-      latex:'V = \\dfrac{4}{3}\\pi r^3, \\quad SA = 4\\pi r^2',
-      raw:'V = 4/3·πr³, SA = 4πr²',
-      note:'V is volume, SA is surface area.',
-      vars:['r — radius'] },
-
-    { cat:'geometry', name:'Volume — Cylinder',
-      latex:'V = \\pi r^2 h, \\quad SA = 2\\pi r h + 2\\pi r^2',
-      raw:'V = πr²h, SA = 2πrh + 2πr²',
-      vars:['r — radius','h — height'] },
-
-    { cat:'geometry', name:'Volume — Cone',
-      latex:'V = \\dfrac{1}{3}\\pi r^2 h, \\quad l = \\sqrt{r^2+h^2}',
-      raw:'V = ⅓πr²h, slant l = √(r²+h²)',
-      vars:['r — base radius','h — height','l — slant height'] },
-
-    { cat:'geometry', name:'Heron\'s Formula',
-      latex:'A = \\sqrt{s(s-a)(s-b)(s-c)}, \\quad s = \\dfrac{a+b+c}{2}',
-      raw:'A = √(s(s−a)(s−b)(s−c)), s = (a+b+c)/2',
-      note:'Area of any triangle given three sides.',
-      vars:['a,b,c — sides','s — semi-perimeter'] },
-
-    /* ─── TRIGONOMETRY ─── */
-    { cat:'trig', name:'SOH-CAH-TOA',
-      latex:'\\sin\\theta = \\frac{\\text{opp}}{\\text{hyp}},\\quad \\cos\\theta = \\frac{\\text{adj}}{\\text{hyp}},\\quad \\tan\\theta = \\frac{\\text{opp}}{\\text{adj}}',
-      raw:'sin θ = opp/hyp, cos θ = adj/hyp, tan θ = opp/adj',
-      note:'For right triangles only.',
-      vars:['θ — angle','opp/adj/hyp — opposite, adjacent, hypotenuse'] },
-
-    { cat:'trig', name:'Pythagorean Identity',
-      latex:'\\sin^2\\theta + \\cos^2\\theta = 1',
-      raw:'sin²θ + cos²θ = 1',
-      note:'Also: 1 + tan²θ = sec²θ; 1 + cot²θ = csc²θ',
-      vars:['θ — any angle'] },
-
-    { cat:'trig', name:'Double Angle Formulas',
-      latex:'\\sin 2\\theta = 2\\sin\\theta\\cos\\theta,\\quad \\cos 2\\theta = \\cos^2\\theta - \\sin^2\\theta',
-      raw:'sin 2θ = 2sinθcosθ, cos 2θ = cos²θ − sin²θ',
-      note:'Also: cos 2θ = 2cos²θ−1 = 1−2sin²θ',
-      vars:['θ — angle'] },
-
-    { cat:'trig', name:'Sum & Difference',
-      latex:'\\sin(A\\pm B) = \\sin A\\cos B \\pm \\cos A\\sin B',
-      raw:'sin(A±B) = sinA cosB ± cosA sinB',
-      note:'cos(A±B) = cosA cosB ∓ sinA sinB',
-      vars:['A, B — angles'] },
-
-    { cat:'trig', name:'Unit Circle Key Values',
-      latex:'\\sin 30°=\\tfrac{1}{2},\\; \\cos 30°=\\tfrac{\\sqrt{3}}{2},\\; \\tan 45°=1,\\; \\sin 90°=1',
-      raw:'sin30°=½, cos30°=√3/2, tan45°=1, sin90°=1',
-      note:'Full unit circle: 0,30,45,60,90 degrees (0,π/6,π/4,π/3,π/2 rad)',
-      vars:[] },
-
-    { cat:'trig', name:'Radians ↔ Degrees',
-      latex:'\\text{rad} = \\text{deg} \\times \\dfrac{\\pi}{180}, \\quad \\text{deg} = \\text{rad} \\times \\dfrac{180}{\\pi}',
-      raw:'rad = deg × π/180, deg = rad × 180/π',
-      vars:[] },
-
-    /* ─── CALCULUS ─── */
-    { cat:'calculus', name:'Limit Definition of Derivative',
-      latex:'f\'(x) = \\lim_{h \\to 0} \\dfrac{f(x+h)-f(x)}{h}',
-      raw:"f'(x) = lim[h→0] (f(x+h)−f(x))/h",
-      note:'The instantaneous rate of change.',
-      vars:['f — function','h → 0 — infinitesimal increment'] },
-
-    { cat:'calculus', name:'Power Rule',
-      latex:'\\dfrac{d}{dx}[x^n] = nx^{n-1}',
-      raw:'d/dx[xⁿ] = nxⁿ⁻¹',
-      note:'Applies for any real n.',
-      vars:['n — exponent'] },
-
-    { cat:'calculus', name:'Chain Rule',
-      latex:'\\dfrac{d}{dx}[f(g(x))] = f\'(g(x)) \\cdot g\'(x)',
-      raw:"d/dx[f(g(x))] = f'(g(x)) · g'(x)",
-      note:'For composite functions.',
-      vars:["f, g — functions"] },
-
-    { cat:'calculus', name:'Product & Quotient Rule',
-      latex:'(uv)\' = u\'v + uv\', \\quad \\left(\\dfrac{u}{v}\\right)\' = \\dfrac{u\'v - uv\'}{v^2}',
-      raw:"(uv)' = u'v + uv', (u/v)' = (u'v − uv')/v²",
-      vars:['u, v — differentiable functions'] },
-
-    { cat:'calculus', name:'Common Derivatives',
-      latex:'\\tfrac{d}{dx}\\sin x = \\cos x,\\quad \\tfrac{d}{dx}e^x = e^x,\\quad \\tfrac{d}{dx}\\ln x = \\tfrac{1}{x}',
-      raw:'d/dx sin x = cos x, d/dx eˣ = eˣ, d/dx ln x = 1/x',
-      note:'Also: d/dx cos x = −sin x, d/dx tan x = sec²x',
-      vars:[] },
-
-    { cat:'calculus', name:'Fundamental Theorem',
-      latex:'\\int_a^b f(x)\\,dx = F(b) - F(a) \\quad \\text{where } F\'=f',
-      raw:'∫[a to b] f(x)dx = F(b)−F(a), where F\'=f',
-      note:'Links differentiation and integration.',
-      vars:['F — antiderivative of f','a,b — limits'] },
-
-    { cat:'calculus', name:'Common Integrals',
-      latex:'\\int x^n\\,dx = \\dfrac{x^{n+1}}{n+1}+C,\\quad \\int e^x\\,dx = e^x+C,\\quad \\int \\tfrac{1}{x}\\,dx = \\ln|x|+C',
-      raw:'∫xⁿdx = xⁿ⁺¹/(n+1)+C, ∫eˣdx = eˣ+C, ∫1/x dx = ln|x|+C',
-      note:'C is the constant of integration.',
-      vars:[] },
-
-    { cat:'calculus', name:'Substitution Rule',
-      latex:'\\int f(g(x))g\'(x)\\,dx = \\int f(u)\\,du,\\quad u = g(x)',
-      raw:"∫f(g(x))g'(x)dx = ∫f(u)du, u = g(x)",
-      note:'The integration analogue of the chain rule.',
-      vars:['u — substitution variable'] },
-
-    /* ─── PHYSICS ─── */
-    { cat:'physics', name:'Kinematics (Big 4)',
-      latex:'v = v_0 + at,\\quad x = x_0 + v_0 t + \\tfrac{1}{2}at^2,\\quad v^2 = v_0^2 + 2a\\Delta x',
-      raw:'v = v₀ + at, x = x₀ + v₀t + ½at², v² = v₀² + 2aΔx',
-      note:'Constant acceleration only.',
-      vars:['v₀ — initial velocity','a — acceleration','t — time','x — displacement'] },
-
-    { cat:'physics', name:'Newton\'s Second Law',
-      latex:'F = ma',
-      raw:'F = ma',
-      note:'Net force equals mass times acceleration.',
-      vars:['F — force (N)','m — mass (kg)','a — acceleration (m/s²)'] },
-
-    { cat:'physics', name:'Work & Energy',
-      latex:'W = Fd\\cos\\theta,\\quad KE = \\tfrac{1}{2}mv^2,\\quad PE = mgh',
-      raw:'W = Fd cosθ, KE = ½mv², PE = mgh',
-      note:'Energy is conserved: KE + PE = const (no friction).',
-      vars:['F — force','d — displacement','m — mass','g ≈ 9.8 m/s²','h — height'] },
-
-    { cat:'physics', name:'Gravitational Force',
-      latex:'F = G\\dfrac{m_1 m_2}{r^2}, \\quad G = 6.674\\times10^{-11}',
-      raw:'F = G·m₁m₂/r², G ≈ 6.674×10⁻¹¹ N·m²/kg²',
-      note:'Universal law of gravitation.',
-      vars:['m₁,m₂ — masses (kg)','r — distance (m)'] },
-
-    { cat:'physics', name:'Ohm\'s Law & Power',
-      latex:'V = IR, \\quad P = IV = \\dfrac{V^2}{R} = I^2R',
-      raw:'V = IR, P = IV = V²/R = I²R',
-      note:'V in volts, I in amps, R in ohms, P in watts.',
-      vars:['V — voltage','I — current','R — resistance','P — power'] },
-
-    { cat:'physics', name:'Wave Equation',
-      latex:'v = f\\lambda, \\quad f = \\dfrac{1}{T}',
-      raw:'v = fλ, f = 1/T',
-      note:'Speed equals frequency times wavelength.',
-      vars:['v — wave speed','f — frequency (Hz)','λ — wavelength (m)','T — period (s)'] },
-
-    { cat:'physics', name:'Ideal Gas Law',
-      latex:'PV = nRT, \\quad R = 8.314\\,\\text{J/mol·K}',
-      raw:'PV = nRT, R = 8.314 J/(mol·K)',
-      note:'Also useful: P₁V₁/T₁ = P₂V₂/T₂ (combined gas law)',
-      vars:['P — pressure (Pa)','V — volume (m³)','n — moles','T — temperature (K)'] },
-
-    { cat:'physics', name:'Coulomb\'s Law',
-      latex:'F = k\\dfrac{q_1 q_2}{r^2}, \\quad k = 8.99\\times10^9',
-      raw:'F = k·q₁q₂/r², k ≈ 8.99×10⁹ N·m²/C²',
-      note:'Force between two point charges.',
-      vars:['q₁,q₂ — charges (C)','r — distance (m)'] },
-
-    /* ─── CHEMISTRY ─── */
-    { cat:'chemistry', name:'Mole Relationships',
-      latex:'n = \\dfrac{m}{M} = \\dfrac{N}{N_A},\\quad N_A = 6.022\\times10^{23}',
-      raw:'n = m/M = N/Nₐ, Nₐ = 6.022×10²³ mol⁻¹',
-      note:'n moles, m mass (g), M molar mass (g/mol), N number of particles.',
-      vars:['n — moles','m — mass','M — molar mass','Nₐ — Avogadro\'s number'] },
-
-    { cat:'chemistry', name:'Molarity & Dilution',
-      latex:'c = \\dfrac{n}{V},\\quad c_1V_1 = c_2V_2',
-      raw:'c = n/V, c₁V₁ = c₂V₂',
-      note:'c in mol/L (M), V in litres.',
-      vars:['c — concentration','n — moles','V — volume (L)'] },
-
-    { cat:'chemistry', name:'pH Scale',
-      latex:'\\text{pH} = -\\log[\\text{H}^+],\\quad [\\text{H}^+][\\text{OH}^-] = 10^{-14}',
-      raw:'pH = −log[H⁺], [H⁺][OH⁻] = 10⁻¹⁴',
-      note:'pH + pOH = 14 at 25°C.',
-      vars:['[H⁺] — hydrogen ion concentration (mol/L)'] },
-
-    { cat:'chemistry', name:'Ideal Gas (Chem)',
-      latex:'PV = nRT,\\quad \\text{STP}: 1\\,\\text{mol} = 22.4\\,\\text{L}',
-      raw:'PV = nRT, at STP: 1 mol = 22.4 L',
-      note:'R = 0.08206 L·atm/(mol·K) when P in atm.',
-      vars:['P — pressure','V — volume','n — moles','T — temperature (K)'] },
-
-    { cat:'chemistry', name:'Percent Composition',
-      latex:'\\%\\text{ element} = \\dfrac{\\text{mass of element}}{\\text{molar mass of compound}}\\times100',
-      raw:'% element = (mass of element / molar mass) × 100',
-      vars:[] },
-
-    { cat:'chemistry', name:'Heat & Specific Heat',
-      latex:'q = mc\\Delta T,\\quad c_{\\text{water}}=4.18\\,\\text{J/(g·°C)}',
-      raw:'q = mcΔT, c_water = 4.18 J/(g·°C)',
-      note:'q in joules, m in grams, c in J/(g·°C), ΔT in °C or K.',
-      vars:['q — heat','m — mass','c — specific heat','ΔT — temperature change'] },
-
-    /* ─── STATISTICS ─── */
-    { cat:'stats', name:'Mean, Median, Mode',
-      latex:'\\bar{x} = \\dfrac{\\sum x_i}{n}',
-      raw:'x̄ = Σxᵢ/n',
-      note:'Mean = sum/count. Median = middle value. Mode = most frequent.',
-      vars:['xᵢ — data values','n — count'] },
-
-    { cat:'stats', name:'Standard Deviation',
-      latex:'s = \\sqrt{\\dfrac{\\sum(x_i - \\bar{x})^2}{n-1}}, \\quad \\sigma = \\sqrt{\\dfrac{\\sum(x_i-\\mu)^2}{N}}',
-      raw:'s = √(Σ(xᵢ−x̄)²/(n−1)), σ = √(Σ(xᵢ−μ)²/N)',
-      note:'s uses n−1 (sample), σ uses N (population).',
-      vars:['x̄/μ — mean','n/N — sample/population size'] },
-
-    { cat:'stats', name:'Combinations & Permutations',
-      latex:'\\binom{n}{k} = \\dfrac{n!}{k!(n-k)!}, \\quad P(n,k) = \\dfrac{n!}{(n-k)!}',
-      raw:'C(n,k) = n!/(k!(n−k)!), P(n,k) = n!/(n−k)!',
-      note:'C = choose (order irrelevant), P = arrange (order matters).',
-      vars:['n — total items','k — chosen items'] },
-
-    { cat:'stats', name:'Probability Basics',
-      latex:'P(A\\cup B) = P(A)+P(B)-P(A\\cap B)',
-      raw:'P(A∪B) = P(A)+P(B)−P(A∩B)',
-      note:'P(A|B) = P(A∩B)/P(B). Independent: P(A∩B) = P(A)·P(B)',
-      vars:['A,B — events'] },
-
-    { cat:'stats', name:'Z-Score',
-      latex:'z = \\dfrac{x - \\mu}{\\sigma}',
-      raw:'z = (x − μ)/σ',
-      note:'Number of standard deviations from the mean.',
-      vars:['x — data value','μ — mean','σ — standard deviation'] },
-
-    { cat:'stats', name:'Linear Regression',
-      latex:'\\hat{y} = b_0 + b_1 x, \\quad b_1 = \\dfrac{\\sum(x_i-\\bar{x})(y_i-\\bar{y})}{\\sum(x_i-\\bar{x})^2}',
-      raw:'ŷ = b₀ + b₁x, b₁ = Σ(xᵢ−x̄)(yᵢ−ȳ)/Σ(xᵢ−x̄)²',
-      note:'b₀ = ȳ − b₁x̄ (y-intercept)',
-      vars:['b₀ — intercept','b₁ — slope','x̄,ȳ — sample means'] },
-  ];
-
-  /* ── Category metadata ── */
-  const CATS = [
-    { id:'algebra',   label:'Algebra',     color:'var(--accent)' },
-    { id:'geometry',  label:'Geometry',    color:'var(--accent-4)' },
-    { id:'trig',      label:'Trig',        color:'var(--purple)' },
-    { id:'calculus',  label:'Calculus',    color:'var(--pink)' },
-    { id:'physics',   label:'Physics',     color:'var(--accent-3)' },
-    { id:'chemistry', label:'Chemistry',   color:'var(--accent-2)' },
-    { id:'stats',     label:'Statistics',  color:'#5BC9D6' },
-  ];
+  /* ── Formula data (shared module-scope library) ── */
+  const FORMULAS = FREF_FORMULAS;
+  const CATS = FREF_CATS;
 
   /* ── State ── */
   let activeCat = 'all';
@@ -19188,6 +19199,484 @@ function mountFormulas(root) {
   return {
     unmount() {}
   };
+}
+
+/* ========== EXAM CHEAT-SHEET BUILDER ==========
+   Compose a one-page allowed formula sheet from the shared Formula Reference
+   library (FREF_FORMULAS) plus your own custom entries, then print to PDF.
+   Full layout controls (title, 1–3 columns, density, Letter/A4, orientation,
+   show/hide notes & variables), subject presets, localStorage autosave, and
+   share-by-code (#cheatsheet=…) — all offline, no backend. (Roadmap 2.7) */
+function mountCheatSheet(root){
+  const $ = (sel, ctx) => (ctx||root).querySelector(sel);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+  /* ── KaTeX lazy-loader (self-contained; shares the global #katex-css node) ── */
+  let katexLoading = false;
+  const katexCbs = [];
+  function loadKatex(cb){
+    if (window.katex){ cb(); return; }
+    katexCbs.push(cb);
+    if (katexLoading) return;
+    katexLoading = true;
+    if (!document.getElementById('katex-css')){
+      const link = document.createElement('link');
+      link.id='katex-css'; link.rel='stylesheet';
+      link.href='https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css';
+      document.head.appendChild(link);
+    }
+    const s = document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js';
+    s.onload = () => katexCbs.splice(0).forEach(fn=>fn());
+    s.onerror = () => katexCbs.splice(0).forEach(fn=>fn());   // graceful: raw stays
+    document.head.appendChild(s);
+  }
+
+  /* ── shared formula library ── */
+  const CATS = FREF_CATS;
+  const catLabel = id => (CATS.find(c=>c.id===id)||{}).label || id;
+  const catColor = id => (CATS.find(c=>c.id===id)||{}).color || 'var(--muted)';
+  const fkey = f => f.cat + '|' + f.name;
+  const LIB = {}; FREF_FORMULAS.forEach(f => LIB[fkey(f)] = f);
+
+  /* one-tap subject presets — bulk-select then trim */
+  const PRESETS = [
+    { id:'algebra',  label:'Algebra',    cats:['algebra'] },
+    { id:'geometry', label:'Geometry',   cats:['geometry'] },
+    { id:'trig',     label:'Trig',       cats:['trig'] },
+    { id:'apcalc',   label:'AP Calc',    cats:['calculus'], extra:['algebra|Logarithm Rules','algebra|Laws of Exponents','trig|Pythagorean Identity'] },
+    { id:'apphys',   label:'AP Physics', cats:['physics'],  extra:['trig|SOH-CAH-TOA','algebra|Quadratic Formula'] },
+    { id:'chem',     label:'Chemistry',  cats:['chemistry'] },
+    { id:'apstats',  label:'AP Stats',   cats:['stats'] },
+  ];
+  function presetKeys(p){
+    const ks = FREF_FORMULAS.filter(f=>p.cats.includes(f.cat)).map(fkey);
+    (p.extra||[]).forEach(k=>{ if (LIB[k] && !ks.includes(k)) ks.push(k); });
+    return ks;
+  }
+
+  const DENSITY = { compact:'9.5pt', normal:'11pt', roomy:'12.5pt' };
+  const PAGE = {
+    letter: { portrait:['8.5in','11in'],  landscape:['11in','8.5in'] },
+    a4:     { portrait:['210mm','297mm'], landscape:['297mm','210mm'] },
+  };
+
+  /* ── state ── */
+  const defaults = () => ({ v:1, title:'Formula Sheet', course:'', columns:2,
+    density:'normal', page:'letter', orient:'portrait',
+    showNotes:true, showVars:true, picked:[], custom:[] });
+  let state = Object.assign(defaults(), Storage.get('cheatsheet', {}) || {});
+  if (![1,2,3].includes(state.columns)) state.columns = 2;
+  if (!DENSITY[state.density]) state.density = 'normal';
+  if (!PAGE[state.page]) state.page = 'letter';
+  if (state.orient !== 'landscape') state.orient = 'portrait';
+  if (!Array.isArray(state.picked)) state.picked = [];
+  state.picked = state.picked.filter(k => LIB[k]);
+  if (!Array.isArray(state.custom)) state.custom = [];
+  state.custom = state.custom.map(c=>({ id:c.id||uid(), name:String(c.name||''), latex:String(c.latex||''), note:String(c.note||'') }));
+  const save = () => Storage.set('cheatsheet', state);
+  const hasContent = () => state.picked.length || state.custom.length;
+
+  let pickQ = '', pickCat = 'all';
+
+  /* ── shell ── */
+  root.innerHTML = `
+<style>
+  .cs-shell{display:flex;flex-direction:column;gap:14px}
+  .cs-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cs-spacer{flex:1}
+  .cs-count{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .cs-main{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:18px;align-items:start}
+  .cs-preview{min-width:0}
+  @media (max-width:860px){ .cs-main{grid-template-columns:1fr} }
+
+  /* builder column */
+  .cs-builder{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .cs-presets-lbl,.cs-custom-head{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .cs-preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .cs-preset{font-family:var(--mono);font-size:11px;padding:5px 9px;border:1px solid var(--rule);background:var(--paper-2);color:var(--ink-2);border-radius:2px;cursor:pointer}
+  .cs-preset:hover{border-color:var(--accent);color:var(--ink)}
+  .cs-search{width:100%;padding:9px 11px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;color:var(--ink);font-family:var(--sans);font-size:14px}
+  .cs-cats{display:flex;flex-wrap:wrap;gap:5px}
+  .cs-cat{font-family:var(--mono);font-size:11px;padding:4px 8px;border:1px solid var(--rule);background:transparent;color:var(--muted);border-radius:2px;cursor:pointer}
+  .cs-cat.active{color:var(--ink);border-color:var(--accent);background:var(--accent-soft)}
+  .cs-list{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto;padding-right:2px}
+  .cs-list-empty{color:var(--muted);font-size:13px;padding:10px 2px}
+  .cs-row{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 9px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;cursor:pointer;color:var(--ink)}
+  .cs-row:hover{border-color:var(--ink-2)}
+  .cs-row.on{border-color:var(--accent);background:var(--accent-soft)}
+  .cs-row-box{flex-shrink:0;width:18px;height:18px;border:1px solid var(--muted);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent);font-family:var(--mono)}
+  .cs-row.on .cs-row-box{border-color:var(--accent)}
+  .cs-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .cs-row-name{font-family:var(--serif);font-size:14px;line-height:1.15}
+  .cs-row-eq{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cs-row-cat{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
+  .cs-custom{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--rule);padding-top:10px}
+  .cs-custom input{width:100%;padding:7px 9px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;color:var(--ink);font-family:var(--sans);font-size:13px}
+  .cs-custom-list{display:flex;flex-direction:column;gap:4px}
+  .cs-cust-row{display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px}
+  .cs-cust-name{font-family:var(--serif);font-size:13px;flex-shrink:0;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cs-cust-eq{font-family:var(--mono);font-size:11px;color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cs-cust-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:2px 4px}
+  .cs-cust-del:hover{color:var(--pink)}
+
+  /* layout controls */
+  .cs-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px}
+  .cs-fld{display:flex;flex-direction:column;gap:4px}
+  .cs-fld>span{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .cs-fld input{padding:7px 9px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;color:var(--ink);font-family:var(--sans);font-size:13px}
+  .cs-seg{display:flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .cs-seg button{font-family:var(--mono);font-size:11px;padding:6px 10px;background:transparent;border:none;border-right:1px solid var(--rule);color:var(--muted);cursor:pointer}
+  .cs-seg button:last-child{border-right:none}
+  .cs-seg button.active{background:var(--accent);color:#fff}
+  .cs-chk{display:flex;align-items:center;gap:6px;font-family:var(--sans);font-size:13px;color:var(--ink-2);cursor:pointer}
+
+  /* paper preview (WYSIWYG with print) */
+  .cs-paper-wrap{background:#2a2533;border:1px solid var(--rule);border-radius:4px;padding:18px;max-height:62vh;overflow:auto;display:flex;justify-content:center}
+  .cs-sheet{background:#fff;color:#111;padding:0.4in;box-shadow:0 8px 30px -8px #000;font-family:Georgia,'Times New Roman',serif;font-size:var(--cs-fs,11pt);box-sizing:border-box}
+  .cs-sheet-head{border-bottom:2px solid #111;padding-bottom:5px;margin-bottom:9px}
+  .cs-sheet-title{font-size:1.5em;font-weight:700;line-height:1.1;color:#000}
+  .cs-sheet-sub{font-size:0.85em;color:#444;margin-top:2px}
+  .cs-sheet-cols{column-count:var(--cs-cols,2);column-gap:0.28in}
+  .cs-item{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;margin:0 0 6px;padding:0 0 5px;border-bottom:1px solid #e2e2e2}
+  .cs-item-name{font-weight:700;font-size:0.92em;color:#000;line-height:1.15}
+  .cs-item-eq{font-size:1em;color:#000;margin:2px 0;overflow-x:auto}
+  .cs-item-note{font-size:0.8em;color:#333;line-height:1.3}
+  .cs-item-vars{font-size:0.72em;color:#666;margin-top:1px}
+  .cs-empty-note{padding:32px 12px;text-align:center;font-style:italic;color:#888}
+
+  @media print{
+    body{background:#fff!important}
+    .splash,.mast,.tagline,.rail,.shelf,.no-results,.site-foot,
+    .panel-backdrop,.panel-head,.panel-foot,.toast,.ribbon,.pin-btn{display:none!important}
+    .panel{position:static!important;transform:none!important;width:100%!important;max-height:none!important;height:auto!important;border:none!important;box-shadow:none!important;background:#fff!important}
+    .panel-body{padding:0!important;background:#fff!important;overflow:visible!important}
+    .cs-toolbar,.cs-builder,.cs-controls{display:none!important}
+    .cs-main{display:block!important}
+    .cs-paper-wrap{background:#fff!important;border:none!important;padding:0!important;max-height:none!important;overflow:visible!important;display:block!important}
+    .cs-sheet{box-shadow:none!important;width:auto!important;min-height:0!important;padding:0!important}
+  }
+</style>
+<div class="cs-shell">
+  <div class="cs-toolbar">
+    <button class="btn sm" id="cs-print">Print / PDF</button>
+    <button class="btn ghost sm" id="cs-export">Export .md</button>
+    <button class="btn ghost sm" id="cs-share">Share</button>
+    <button class="btn ghost sm" id="cs-clear">Clear sheet</button>
+    <div class="cs-spacer"></div>
+    <span class="cs-count" id="cs-count"></span>
+  </div>
+  <div class="cs-main">
+    <div class="cs-builder">
+      <div class="cs-presets">
+        <span class="cs-presets-lbl">Quick add by subject</span>
+        <div class="cs-preset-row">${PRESETS.map(p=>`<button class="cs-preset" data-preset="${p.id}">${escape(p.label)}</button>`).join('')}</div>
+      </div>
+      <input id="cs-search" class="cs-search" type="search" placeholder="Search formulas…" autocomplete="off" spellcheck="false">
+      <div class="cs-cats" id="cs-cats">
+        <button class="cs-cat active" data-cat="all">All</button>
+        ${CATS.map(c=>`<button class="cs-cat" data-cat="${c.id}">${escape(c.label)}</button>`).join('')}
+      </div>
+      <div class="cs-list" id="cs-list"></div>
+      <div class="cs-custom">
+        <span class="cs-custom-head">Add your own</span>
+        <input id="cs-c-name" type="text" placeholder="Name (e.g. Ohm's Law)">
+        <input id="cs-c-latex" type="text" placeholder="Formula — LaTeX or plain (e.g. V = IR)">
+        <input id="cs-c-note" type="text" placeholder="Note (optional)">
+        <button class="btn ghost sm" id="cs-c-add">Add to sheet</button>
+        <div class="cs-custom-list" id="cs-custom-list"></div>
+      </div>
+    </div>
+    <div class="cs-preview">
+      <div class="cs-controls">
+        <label class="cs-fld"><span>Sheet title</span><input id="cs-title" type="text"></label>
+        <label class="cs-fld"><span>Course / exam</span><input id="cs-course" type="text" placeholder="optional"></label>
+        <div class="cs-fld"><span>Columns</span><div class="cs-seg" id="cs-cols">${[1,2,3].map(n=>`<button data-cols="${n}">${n}</button>`).join('')}</div></div>
+        <div class="cs-fld"><span>Density</span><div class="cs-seg" id="cs-density">${['compact','normal','roomy'].map(d=>`<button data-density="${d}">${d[0].toUpperCase()+d.slice(1)}</button>`).join('')}</div></div>
+        <div class="cs-fld"><span>Page</span><div class="cs-seg" id="cs-page"><button data-page="letter">Letter</button><button data-page="a4">A4</button></div></div>
+        <div class="cs-fld"><span>Orientation</span><div class="cs-seg" id="cs-orient"><button data-orient="portrait">Portrait</button><button data-orient="landscape">Landscape</button></div></div>
+        <label class="cs-chk"><input type="checkbox" id="cs-notes"> Notes</label>
+        <label class="cs-chk"><input type="checkbox" id="cs-vars"> Variables</label>
+      </div>
+      <div class="cs-paper-wrap"><div class="cs-sheet" id="cs-sheet"></div></div>
+    </div>
+  </div>
+</div>
+<style id="cs-page-style"></style>`;
+
+  /* ── small local helpers ── */
+  function downloadBlob(name, content, type){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  }
+  const slug = () => (state.title||'cheat-sheet').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60) || 'cheat-sheet';
+
+  /* ── render: picker list ── */
+  function renderList(){
+    const q = pickQ.toLowerCase();
+    const rows = FREF_FORMULAS.filter(f=>{
+      if (pickCat!=='all' && f.cat!==pickCat) return false;
+      if (!q) return true;
+      return f.name.toLowerCase().includes(q) || (f.raw||'').toLowerCase().includes(q) ||
+             (f.note||'').toLowerCase().includes(q) || f.cat.includes(q) ||
+             (f.vars||[]).join(' ').toLowerCase().includes(q);
+    });
+    const list = $('#cs-list');
+    if (!rows.length){ list.innerHTML = `<div class="cs-list-empty">No formulas match.</div>`; return; }
+    list.innerHTML = rows.map(f=>{
+      const k = fkey(f); const on = state.picked.includes(k);
+      return `<button class="cs-row${on?' on':''}" data-key="${escape(k)}" role="checkbox" aria-checked="${on}">
+        <span class="cs-row-box">${on?'✓':''}</span>
+        <span class="cs-row-main">
+          <span class="cs-row-name">${escape(f.name)}</span>
+          <span class="cs-row-eq">${escape(f.raw)}</span>
+        </span>
+        <span class="cs-row-cat" style="color:${catColor(f.cat)}">${escape(catLabel(f.cat))}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderCustomList(){
+    const wrap = $('#cs-custom-list');
+    wrap.innerHTML = state.custom.map(c=>`<div class="cs-cust-row" data-id="${c.id}">
+      <span class="cs-cust-name">${escape(c.name||'(unnamed)')}</span>
+      <span class="cs-cust-eq">${escape(c.latex||'')}</span>
+      <button class="cs-cust-del" data-del="${c.id}" title="Remove" aria-label="Remove ${escape(c.name||'entry')}">✕</button>
+    </div>`).join('');
+  }
+
+  /* ── render: the printable sheet ── */
+  function itemHTML(name, latex, raw, note, vars, color){
+    return `<div class="cs-item">
+      <div class="cs-item-name" style="color:${color}">${escape(name)}</div>
+      <div class="cs-item-eq" data-latex="${escape(latex||'')}">${escape(raw||latex||'')}</div>
+      ${state.showNotes && note ? `<div class="cs-item-note">${escape(note)}</div>` : ''}
+      ${state.showVars && vars && vars.length ? `<div class="cs-item-vars">${escape(vars.join(' · '))}</div>` : ''}
+    </div>`;
+  }
+  function renderSheet(){
+    const sheet = $('#cs-sheet');
+    const dim = PAGE[state.page][state.orient];
+    sheet.style.width = dim[0];
+    sheet.style.minHeight = dim[1];
+    sheet.style.setProperty('--cs-cols', state.columns);
+    sheet.style.setProperty('--cs-fs', DENSITY[state.density]);
+    let items = '';
+    CATS.forEach(cat=>{
+      FREF_FORMULAS.filter(f=>f.cat===cat.id && state.picked.includes(fkey(f)))
+        .forEach(f=> items += itemHTML(f.name, f.latex, f.raw, f.note, f.vars, '#000'));
+    });
+    state.custom.forEach(c=> items += itemHTML(c.name||'(unnamed)', c.latex, c.latex, c.note, [], '#000'));
+    sheet.innerHTML = `
+      <div class="cs-sheet-head">
+        <div class="cs-sheet-title">${escape(state.title||'Formula Sheet')}</div>
+        ${state.course ? `<div class="cs-sheet-sub">${escape(state.course)}</div>` : ''}
+      </div>
+      ${ hasContent() ? `<div class="cs-sheet-cols">${items}</div>`
+        : `<div class="cs-empty-note">No formulas yet. Pick some on the left, or use a subject preset.</div>` }`;
+    loadKatex(()=>{
+      if (!window.katex) return;
+      sheet.querySelectorAll('.cs-item-eq').forEach(eq=>{
+        const tex = eq.getAttribute('data-latex');
+        if (!tex) return;
+        try { window.katex.render(tex, eq, { throwOnError:false, displayMode:false }); }
+        catch(e){ /* keep raw fallback */ }
+      });
+    });
+  }
+
+  function applyPageStyle(){
+    const sz = state.page === 'a4' ? 'A4' : 'letter';
+    $('#cs-page-style').textContent = `@media print{ @page{ size:${sz} ${state.orient}; margin:0.4in; } }`;
+  }
+  function segActive(sel, attr, val){
+    $(sel).querySelectorAll('button').forEach(b=> b.classList.toggle('active', b.dataset[attr]===val));
+  }
+  function syncControls(){
+    $('#cs-title').value = state.title;
+    $('#cs-course').value = state.course;
+    $('#cs-notes').checked = state.showNotes;
+    $('#cs-vars').checked = state.showVars;
+    segActive('#cs-cols','cols',String(state.columns));
+    segActive('#cs-density','density',state.density);
+    segActive('#cs-page','page',state.page);
+    segActive('#cs-orient','orient',state.orient);
+  }
+  function updateCount(){
+    const n = state.picked.length + state.custom.length;
+    $('#cs-count').textContent = n + (n===1?' formula' : ' formulas');
+  }
+  function renderAll(){ renderList(); renderCustomList(); renderSheet(); applyPageStyle(); syncControls(); updateCount(); }
+
+  /* ── markdown export ── */
+  function buildMarkdown(){
+    let md = `# ${state.title||'Formula Sheet'}\n`;
+    if (state.course) md += `*${state.course}*\n`;
+    md += '\n';
+    CATS.forEach(cat=>{
+      const items = FREF_FORMULAS.filter(f=>f.cat===cat.id && state.picked.includes(fkey(f)));
+      if (!items.length) return;
+      md += `## ${cat.label}\n\n`;
+      items.forEach(f=>{
+        md += `**${f.name}** — $${f.latex}$\n`;
+        if (state.showNotes && f.note) md += `> ${f.note}\n`;
+        if (state.showVars && f.vars && f.vars.length) md += `> _${f.vars.join(' · ')}_\n`;
+        md += '\n';
+      });
+    });
+    if (state.custom.length){
+      md += `## Custom\n\n`;
+      state.custom.forEach(c=>{
+        md += `**${c.name||'(unnamed)'}** — $${c.latex}$\n`;
+        if (state.showNotes && c.note) md += `> ${c.note}\n`;
+        md += '\n';
+      });
+    }
+    return md;
+  }
+
+  /* ── share-by-code (UTF-8-safe base64url, no backend) ── */
+  function b64urlEncode(bytes){ let bin=''; for (let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+  function b64urlDecode(str){ let b=str.replace(/-/g,'+').replace(/_/g,'/'); while (b.length%4) b+='='; const bin=atob(b); const u=new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+  function encodeState(){
+    const payload = { v:1, t:state.title, co:state.course, cl:state.columns, d:state.density,
+      pg:state.page, o:state.orient, sn:state.showNotes?1:0, sv:state.showVars?1:0,
+      p:state.picked, c:state.custom.map(c=>[c.name,c.latex,c.note]) };
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  }
+  function decodeState(input){
+    let s = String(input||'').trim(); if (!s) return null;
+    if (s.includes('=')) s = s.slice(s.lastIndexOf('=')+1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g,''); if (!s) return null;
+    try{
+      const o = JSON.parse(new TextDecoder().decode(b64urlDecode(s)));
+      if (!o || typeof o!=='object') return null;
+      return {
+        v:1, title:String(o.t||'Formula Sheet'), course:String(o.co||''),
+        columns:[1,2,3].includes(o.cl)?o.cl:2,
+        density:DENSITY[o.d]?o.d:'normal',
+        page:o.pg==='a4'?'a4':'letter',
+        orient:o.o==='landscape'?'landscape':'portrait',
+        showNotes:o.sn!==0, showVars:o.sv!==0,
+        picked:Array.isArray(o.p)?o.p.filter(k=>LIB[k]):[],
+        custom:Array.isArray(o.c)?o.c.map(a=>({id:uid(),name:String((a&&a[0])||''),latex:String((a&&a[1])||''),note:String((a&&a[2])||'')})):[],
+      };
+    }catch(e){ return null; }
+  }
+
+  function openShareDialog(){
+    const code = encodeState();
+    const link = location.href.split('#')[0] + '#cheatsheet=' + code;
+    const back = el('div', { class:'lr-modal-back' });
+    const box = el('div', { class:'lr-modal' });
+    back.appendChild(box);
+    back.addEventListener('pointerdown', (ev)=>{ if (ev.target===back) back.remove(); });
+    const ta = el('textarea', { attrs:{ rows:'3', readonly:'true' } }); ta.value = code;
+    const linkInp = el('input', { type:'text', attrs:{ readonly:'true' } }); linkInp.value = link;
+    const imp = el('textarea', { attrs:{ rows:'3', placeholder:'Paste a #cheatsheet=… code or link here' } });
+    const mkBtn = (label, cls, fn) => el('button', { class:'btn '+cls+' sm', text:label, on:{ click:fn } });
+    box.append(
+      el('h3', { text:'Share by code' }),
+      el('p', { text:'No backend — this code is the whole sheet. A friend pastes it (or the link) below to get a copy.' }),
+      el('p', { class:'lr-modal-lbl', text:'Code' }), ta,
+      el('p', { class:'lr-modal-lbl', text:'Link' }), linkInp,
+      el('div', { class:'lr-modal-row' }, [
+        mkBtn('Copy code', 'accent', (ev)=>copy(code, ev.currentTarget)),
+        mkBtn('Copy link', 'ghost', (ev)=>copy(link, ev.currentTarget)),
+      ]),
+      el('p', { class:'lr-modal-lbl', text:'Import a sheet' }), imp,
+      el('div', { class:'lr-modal-row' }, [
+        mkBtn('Import', 'accent', ()=>{
+          const decoded = decodeState(imp.value);
+          if (!decoded){ showToast('That code didn’t decode.'); return; }
+          if (hasContent() && !confirm('Replace your current sheet with the imported one?')) return;
+          state = decoded; save(); renderAll(); back.remove();
+          showToast('Imported sheet.');
+        }),
+        mkBtn('Close', 'ghost', ()=>back.remove()),
+      ]),
+    );
+    root.appendChild(back);
+  }
+
+  /* ── events ── */
+  $('#cs-search').addEventListener('input', (e)=>{ pickQ = e.target.value; renderList(); });
+  $('#cs-cats').addEventListener('click', (e)=>{
+    const b = e.target.closest('.cs-cat'); if (!b) return;
+    pickCat = b.dataset.cat;
+    $('#cs-cats').querySelectorAll('.cs-cat').forEach(x=>x.classList.toggle('active', x===b));
+    renderList();
+  });
+  root.querySelector('.cs-preset-row').addEventListener('click', (e)=>{
+    const b = e.target.closest('.cs-preset'); if (!b) return;
+    const p = PRESETS.find(x=>x.id===b.dataset.preset); if (!p) return;
+    const set = new Set(state.picked);
+    presetKeys(p).forEach(k=>set.add(k));
+    state.picked = [...set];
+    save(); renderList(); renderSheet(); updateCount();
+    showToast('Added ' + p.label + '.');
+  });
+  $('#cs-list').addEventListener('click', (e)=>{
+    const b = e.target.closest('.cs-row'); if (!b) return;
+    const k = b.dataset.key;
+    const i = state.picked.indexOf(k);
+    if (i>=0) state.picked.splice(i,1); else state.picked.push(k);
+    save(); renderList(); renderSheet(); updateCount();
+  });
+  $('#cs-c-add').addEventListener('click', ()=>{
+    const name = $('#cs-c-name').value.trim();
+    const latex = $('#cs-c-latex').value.trim();
+    const note = $('#cs-c-note').value.trim();
+    if (!name && !latex){ showToast('Add a name or formula first.'); return; }
+    state.custom.push({ id:uid(), name, latex, note });
+    $('#cs-c-name').value=''; $('#cs-c-latex').value=''; $('#cs-c-note').value='';
+    save(); renderCustomList(); renderSheet(); updateCount();
+    $('#cs-c-name').focus();
+  });
+  $('#cs-custom-list').addEventListener('click', (e)=>{
+    const b = e.target.closest('.cs-cust-del'); if (!b) return;
+    state.custom = state.custom.filter(c=>c.id!==b.dataset.del);
+    save(); renderCustomList(); renderSheet(); updateCount();
+  });
+  $('#cs-title').addEventListener('input', (e)=>{ state.title = e.target.value; save(); renderSheet(); });
+  $('#cs-course').addEventListener('input', (e)=>{ state.course = e.target.value; save(); renderSheet(); });
+  $('#cs-cols').addEventListener('click', (e)=>{ const b=e.target.closest('button'); if(!b)return; state.columns=+b.dataset.cols; save(); segActive('#cs-cols','cols',String(state.columns)); renderSheet(); });
+  $('#cs-density').addEventListener('click', (e)=>{ const b=e.target.closest('button'); if(!b)return; state.density=b.dataset.density; save(); segActive('#cs-density','density',state.density); renderSheet(); });
+  $('#cs-page').addEventListener('click', (e)=>{ const b=e.target.closest('button'); if(!b)return; state.page=b.dataset.page; save(); segActive('#cs-page','page',state.page); renderSheet(); applyPageStyle(); });
+  $('#cs-orient').addEventListener('click', (e)=>{ const b=e.target.closest('button'); if(!b)return; state.orient=b.dataset.orient; save(); segActive('#cs-orient','orient',state.orient); renderSheet(); applyPageStyle(); });
+  $('#cs-notes').addEventListener('change', (e)=>{ state.showNotes=e.target.checked; save(); renderSheet(); });
+  $('#cs-vars').addEventListener('change', (e)=>{ state.showVars=e.target.checked; save(); renderSheet(); });
+  $('#cs-print').addEventListener('click', ()=>{ applyPageStyle(); window.print(); });
+  $('#cs-export').addEventListener('click', ()=>{ downloadBlob(slug()+'.md', buildMarkdown(), 'text/markdown'); showToast('Exported .md'); });
+  $('#cs-share').addEventListener('click', openShareDialog);
+  $('#cs-clear').addEventListener('click', ()=>{
+    if (hasContent() && !confirm('Clear all formulas from the sheet? Layout settings stay.')) return;
+    state.picked = []; state.custom = [];
+    save(); renderAll();
+    showToast('Sheet cleared.');
+  });
+
+  /* ── incoming share link (#cheatsheet=CODE) ── */
+  (function checkSharedLink(){
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0 || !/cheatsheet/i.test(h.slice(0, eq))) return;
+    const decoded = decodeState(h.slice(eq+1));
+    if (!decoded) return;
+    setTimeout(()=>{
+      if (!hasContent() || confirm(`Import shared sheet${decoded.title ? ` “${decoded.title}”` : ''}? This replaces your current sheet.`)){
+        state = decoded; save(); renderAll();
+        showToast('Imported shared sheet.');
+      }
+    }, 350);
+  })();
+
+  /* ── boot ── */
+  renderAll();
+
+  return { unmount(){ save(); } };
 }
 
 
