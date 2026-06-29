@@ -5702,6 +5702,9 @@ function registerTools() {
   TOOLS.push({ id:'sigfig', shelf:'lab', icon:'🔬', name:'Sig Figs',
     desc:'Rounding & sci notation.', tag:'upgraded',
     keywords:['significant','figures','notation'], mount: mountSigFig });
+  TOOLS.push({ id:'labreport', shelf:'lab', icon:'📋', name:'Lab Report Builder',
+    desc:'Structured template, sig-fig data table, print & share.', tag:'new',
+    keywords:['lab','report','experiment','hypothesis','procedure','materials','data','table','error','analysis','conclusion','science','sig fig','significant figures','print','pdf','share','calculations'], mount: mountLabReport });
   TOOLS.push({ id:'geometry', shelf:'lab', icon:'📐', name:'Geometry Solver',
     desc:'Triangles, circles, prisms.', tag:'upgraded',
     keywords:['triangle','circle','area','volume'], mount: mountGeometry });
@@ -6338,7 +6341,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -13170,6 +13173,712 @@ function mountSigFig(root) {
     $$('.tab', root).forEach(x => x.classList.toggle('active', x === t));
     render(t.dataset.tab);
   });
+}
+
+/* ========== LAB REPORT BUILDER ==========
+   Structured lab-report template (Lab ↔ Words bridge). A full standard report:
+   title/info, purpose, hypothesis, materials, procedure, a sig-fig-aware data
+   table with computed columns, calculations, error analysis, conclusion,
+   references. Print/PDF, .md/.txt export, localStorage autosave, and
+   share-by-code (#labreport=…) — all no-backend. */
+function mountLabReport(root) {
+  const SKEY = 'labreport:v1';
+  const uid = () => Math.random().toString(36).slice(2, 9);
+
+  const cleanInfo = (i) => {
+    const o = {}; ['student', 'partners', 'course', 'instructor', 'date', 'section']
+      .forEach(k => o[k] = String((i && i[k]) || ''));
+    return o;
+  };
+  const defaults = () => ({
+    v: 1,
+    title: '',
+    info: cleanInfo({}),
+    purpose: '',
+    hypothesis: '',
+    materials: '',
+    procedure: '',
+    table: {
+      cols: [
+        { id: uid(), name: 'Trial',   unit: '',     sig: '',     formula: '' },
+        { id: uid(), name: 'Mass',    unit: 'g',    sig: '3',    formula: '' },
+        { id: uid(), name: 'Volume',  unit: 'mL',   sig: '3',    formula: '' },
+        { id: uid(), name: 'Density', unit: 'g/mL', sig: 'auto', formula: 'B/C' },
+      ],
+      rows: [{ id: uid(), cells: {} }, { id: uid(), cells: {} }, { id: uid(), cells: {} }],
+    },
+    calculations: '',
+    errors: '',
+    conclusion: '',
+    references: '',
+  });
+
+  let state = Storage.get(SKEY, null);
+  if (!state || typeof state !== 'object' || !state.table || !Array.isArray(state.table.cols)) state = defaults();
+  state.info = cleanInfo(state.info);
+  const T = state.table;
+  const save = () => Storage.set(SKEY, state);
+
+  /* ── number / sig-fig helpers (mirrors the Sig Figs tool) ── */
+  function countSig(str) {
+    const s = String(str).trim();
+    if (!/^-?\d*\.?\d+(?:[eE][-+]?\d+)?$/.test(s)) return null;
+    let m = s.replace(/^-/, '').replace(/[eE].*$/, '');
+    if (m.includes('.')) {
+      m = m.replace(/^0+/, '');
+      if (m.startsWith('.')) m = m.slice(1).replace(/^0+/, '');
+      else m = m.replace('.', '');
+      return m.length || 1;
+    }
+    const t = m.replace(/^0+/, '');
+    const sig = t.replace(/0+$/, '');
+    return sig.length || 1;
+  }
+  function roundSig(num, n) {
+    if (!isFinite(num)) return '';
+    n = Math.max(1, Math.min(15, n | 0));
+    return Number(num).toPrecision(n);
+  }
+  function trimNum(num) {
+    if (!isFinite(num)) return '';
+    return Number(num.toPrecision(12)).toString();
+  }
+
+  /* ── column letters (bijective base-26: A, B … Z, AA, AB …) ── */
+  function colIndexToLetter(i) {
+    let s = ''; i++;
+    while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function letterToColIndex(L) {
+    let n = 0;
+    for (const ch of String(L).toUpperCase()) {
+      if (ch < 'A' || ch > 'Z') return -1;
+      n = n * 26 + (ch.charCodeAt(0) - 64);
+    }
+    return n - 1;
+  }
+
+  /* ── formula parser (recursive descent, no eval) ── */
+  const FUNCS = {
+    sqrt: Math.sqrt, abs: Math.abs, ln: Math.log, log: (x) => Math.log10(x),
+    exp: Math.exp, sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan,
+  };
+  function parseFormula(formula) {
+    const s = String(formula); let i = 0;
+    const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+    function expr() {
+      let node = term(); ws();
+      while (s[i] === '+' || s[i] === '-') { const op = s[i++]; node = { op, l: node, r: term() }; ws(); }
+      return node;
+    }
+    function term() {
+      let node = factor(); ws();
+      while (s[i] === '*' || s[i] === '/') { const op = s[i++]; node = { op, l: node, r: factor() }; ws(); }
+      return node;
+    }
+    function factor() {
+      let node = base(); ws();
+      if (s[i] === '^') { i++; node = { op: '^', l: node, r: factor() }; }
+      return node;
+    }
+    function base() {
+      ws();
+      if (s[i] === '+') { i++; return base(); }
+      if (s[i] === '-') { i++; return { op: 'neg', l: base() }; }
+      if (s[i] === '(') { i++; const n = expr(); ws(); if (s[i] !== ')') throw { parse: true }; i++; return n; }
+      const num = /^[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?/.exec(s.slice(i));
+      if (num) { i += num[0].length; return { num: parseFloat(num[0]) }; }
+      const id = /^[A-Za-z]+/.exec(s.slice(i));
+      if (id) {
+        const name = id[0]; i += name.length; ws();
+        const lower = name.toLowerCase();
+        if (s[i] === '(') {
+          if (!FUNCS[lower]) throw { parse: true };
+          i++; const arg = expr(); ws(); if (s[i] !== ')') throw { parse: true }; i++;
+          return { fn: FUNCS[lower], arg };
+        }
+        if (lower === 'pi') return { num: Math.PI };
+        return { ref: name.toUpperCase() };
+      }
+      throw { parse: true };
+    }
+    ws(); const tree = expr(); ws();
+    if (i < s.length) throw { parse: true };
+    return tree;
+  }
+  function evalNode(node, lookup) {
+    if ('num' in node) return node.num;
+    if ('ref' in node) return lookup(node.ref);
+    if ('fn' in node) return node.fn(evalNode(node.arg, lookup));
+    if (node.op === 'neg') return -evalNode(node.l, lookup);
+    const a = evalNode(node.l, lookup), b = evalNode(node.r, lookup);
+    switch (node.op) {
+      case '+': return a + b; case '-': return a - b;
+      case '*': return a * b; case '/': return a / b; case '^': return Math.pow(a, b);
+    }
+    throw { parse: true };
+  }
+  const isComputed = (col) => !!(col.formula && col.formula.trim());
+
+  /* ── evaluate the whole table (with cache + cycle guard) ── */
+  function computeAll() {
+    const cache = new Map();
+    function valueOf(col, row, stack) {
+      stack = stack || new Set();
+      const key = col.id + '|' + row.id;
+      if (cache.has(key)) return cache.get(key);
+      let res;
+      if (isComputed(col)) {
+        if (stack.has(key)) { res = { disp: '#CYC', num: null, sig: null }; cache.set(key, res); return res; }
+        stack.add(key);
+        let tree;
+        try { tree = parseFormula(col.formula); }
+        catch { res = { disp: '#ERR', num: null, sig: null }; cache.set(key, res); stack.delete(key); return res; }
+        const refSigs = [];
+        const lookup = (L) => {
+          const idx = letterToColIndex(L);
+          if (idx < 0 || idx >= T.cols.length) throw { ref: true };
+          const rv = valueOf(T.cols[idx], row, stack);
+          if (rv.num == null) throw { ref: true };
+          if (rv.sig != null) refSigs.push(rv.sig);
+          return rv.num;
+        };
+        let num;
+        try { num = evalNode(tree, lookup); }
+        catch (e) { res = { disp: e && e.ref ? '#REF' : '#ERR', num: null, sig: null }; cache.set(key, res); stack.delete(key); return res; }
+        stack.delete(key);
+        if (!isFinite(num)) { res = { disp: '#ERR', num: null, sig: null }; cache.set(key, res); return res; }
+        let sig = null, disp;
+        if (col.sig === 'auto') { sig = refSigs.length ? Math.min.apply(null, refSigs) : null; disp = sig ? roundSig(num, sig) : trimNum(num); }
+        else if (/^\d+$/.test(col.sig)) { sig = +col.sig; disp = roundSig(num, sig); }
+        else { disp = trimNum(num); sig = countSig(disp); }
+        res = { disp, num, sig };
+      } else {
+        const raw = String(row.cells[col.id] == null ? '' : row.cells[col.id]).trim();
+        if (raw === '') res = { disp: '', num: null, sig: null };
+        else {
+          const isNum = /^-?\d*\.?\d+(?:[eE][-+]?\d+)?$/.test(raw) && isFinite(parseFloat(raw));
+          const sig = isNum ? (/^\d+$/.test(col.sig) ? +col.sig : countSig(raw)) : null;
+          res = { disp: raw, num: isNum ? parseFloat(raw) : null, sig };
+        }
+      }
+      cache.set(key, res);
+      return res;
+    }
+    return valueOf;
+  }
+
+  /* ── shell ── */
+  const SIG_OPTS = ['', 'auto', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const sigLabel = (v) => v === '' ? '— sig' : v;
+  const sigOptions = (sel) => SIG_OPTS.map(v => `<option value="${v}"${v === sel ? ' selected' : ''}>${sigLabel(v)}</option>`).join('');
+  const e = escape;
+
+  root.innerHTML = `
+    <style>
+      .lr-shell{display:flex;flex-direction:column;min-height:560px}
+      .lr-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-bottom:14px;border-bottom:1px solid var(--rule);margin-bottom:18px}
+      .lr-title-inp{flex:1;min-width:200px;font-family:var(--serif);font-weight:500;font-size:20px;line-height:1.2;background:transparent;border:none;outline:none;color:var(--ink);border-bottom:1.5px dashed var(--rule);padding-bottom:2px}
+      .lr-title-inp::placeholder{color:var(--muted)}
+      .lr-title-inp:focus{border-bottom-color:var(--accent)}
+      .lr-menu-wrap{position:relative}
+      .lr-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:6;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;min-width:150px;overflow:hidden}
+      .lr-menu[hidden]{display:none}
+      .lr-menu button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:9px 12px;background:none;border:none;color:var(--ink-2);cursor:pointer;transition:background .1s,color .1s}
+      .lr-menu button:hover{background:var(--paper-3);color:var(--ink)}
+      .lr-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px;margin-bottom:8px}
+      .lr-info .field{margin:0}
+      .lr-info label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+      .lr-sec{margin-top:22px}
+      .lr-sec-h{font-family:var(--serif);font-weight:500;font-size:18px;letter-spacing:-.015em;color:var(--ink);margin:0 0 4px;display:flex;align-items:baseline;gap:8px}
+      .lr-sec-num{font-family:var(--mono);font-size:11px;color:var(--accent-4);letter-spacing:.08em}
+      .lr-sec-hint{font-family:var(--sans);font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .lr-sec textarea{width:100%;resize:vertical}
+      /* data table */
+      .lr-tbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+      .lr-table-scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--paper-2)}
+      .lr-table{border-collapse:collapse;width:100%;min-width:max-content}
+      .lr-table th,.lr-table td{border:1px solid var(--rule);padding:0;vertical-align:top}
+      .lr-table thead th{background:var(--paper-3);padding:6px}
+      .lr-col{display:flex;flex-direction:column;gap:4px;min-width:120px}
+      .lr-col-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
+      .lr-col-letter{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--accent-4);background:var(--accent-soft);border-radius:2px;padding:1px 6px}
+      .lr-col-del,.lr-row-del{font-family:var(--mono);font-size:13px;line-height:1;color:var(--muted);background:none;border:1px solid var(--rule);border-radius:2px;cursor:pointer;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0}
+      .lr-col-del:hover,.lr-row-del:hover{color:var(--pink);border-color:var(--pink)}
+      .lr-col input,.lr-col select{font-family:var(--sans);font-size:12.5px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;color:var(--ink);padding:4px 6px;width:100%}
+      .lr-col .lr-col-name{font-weight:600}
+      .lr-col .lr-col-unit{color:var(--ink-2)}
+      .lr-col .lr-col-formula{font-family:var(--mono);font-size:11.5px;color:var(--accent-2)}
+      .lr-col select{font-family:var(--mono);font-size:11px;letter-spacing:.04em;cursor:pointer}
+      .lr-cell{font-family:var(--mono);font-size:13px;background:transparent;border:none;color:var(--ink);padding:7px 8px;width:100%;min-width:84px;outline:none}
+      .lr-cell:focus{background:var(--accent-soft)}
+      .lr-cell.lr-computed{color:var(--accent-3);background:color-mix(in srgb,var(--accent-3) 7%,transparent);cursor:default}
+      .lr-cell.lr-err{color:var(--pink)}
+      .lr-row-del-cell{text-align:center;background:var(--paper-3);padding:0 4px}
+      .lr-table-caption{font-family:var(--sans);font-size:12px;color:var(--muted);line-height:1.5;margin:8px 2px 0}
+      .lr-table-caption code{font-family:var(--mono);font-size:11px;color:var(--accent-2);background:var(--paper-2);padding:1px 4px;border-radius:2px}
+      /* share / import modal */
+      .lr-modal-back{position:fixed;inset:0;z-index:60;background:#0008;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px}
+      .lr-modal{background:var(--paper-2);border:1px solid var(--ink-2);border-radius:4px;box-shadow:var(--shadow-card);padding:20px;width:min(520px,100%);max-height:90vh;overflow:auto}
+      .lr-modal h3{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.015em;margin:0 0 6px}
+      .lr-modal p{font-family:var(--sans);font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 8px}
+      .lr-modal .lr-modal-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);margin:14px 0 5px}
+      .lr-modal textarea,.lr-modal input[type=text]{width:100%;font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;color:var(--ink);padding:8px;resize:vertical}
+      .lr-modal-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+      /* print container */
+      .lr-print{display:none}
+      @media print{
+        .panel-backdrop,.panel-head,.panel-foot,.toast{display:none!important}
+        .panel{position:static!important;transform:none!important;box-shadow:none!important;border:none!important;max-height:none!important;width:100%!important;background:#fff!important}
+        .panel-body{overflow:visible!important;background:#fff!important;padding:0!important}
+        .lr-shell > *:not(.lr-print){display:none!important}
+        .lr-print{display:block!important;color:#000;font-family:Georgia,'Times New Roman',serif;padding:.25in 0}
+        .lr-print h1{font-size:22px;margin:0 0 6px}
+        .lr-print h2{font-size:14px;margin:18px 0 7px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #ccc;padding-bottom:3px}
+        .lr-print p{font-size:13px;line-height:1.55;margin:0 0 8px}
+        .lr-print .lr-pinfo{font-size:12px;color:#222;margin:0 0 14px}
+        .lr-print ul,.lr-print ol{margin:0 0 10px 1.4em;padding:0}
+        .lr-print li{font-size:13px;line-height:1.5;margin:0 0 3px}
+        .lr-print table.lr-ptable{border-collapse:collapse;margin:0 0 12px;font-size:12px}
+        .lr-print table.lr-ptable th,.lr-print table.lr-ptable td{border:1px solid #999;padding:4px 9px;text-align:left}
+        .lr-print table.lr-ptable th{background:#eee}
+        .lr-print .lr-punit{font-weight:400;color:#555;font-size:10px}
+        @page{margin:.75in}
+      }
+    </style>
+    <div class="lr-shell">
+      <div class="lr-head">
+        <input class="lr-title-inp" id="lr-title" placeholder="Untitled lab report…" maxlength="140" value="${e(state.title)}">
+        <button class="btn ghost sm" id="lr-new">New report</button>
+        <div class="lr-menu-wrap">
+          <button class="btn ghost sm" id="lr-export-btn" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+          <div class="lr-menu" id="lr-export-menu" role="menu" hidden>
+            <button data-export="md" role="menuitem">Markdown .md</button>
+            <button data-export="txt" role="menuitem">Plain text .txt</button>
+          </div>
+        </div>
+        <button class="btn ghost sm" id="lr-print">Print / PDF</button>
+        <button class="btn ghost sm" id="lr-share">Share by code</button>
+      </div>
+
+      <div class="lr-info">
+        <div class="field"><label for="lr-student">Name</label><input class="input" id="lr-student" maxlength="120" value="${e(state.info.student)}"></div>
+        <div class="field"><label for="lr-partners">Lab partners</label><input class="input" id="lr-partners" maxlength="200" value="${e(state.info.partners)}"></div>
+        <div class="field"><label for="lr-course">Course</label><input class="input" id="lr-course" maxlength="120" value="${e(state.info.course)}"></div>
+        <div class="field"><label for="lr-instructor">Instructor</label><input class="input" id="lr-instructor" maxlength="120" value="${e(state.info.instructor)}"></div>
+        <div class="field"><label for="lr-section">Section / period</label><input class="input" id="lr-section" maxlength="60" value="${e(state.info.section)}"></div>
+        <div class="field"><label for="lr-date">Date</label><input class="input" id="lr-date" type="date" value="${e(state.info.date)}"></div>
+      </div>
+
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">01</span>Purpose / Objective</h3>
+        <p class="lr-sec-hint">What question is this experiment answering? State the goal in a sentence or two.</p>
+        <textarea class="input" id="lr-purpose" rows="3" placeholder="The purpose of this experiment is to…">${e(state.purpose)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">02</span>Hypothesis</h3>
+        <p class="lr-sec-hint">A testable, if–then prediction. No need to be right — you'll check it against the data.</p>
+        <textarea class="input" id="lr-hypothesis" rows="3" placeholder="If… then… because…">${e(state.hypothesis)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">03</span>Materials</h3>
+        <p class="lr-sec-hint">One item per line. Exported as a bulleted list.</p>
+        <textarea class="input" id="lr-materials" rows="4" placeholder="100 mL graduated cylinder&#10;Electronic balance (±0.01 g)&#10;Distilled water">${e(state.materials)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">04</span>Procedure</h3>
+        <p class="lr-sec-hint">One step per line. Exported as a numbered list.</p>
+        <textarea class="input" id="lr-procedure" rows="5" placeholder="Measure the mass of the empty cylinder.&#10;Add 50 mL of water and record the mass.&#10;Repeat for three trials.">${e(state.procedure)}</textarea>
+      </div>
+
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">05</span>Data Table</h3>
+        <p class="lr-sec-hint">Sig-fig aware. Set each column's significant figures in its header. Type a formula (e.g. <code>B/C</code>) to make a column compute from the others — columns are lettered A, B, C… Computed columns round to their sig-fig setting; <b>auto</b> rounds to the fewest sig figs of its inputs.</p>
+        <div class="lr-tbar">
+          <button class="btn ghost sm" id="lr-add-col">+ Column</button>
+          <button class="btn ghost sm" id="lr-add-row">+ Row</button>
+        </div>
+        <div class="lr-table-scroll"><table class="lr-table" id="lr-table"></table></div>
+        <p class="lr-table-caption">Tip: a measurement column with sig figs set declares its precision; a computed column with <code>auto</code> uses that to round its result correctly.</p>
+      </div>
+
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">06</span>Sample Calculations</h3>
+        <p class="lr-sec-hint">Show one worked example of each calculation — the method, not every number.</p>
+        <textarea class="input" id="lr-calculations" rows="4" placeholder="Density = mass ÷ volume = 50.0 g ÷ 50.0 mL = 1.00 g/mL">${e(state.calculations)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">07</span>Error Analysis</h3>
+        <p class="lr-sec-hint">Sources of error, their likely direction, and how they'd affect the result. Percent error if you have an accepted value.</p>
+        <textarea class="input" id="lr-errors" rows="4" placeholder="The balance reads to ±0.01 g, contributing roughly ±0.2% to each mass…">${e(state.errors)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">08</span>Conclusion</h3>
+        <p class="lr-sec-hint">Was the hypothesis supported? What do the data show, and what does it mean?</p>
+        <textarea class="input" id="lr-conclusion" rows="4" placeholder="The data support the hypothesis that…">${e(state.conclusion)}</textarea>
+      </div>
+      <div class="lr-sec">
+        <h3 class="lr-sec-h"><span class="lr-sec-num">09</span>References</h3>
+        <p class="lr-sec-hint">Lab manual, textbook, or sources — one per line.</p>
+        <textarea class="input" id="lr-references" rows="3" placeholder="Course lab manual, Experiment 4.">${e(state.references)}</textarea>
+      </div>
+
+      <div class="lr-print" aria-hidden="true"></div>
+    </div>
+  `;
+
+  /* ── data table render ── */
+  const tableEl = $('#lr-table', root);
+  function renderTable() {
+    let h = '<thead><tr>';
+    T.cols.forEach((col, ci) => {
+      h += `<th><div class="lr-col">
+        <div class="lr-col-top"><span class="lr-col-letter" data-colletter="${col.id}">${colIndexToLetter(ci)}</span><button class="lr-col-del" data-delcol="${col.id}" title="Delete column" aria-label="Delete column">×</button></div>
+        <input class="lr-col-name" data-colname="${col.id}" value="${e(col.name)}" placeholder="Column" maxlength="40" aria-label="Column name">
+        <input class="lr-col-unit" data-colunit="${col.id}" value="${e(col.unit)}" placeholder="unit" maxlength="20" aria-label="Unit">
+        <select class="lr-col-sig" data-colsig="${col.id}" aria-label="Significant figures">${sigOptions(col.sig)}</select>
+        <input class="lr-col-formula" data-colformula="${col.id}" value="${e(col.formula)}" placeholder="= e.g. B/C" maxlength="80" aria-label="Formula">
+      </div></th>`;
+    });
+    h += '<th class="lr-row-del-cell" aria-hidden="true"></th></tr></thead><tbody>';
+    T.rows.forEach(row => {
+      h += '<tr>';
+      T.cols.forEach(col => {
+        const raw = e(String(row.cells[col.id] == null ? '' : row.cells[col.id]));
+        h += `<td><input class="lr-cell" data-cell="${col.id}:${row.id}" value="${raw}" inputmode="decimal" aria-label="${e(col.name || 'cell')}"></td>`;
+      });
+      h += `<td class="lr-row-del-cell"><button class="lr-row-del" data-delrow="${row.id}" title="Delete row" aria-label="Delete row">×</button></td>`;
+      h += '</tr>';
+    });
+    h += '</tbody>';
+    tableEl.innerHTML = h;
+    refreshComputed();
+  }
+  function refreshComputed() {
+    const valueOf = computeAll();
+    T.cols.forEach((col, ci) => {
+      const computed = isComputed(col);
+      const letterEl = tableEl.querySelector(`[data-colletter="${col.id}"]`);
+      if (letterEl) letterEl.textContent = colIndexToLetter(ci);
+      T.rows.forEach(row => {
+        const inp = tableEl.querySelector(`[data-cell="${col.id}:${row.id}"]`);
+        if (!inp) return;
+        if (computed) {
+          const r = valueOf(col, row);
+          inp.readOnly = true;
+          inp.classList.add('lr-computed');
+          inp.classList.toggle('lr-err', /^#/.test(r.disp));
+          inp.value = r.disp;
+          inp.title = (r.sig != null && !/^#/.test(r.disp)) ? `${r.sig} sig figs` : '';
+        } else {
+          inp.readOnly = false;
+          inp.classList.remove('lr-computed', 'lr-err');
+          inp.title = '';
+          const stored = String(row.cells[col.id] == null ? '' : row.cells[col.id]);
+          if (inp.value !== stored && document.activeElement !== inp) inp.value = stored;
+        }
+      });
+    });
+  }
+
+  /* ── table events (delegated, bound once) ── */
+  tableEl.addEventListener('input', (ev) => {
+    const t = ev.target;
+    if (t.dataset.cell) {
+      const [cid, rid] = t.dataset.cell.split(':');
+      const col = T.cols.find(c => c.id === cid);
+      if (!col || isComputed(col)) return;
+      const row = T.rows.find(r => r.id === rid);
+      if (row) { row.cells[cid] = t.value; save(); refreshComputed(); }
+    } else if (t.dataset.colname) {
+      const c = T.cols.find(x => x.id === t.dataset.colname); if (c) { c.name = t.value; save(); }
+    } else if (t.dataset.colunit) {
+      const c = T.cols.find(x => x.id === t.dataset.colunit); if (c) { c.unit = t.value; save(); }
+    } else if (t.dataset.colformula) {
+      const c = T.cols.find(x => x.id === t.dataset.colformula); if (c) { c.formula = t.value; save(); refreshComputed(); }
+    }
+  });
+  tableEl.addEventListener('change', (ev) => {
+    if (ev.target.dataset.colsig) {
+      const c = T.cols.find(x => x.id === ev.target.dataset.colsig);
+      if (c) { c.sig = ev.target.value; save(); refreshComputed(); }
+    }
+  });
+  tableEl.addEventListener('click', (ev) => {
+    const dc = ev.target.closest('[data-delcol]');
+    if (dc) {
+      if (T.cols.length <= 1) { showToast('Keep at least one column.'); return; }
+      const id = dc.dataset.delcol;
+      T.cols = T.cols.filter(c => c.id !== id);
+      T.rows.forEach(r => delete r.cells[id]);
+      save(); renderTable(); return;
+    }
+    const dr = ev.target.closest('[data-delrow]');
+    if (dr) {
+      if (T.rows.length <= 1) { showToast('Keep at least one row.'); return; }
+      T.rows = T.rows.filter(r => r.id !== dr.dataset.delrow);
+      save(); renderTable(); return;
+    }
+  });
+  $('#lr-add-col', root).addEventListener('click', () => {
+    T.cols.push({ id: uid(), name: '', unit: '', sig: '', formula: '' });
+    save(); renderTable();
+  });
+  $('#lr-add-row', root).addEventListener('click', () => {
+    T.rows.push({ id: uid(), cells: {} });
+    save(); renderTable();
+  });
+
+  /* ── text-field binding ── */
+  const FIELDS = [
+    ['lr-title', s => s.title, (s, v) => s.title = v],
+    ['lr-student', s => s.info.student, (s, v) => s.info.student = v],
+    ['lr-partners', s => s.info.partners, (s, v) => s.info.partners = v],
+    ['lr-course', s => s.info.course, (s, v) => s.info.course = v],
+    ['lr-instructor', s => s.info.instructor, (s, v) => s.info.instructor = v],
+    ['lr-section', s => s.info.section, (s, v) => s.info.section = v],
+    ['lr-date', s => s.info.date, (s, v) => s.info.date = v],
+    ['lr-purpose', s => s.purpose, (s, v) => s.purpose = v],
+    ['lr-hypothesis', s => s.hypothesis, (s, v) => s.hypothesis = v],
+    ['lr-materials', s => s.materials, (s, v) => s.materials = v],
+    ['lr-procedure', s => s.procedure, (s, v) => s.procedure = v],
+    ['lr-calculations', s => s.calculations, (s, v) => s.calculations = v],
+    ['lr-errors', s => s.errors, (s, v) => s.errors = v],
+    ['lr-conclusion', s => s.conclusion, (s, v) => s.conclusion = v],
+    ['lr-references', s => s.references, (s, v) => s.references = v],
+  ];
+  FIELDS.forEach(([id, , setter]) => {
+    const elx = $('#' + id, root);
+    if (elx) elx.addEventListener('input', () => { setter(state, elx.value); save(); });
+  });
+  function renderAll() {
+    FIELDS.forEach(([id, getter]) => { const elx = $('#' + id, root); if (elx) elx.value = getter(state); });
+    renderTable();
+  }
+
+  /* ── builders: markdown / text / print ── */
+  function infoPairs() {
+    const i = state.info;
+    return [['Name', i.student], ['Lab partners', i.partners], ['Course', i.course],
+      ['Instructor', i.instructor], ['Section', i.section], ['Date', i.date]]
+      .filter(p => p[1] && p[1].trim());
+  }
+  function buildMarkdown() {
+    const valueOf = computeAll();
+    let md = `# ${state.title || 'Lab Report'}\n\n`;
+    const pairs = infoPairs();
+    if (pairs.length) md += pairs.map(p => `**${p[0]}:** ${p[1]}`).join('  \n') + '\n\n';
+    const sec = (t, b) => { if (b && b.trim()) md += `## ${t}\n\n${b.trim()}\n\n`; };
+    sec('Purpose', state.purpose);
+    sec('Hypothesis', state.hypothesis);
+    if (state.materials.trim()) md += `## Materials\n\n` + state.materials.split(/\n+/).filter(s => s.trim()).map(s => `- ${s.trim()}`).join('\n') + '\n\n';
+    if (state.procedure.trim()) md += `## Procedure\n\n` + state.procedure.split(/\n+/).filter(s => s.trim()).map((s, i) => `${i + 1}. ${s.trim()}`).join('\n') + '\n\n';
+    if (T.cols.length) {
+      md += `## Data\n\n`;
+      const hdr = T.cols.map((c, i) => `${colIndexToLetter(i)}: ${c.name || '—'}${c.unit ? ` (${c.unit})` : ''}`);
+      md += `| ${hdr.join(' | ')} |\n| ${T.cols.map(() => '---').join(' | ')} |\n`;
+      T.rows.forEach(row => {
+        md += `| ${T.cols.map(c => (valueOf(c, row).disp || '').replace(/\|/g, '\\|')).join(' | ')} |\n`;
+      });
+      md += '\n';
+    }
+    sec('Sample Calculations', state.calculations);
+    sec('Error Analysis', state.errors);
+    sec('Conclusion', state.conclusion);
+    if (state.references.trim()) md += `## References\n\n` + state.references.split(/\n+/).filter(s => s.trim()).map(s => `- ${s.trim()}`).join('\n') + '\n\n';
+    return md.trim() + '\n';
+  }
+  function buildText() {
+    const valueOf = computeAll();
+    const title = state.title || 'Lab Report';
+    let out = title + '\n' + '='.repeat(title.length) + '\n\n';
+    const pairs = infoPairs();
+    if (pairs.length) out += pairs.map(p => `${p[0]}: ${p[1]}`).join('\n') + '\n\n';
+    const sec = (t, b) => { if (b && b.trim()) out += `${t.toUpperCase()}\n\n${b.trim()}\n\n`; };
+    sec('Purpose', state.purpose);
+    sec('Hypothesis', state.hypothesis);
+    if (state.materials.trim()) out += `MATERIALS\n\n` + state.materials.split(/\n+/).filter(s => s.trim()).map(s => `- ${s.trim()}`).join('\n') + '\n\n';
+    if (state.procedure.trim()) out += `PROCEDURE\n\n` + state.procedure.split(/\n+/).filter(s => s.trim()).map((s, i) => `${i + 1}. ${s.trim()}`).join('\n') + '\n\n';
+    if (T.cols.length) {
+      out += `DATA\n\n`;
+      const grid = [T.cols.map((c, i) => `${colIndexToLetter(i)}:${c.name || '-'}${c.unit ? ` (${c.unit})` : ''}`)];
+      T.rows.forEach(row => grid.push(T.cols.map(c => valueOf(c, row).disp || '')));
+      const widths = T.cols.map((_, ci) => Math.max.apply(null, grid.map(r => r[ci].length)));
+      out += grid.map(r => r.map((cell, ci) => cell.padEnd(widths[ci])).join('  ')).join('\n') + '\n\n';
+    }
+    sec('Sample Calculations', state.calculations);
+    sec('Error Analysis', state.errors);
+    sec('Conclusion', state.conclusion);
+    if (state.references.trim()) out += `REFERENCES\n\n` + state.references.split(/\n+/).filter(s => s.trim()).map(s => `- ${s.trim()}`).join('\n') + '\n\n';
+    return out.trim() + '\n';
+  }
+  function buildPrintHTML() {
+    const valueOf = computeAll();
+    let h = `<h1>${e(state.title) || 'Lab Report'}</h1>`;
+    const pairs = infoPairs();
+    if (pairs.length) h += `<p class="lr-pinfo">` + pairs.map(p => `<strong>${e(p[0])}:</strong> ${e(p[1])}`).join(' &nbsp;·&nbsp; ') + `</p>`;
+    const sec = (t, b) => { if (b && b.trim()) h += `<h2>${t}</h2><p>${e(b.trim()).replace(/\n/g, '<br>')}</p>`; };
+    sec('Purpose', state.purpose);
+    sec('Hypothesis', state.hypothesis);
+    if (state.materials.trim()) h += `<h2>Materials</h2><ul>` + state.materials.split(/\n+/).filter(s => s.trim()).map(s => `<li>${e(s.trim())}</li>`).join('') + `</ul>`;
+    if (state.procedure.trim()) h += `<h2>Procedure</h2><ol>` + state.procedure.split(/\n+/).filter(s => s.trim()).map(s => `<li>${e(s.trim())}</li>`).join('') + `</ol>`;
+    if (T.cols.length) {
+      h += `<h2>Data</h2><table class="lr-ptable"><thead><tr>` +
+        T.cols.map((c, i) => `<th>${e(c.name) || colIndexToLetter(i)}${c.unit ? `<br><span class="lr-punit">(${e(c.unit)})</span>` : ''}</th>`).join('') +
+        `</tr></thead><tbody>`;
+      T.rows.forEach(row => { h += `<tr>` + T.cols.map(c => `<td>${e(valueOf(c, row).disp)}</td>`).join('') + `</tr>`; });
+      h += `</tbody></table>`;
+    }
+    sec('Sample Calculations', state.calculations);
+    sec('Error Analysis', state.errors);
+    sec('Conclusion', state.conclusion);
+    if (state.references.trim()) h += `<h2>References</h2><ul>` + state.references.split(/\n+/).filter(s => s.trim()).map(s => `<li>${e(s.trim())}</li>`).join('') + `</ul>`;
+    return h;
+  }
+  function downloadBlob(name, content, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }
+  const slug = () => (state.title || 'lab-report').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'lab-report';
+
+  /* ── share-by-code (UTF-8-safe base64url, no backend) ── */
+  function b64urlEncode(bytes) { let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function b64urlDecode(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeReport() {
+    const payload = {
+      v: 1, t: state.title, i: state.info, p: state.purpose, h: state.hypothesis,
+      m: state.materials, pr: state.procedure, c: state.calculations, e: state.errors,
+      cn: state.conclusion, r: state.references,
+      tc: T.cols.map(c => [c.name, c.unit, c.sig, c.formula]),
+      tr: T.rows.map(row => T.cols.map(c => String(row.cells[c.id] == null ? '' : row.cells[c.id]))),
+    };
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  }
+  function decodeReport(input) {
+    let s = String(input || '').trim();
+    if (!s) return null;
+    if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, '');
+    if (!s) return null;
+    try {
+      const o = JSON.parse(new TextDecoder().decode(b64urlDecode(s)));
+      if (!o || typeof o !== 'object' || !Array.isArray(o.tc)) return null;
+      const cols = o.tc.map(a => ({ id: uid(), name: String(a[0] || ''), unit: String(a[1] || ''), sig: String(a[2] || ''), formula: String(a[3] || '') }));
+      if (!cols.length) return null;
+      const rows = (o.tr || []).map(arr => { const cells = {}; cols.forEach((c, i) => cells[c.id] = String((arr && arr[i]) || '')); return { id: uid(), cells }; });
+      return {
+        v: 1, title: String(o.t || ''), info: cleanInfo(o.i),
+        purpose: String(o.p || ''), hypothesis: String(o.h || ''), materials: String(o.m || ''),
+        procedure: String(o.pr || ''), calculations: String(o.c || ''), errors: String(o.e || ''),
+        conclusion: String(o.cn || ''), references: String(o.r || ''),
+        table: { cols, rows: rows.length ? rows : [{ id: uid(), cells: {} }] },
+      };
+    } catch { return null; }
+  }
+  const hasContent = () => state.title || state.purpose || state.hypothesis || state.materials ||
+    state.procedure || state.conclusion || T.rows.some(r => Object.values(r.cells).some(v => String(v).trim()));
+
+  /* ── toolbar menus & actions ── */
+  const exportMenu = $('#lr-export-menu', root);
+  const exportBtn = $('#lr-export-btn', root);
+  const closeExportMenu = () => { exportMenu.hidden = true; exportBtn.setAttribute('aria-expanded', 'false'); };
+  exportBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const open = exportMenu.hidden;
+    exportMenu.hidden = !open;
+    exportBtn.setAttribute('aria-expanded', String(open));
+  });
+  exportMenu.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-export]');
+    if (!b) return;
+    closeExportMenu();
+    if (b.dataset.export === 'md') { downloadBlob(slug() + '.md', buildMarkdown(), 'text/markdown'); showToast('Exported .md'); }
+    else { downloadBlob(slug() + '.txt', buildText(), 'text/plain'); showToast('Exported .txt'); }
+  });
+  const onDocClick = (ev) => { if (!exportMenu.hidden && !ev.target.closest('.lr-menu-wrap')) closeExportMenu(); };
+  document.addEventListener('click', onDocClick);
+
+  $('#lr-print', root).addEventListener('click', () => {
+    $('.lr-print', root).innerHTML = buildPrintHTML();
+    window.print();
+  });
+  $('#lr-new', root).addEventListener('click', () => {
+    if (hasContent() && !confirm('Start a new lab report? This clears the current one.')) return;
+    state = defaults();
+    rebindTable();
+    save();
+    renderAll();
+    showToast('New report.');
+  });
+
+  // T is captured by closures; keep it pointing at the live table after reset/import.
+  function rebindTable() {
+    // copy new table contents into the existing T object so closures stay valid
+    T.cols = state.table.cols;
+    T.rows = state.table.rows;
+  }
+
+  function openShareDialog() {
+    const code = encodeReport();
+    const link = location.href.split('#')[0] + '#labreport=' + code;
+    const back = el('div', { class: 'lr-modal-back' });
+    const box = el('div', { class: 'lr-modal' });
+    back.appendChild(box);
+    back.addEventListener('pointerdown', (ev) => { if (ev.target === back) back.remove(); });
+    const ta = el('textarea', { attrs: { rows: '3', readonly: 'true' } }); ta.value = code;
+    const linkInp = el('input', { type: 'text', attrs: { readonly: 'true' } }); linkInp.value = link;
+    const imp = el('textarea', { attrs: { rows: '3', placeholder: 'Paste a #labreport=… code or link here' } });
+    const mkBtn = (label, cls, fn) => el('button', { class: 'btn ' + cls + ' sm', text: label, on: { click: fn } });
+    box.append(
+      el('h3', { text: 'Share by code' }),
+      el('p', { text: 'No backend — this code is the whole report. A partner pastes it (or the link) below to get a copy.' }),
+      el('p', { class: 'lr-modal-lbl', text: 'Code' }), ta,
+      el('p', { class: 'lr-modal-lbl', text: 'Link' }), linkInp,
+      el('div', { class: 'lr-modal-row' }, [
+        mkBtn('Copy code', 'primary', (ev) => copy(code, ev.currentTarget)),
+        mkBtn('Copy link', 'ghost', (ev) => copy(link, ev.currentTarget)),
+      ]),
+      el('p', { class: 'lr-modal-lbl', text: 'Import a report' }), imp,
+      el('div', { class: 'lr-modal-row' }, [
+        mkBtn('Import', 'primary', () => {
+          const decoded = decodeReport(imp.value);
+          if (!decoded) { showToast('That code didn’t decode.'); return; }
+          if (hasContent() && !confirm('Replace your current report with the imported one?')) return;
+          state = decoded; rebindTable(); save(); renderAll(); back.remove();
+          showToast('Imported report.');
+        }),
+        mkBtn('Close', 'ghost', () => back.remove()),
+      ]),
+    );
+    root.appendChild(back);
+  }
+  $('#lr-share', root).addEventListener('click', openShareDialog);
+
+  /* ── incoming share link (#labreport=CODE) ── */
+  (function checkSharedLink() {
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0 || !/labreport/i.test(h.slice(0, eq))) return;
+    const decoded = decodeReport(h.slice(eq + 1));
+    if (!decoded) return;
+    setTimeout(() => {
+      if (!hasContent() || confirm(`Import shared lab report${decoded.title ? ` “${decoded.title}”` : ''}? This replaces your current report.`)) {
+        state = decoded; rebindTable(); save(); renderAll();
+        showToast('Imported shared report.');
+      }
+    }, 350);
+  })();
+
+  /* ── boot ── */
+  renderTable();
+
+  return {
+    unmount() { document.removeEventListener('click', onDocClick); save(); }
+  };
 }
 
 /* ========== GEOMETRY SOLVER ========== */

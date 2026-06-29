@@ -154,9 +154,20 @@ student actually exports or reuses.
 Node-and-edge canvas; drag to arrange; export PNG + JSON. The most-requested
 study artifact the app currently lacks.
 
-### 2.2 Lab Report Builder  *(Lab ↔ Words bridge)*
-Structured template: hypothesis, materials, procedure, data table (sig-fig
-aware, ties into Sig Figs), error analysis. Print/export to PDF.
+### 2.2 Lab Report Builder  *(Lab ↔ Words bridge)*  ✅ *shipped*
+- ✅ Full standard template: title/info (name, partners, course, instructor,
+  section, date), Purpose, Hypothesis, Materials, Procedure, Data Table,
+  Sample Calculations, Error Analysis, Conclusion, References.
+- ✅ **Sig-fig-aware data table** with **computed columns**: type a formula
+  (e.g. `B/C`) referencing other columns by letter and the column auto-evaluates
+  per row. A small no-`eval` recursive-descent parser handles `+ - * / ^`,
+  parentheses, and `sqrt/ln/log/sin/…`/`pi`. Each column carries a sig-fig
+  setting; computed columns round to it, and **`auto`** rounds to the fewest sig
+  figs of its inputs (reusing the Sig Figs count/round logic). `#REF`/`#ERR`/
+  `#CYC` flags surface bad references, parse errors, and cycles.
+- ✅ **Print / PDF** (clean document view), **.md / .txt export** (the data
+  table renders as a Markdown / aligned-text table), **localStorage autosave**,
+  and **share-by-code** (`#labreport=…` code + link, no backend).
 
 ### 2.3 Matrix Calculator  *(Numbers)*
 Add/multiply, determinant, inverse, **RREF with steps**. Linear algebra + AP CS.
