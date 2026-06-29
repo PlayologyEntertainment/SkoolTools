@@ -5692,6 +5692,9 @@ function registerTools() {
   TOOLS.push({ id:'truthtable', shelf:'numbers', icon:'⊤', name:'Truth Table',
     desc:'Truth tables, equivalence, DNF/CNF.', tag:'new',
     keywords:['truth table','logic','boolean','proposition','propositional','tautology','contradiction','contingent','satisfiable','equivalence','equivalent','dnf','cnf','normal form','minterm','maxterm','implication','conditional','biconditional','xor','nand','nor','and','or','not','negation','conjunction','disjunction','discrete math','cs','philosophy','logic gates'], mount: mountTruthTable });
+  TOOLS.push({ id:'inequality', shelf:'numbers', icon:'≷', name:'Inequality Solver',
+    desc:'Solve & graph on a number line; interval + set notation.', tag:'new',
+    keywords:['inequality','inequalities','interval','set','number line','set builder','solve','linear','quadratic','polynomial','rational','absolute value','compound','union','intersection','complement','sign chart','algebra','precalculus','notation','solution set'], mount: mountInequality });
   TOOLS.push({ id:'roman', shelf:'numbers', icon:'🏛️', name:'Roman Numerals',
     desc:'Number ↔ Roman.',
     keywords:['roman','numeral','latin'], mount: mountRoman });
@@ -6347,7 +6350,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -8241,6 +8244,731 @@ function mountTruthTable(root) {
 
   return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
 }
+
+/* ========== INEQUALITY / INTERVAL SOLVER ==========
+   Solve linear, compound, absolute-value, polynomial and rational inequalities
+   in one variable and visualize the solution on a number line, with interval,
+   set-builder and inequality notation. A second tab does interval / set algebra
+   (union, intersection, complement, difference) with the same number-line view.
+   No eval: a hand-written tokenizer + recursive-descent parser build an AST, then
+   exact-fraction polynomial/rational arithmetic drives a sign-chart solver. The
+   workspace autosaves to localStorage and shares by code (#inequality=…), no
+   backend. (Roadmap 2.5, Numbers shelf.) */
+function mountInequality(root) {
+  const SKEY = 'inequality:v1';
+  const $ = (sel, ctx) => (ctx || root).querySelector(sel);
+
+  /* ============================ EXACT-MATH ENGINE ============================ */
+  const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; };
+  const chk = n => { if (!Number.isFinite(n) || Math.abs(n) > 9e15) throw new Error('Numbers got too large to keep exact.'); return n; };
+  function fr(n, d = 1) { chk(n); chk(d); if (d === 0) throw new Error('Division by zero.'); n = Math.round(n); d = Math.round(d); if (d < 0) { n = -n; d = -d; } const g = gcd(n, d) || 1; return { n: n / g, d: d / g }; }
+  const I = n => fr(n, 1);
+  const FR = {
+    add: (a, b) => fr(a.n * b.d + b.n * a.d, a.d * b.d),
+    sub: (a, b) => fr(a.n * b.d - b.n * a.d, a.d * b.d),
+    mul: (a, b) => fr(a.n * b.n, a.d * b.d),
+    div: (a, b) => { if (b.n === 0) throw new Error('Division by zero.'); return fr(a.n * b.d, a.d * b.n); },
+    neg: a => fr(-a.n, a.d), num: a => a.n / a.d, isZero: a => a.n === 0,
+  };
+  function fracFromStr(s) {
+    s = s.trim();
+    if (/^[+-]?\d+$/.test(s)) return I(parseInt(s, 10));
+    const m = /^([+-]?)(\d*)\.(\d+)$/.exec(s);
+    if (m) { const sign = m[1] === '-' ? -1 : 1, whole = m[2] || '0', frac = m[3]; return fr(sign * parseInt(whole + frac, 10), Math.pow(10, frac.length)); }
+    throw new Error(`Couldn't read the number "${s}".`);
+  }
+
+  const polyTrim = p => { let i = p.length - 1; while (i > 0 && FR.isZero(p[i])) i--; return p.slice(0, i + 1); };
+  const polyIsZero = p => p.length === 1 && FR.isZero(p[0]);
+  const polyAdd = (a, b) => { const n = Math.max(a.length, b.length), r = []; for (let i = 0; i < n; i++) r[i] = FR.add(a[i] || I(0), b[i] || I(0)); return polyTrim(r); };
+  const polySub = (a, b) => { const n = Math.max(a.length, b.length), r = []; for (let i = 0; i < n; i++) r[i] = FR.sub(a[i] || I(0), b[i] || I(0)); return polyTrim(r); };
+  const polyMul = (a, b) => { const r = Array(a.length + b.length - 1).fill(0).map(() => I(0)); for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) r[i + j] = FR.add(r[i + j], FR.mul(a[i], b[j])); return polyTrim(r); };
+  const polyScale = (a, s) => polyTrim(a.map(c => FR.mul(c, s)));
+  const polyEvalNum = (p, x) => { let acc = 0; for (let i = p.length - 1; i >= 0; i--) acc = acc * x + FR.num(p[i]); return acc; };
+  const polyEvalFr = (p, xf) => { let acc = I(0); for (let i = p.length - 1; i >= 0; i--) acc = FR.add(FR.mul(acc, xf), p[i]); return acc; };
+  const polyDeg = p => polyTrim(p).length - 1;
+
+  const ratConst = f => ({ num: [f], den: [I(1)] });
+  const ratX = () => ({ num: [I(0), I(1)], den: [I(1)] });
+  const ratNeg = A => ({ num: polyScale(A.num, I(-1)), den: A.den });
+  const ratAdd = (A, B) => ({ num: polyAdd(polyMul(A.num, B.den), polyMul(B.num, A.den)), den: polyMul(A.den, B.den) });
+  const ratSub = (A, B) => ({ num: polySub(polyMul(A.num, B.den), polyMul(B.num, A.den)), den: polyMul(A.den, B.den) });
+  const ratMul = (A, B) => ({ num: polyMul(A.num, B.num), den: polyMul(A.den, B.den) });
+  const ratDiv = (A, B) => { if (polyIsZero(B.num)) throw new Error('Division by zero.'); return { num: polyMul(A.num, B.den), den: polyMul(A.den, B.num) }; };
+  function ratPow(A, k) {
+    if (k > 40 || k < -40) throw new Error('Exponent is too large.');
+    let R = ratConst(I(1)); const base = k < 0 ? ratDiv(ratConst(I(1)), A) : A;
+    for (let i = 0; i < Math.abs(k); i++) { R = ratMul(R, base); if (polyDeg(R.num) > 60 || polyDeg(R.den) > 60) throw new Error('Expression degree is too high.'); }
+    return R;
+  }
+
+  function realRoots(p) {
+    p = polyTrim(p);
+    if (polyIsZero(p)) return { zeroPoly: true, roots: [] };
+    if (p.length === 1) return { roots: [] };
+    let fp = p.slice(); const roots = [];
+    const pushRoot = (val, frac, mult) => { const hit = roots.find(r => Math.abs(r.val - val) < 1e-9 * (1 + Math.abs(val))); if (hit) { hit.mult += mult; if (!hit.frac && frac) hit.frac = frac; } else roots.push({ val, frac, mult }); };
+    while (fp.length > 1 && FR.isZero(fp[0])) { fp = fp.slice(1); pushRoot(0, I(0), 1); }
+    const deflate = (q, rf) => { const n = q.length - 1, out = new Array(n); let carry = q[n]; out[n - 1] = carry; for (let k = n - 1; k >= 1; k--) { carry = FR.add(q[k], FR.mul(rf, carry)); out[k - 1] = carry; } return out; };
+    const divisors = m => { m = Math.abs(m); const ds = []; for (let i = 1; i <= m && i <= 100000; i++) if (m % i === 0) ds.push(i); return ds; };
+    let guard = 0;
+    while (polyDeg(fp) >= 1 && guard++ < 200) {
+      let lcm = 1; for (const c of fp) lcm = lcm / gcd(lcm, c.d) * c.d;
+      let ip = fp.map(c => Math.round(FR.num(FR.mul(c, I(lcm))))); let g = 0; for (const c of ip) g = gcd(g, c); if (g > 1) ip = ip.map(c => c / g);
+      const a0 = ip[0], an = ip[ip.length - 1];
+      if (a0 === 0) { fp = fp.slice(1); pushRoot(0, I(0), 1); continue; }
+      const ps = divisors(a0), qs = divisors(an); let found = null;
+      outer: for (const qq of qs) for (const pp of ps) for (const sgn of [1, -1]) { const cand = fr(sgn * pp, qq); if (FR.isZero(polyEvalFr(fp, cand))) { found = cand; break outer; } }
+      if (found) { fp = deflate(fp, found); pushRoot(FR.num(found), found, 1); continue; }
+      break;
+    }
+    const d = polyDeg(fp);
+    if (d === 1) { const r = FR.div(FR.neg(fp[0]), fp[1]); pushRoot(FR.num(r), r, 1); }
+    else if (d === 2) {
+      const a = fp[2], b = fp[1], c = fp[0]; const disc = FR.sub(FR.mul(b, b), FR.mul(FR.mul(I(4), a), c)); const dn = FR.num(disc);
+      if (dn >= 0) { const s = Math.sqrt(dn), bn = FR.num(b), an2 = FR.num(a); if (s === 0) pushRoot(-bn / (2 * an2), null, 2); else { pushRoot((-bn + s) / (2 * an2), null, 1); pushRoot((-bn - s) / (2 * an2), null, 1); } }
+    } else if (d >= 3) {
+      const lead = FR.num(fp[fp.length - 1]); let R = 1; for (let i = 0; i < fp.length - 1; i++) R = Math.max(R, Math.abs(FR.num(fp[i]) / lead)); R = 1 + R;
+      const N = 2000, f = x => polyEvalNum(fp, x); let prev = -R, pv = f(prev);
+      for (let i = 1; i <= N; i++) { const cur = -R + 2 * R * i / N, cv = f(cur); if (pv === 0) pushRoot(prev, null, 1); else if (pv * cv < 0) { let lo = prev, hi = cur, fl = pv; for (let it = 0; it < 80; it++) { const mid = (lo + hi) / 2, fm = f(mid); if (fm === 0) { lo = hi = mid; break; } if (fl * fm < 0) hi = mid; else { lo = mid; fl = fm; } } pushRoot((lo + hi) / 2, null, 1); } prev = cur; pv = cv; }
+    }
+    roots.sort((a, b) => a.val - b.val);
+    return { roots };
+  }
+
+  /* ---- interval-set algebra ---- */
+  const NINF = -Infinity, PINF = Infinity;
+  const approx = (a, b) => { if (a === b) return true; if (!isFinite(a) || !isFinite(b)) return false; return Math.abs(a - b) <= 1e-9 * (1 + Math.abs(a) + Math.abs(b)); };
+  const mkInt = (a, ao, b, bo) => ({ a, ao: a === NINF ? true : ao, b, bo: b === PINF ? true : bo });
+  const ivEmpty = iv => { if (iv.a > iv.b + 1e-12) return true; if (approx(iv.a, iv.b)) return iv.ao || iv.bo; return false; };
+  function mergeList(list) {
+    list = list.filter(iv => !ivEmpty(iv)); list.sort((x, y) => x.a - y.a || (x.ao ? 1 : 0) - (y.ao ? 1 : 0));
+    const out = [];
+    for (const iv of list) {
+      if (!out.length) { out.push({ ...iv }); continue; }
+      const cur = out[out.length - 1]; const touch = approx(iv.a, cur.b) && (!iv.ao || !cur.bo);
+      if (iv.a < cur.b - 1e-12 || touch) { if (iv.b > cur.b + 1e-12) { cur.b = iv.b; cur.bo = iv.bo; } else if (approx(iv.b, cur.b)) cur.bo = cur.bo && iv.bo; }
+      else out.push({ ...iv });
+    }
+    return out;
+  }
+  const setUnion = (A, B) => mergeList([...A, ...B]);
+  function intersectTwo(p, q) {
+    let a, ao, b, bo;
+    if (approx(p.a, q.a)) { a = Math.max(p.a, q.a); ao = p.ao || q.ao; } else if (p.a > q.a) { a = p.a; ao = p.ao; } else { a = q.a; ao = q.ao; }
+    if (approx(p.b, q.b)) { b = Math.min(p.b, q.b); bo = p.bo || q.bo; } else if (p.b < q.b) { b = p.b; bo = p.bo; } else { b = q.b; bo = q.bo; }
+    const iv = mkInt(a, ao, b, bo); return ivEmpty(iv) ? null : iv;
+  }
+  function setIntersect(A, B) { const out = []; for (const p of A) for (const q of B) { const r = intersectTwo(p, q); if (r) out.push(r); } return mergeList(out); }
+  function setComplement(A) { A = mergeList(A.slice()); const out = []; let lowV = NINF, lowO = true; for (const iv of A) { const cand = mkInt(lowV, lowO, iv.a, !iv.ao); if (!ivEmpty(cand)) out.push(cand); lowV = iv.b; lowO = !iv.bo; } const last = mkInt(lowV, lowO, PINF, true); if (!ivEmpty(last)) out.push(last); return out; }
+  const setDifference = (A, B) => setIntersect(A, setComplement(B));
+  const setFull = () => [mkInt(NINF, true, PINF, true)];
+  const setSingleton = v => [mkInt(v, false, v, false)];
+  const removePoint = (A, v) => setDifference(A, setSingleton(v));
+  const setEqual = (A, B) => { A = mergeList(A.slice()); B = mergeList(B.slice()); if (A.length !== B.length) return false; for (let i = 0; i < A.length; i++) { const x = A[i], y = B[i]; if (!approx(x.a, y.a) || !approx(x.b, y.b) || !!x.ao !== !!y.ao || !!x.bo !== !!y.bo) return false; } return true; };
+
+  /* ---- one rational inequality F relop 0 via sign chart ---- */
+  function solveRational(F, relop) {
+    const num = polyTrim(F.num), den = polyTrim(F.den);
+    if (polyIsZero(den)) throw new Error('The denominator is zero everywhere.');
+    const qRoots = realRoots(den).roots; const eq = relop === '<=' || relop === '>=' || relop === '=';
+    if (polyIsZero(num)) { let base = (relop === '<=' || relop === '>=' || relop === '=') ? setFull() : []; for (const q of qRoots) base = removePoint(base, q.val); return { set: base, pRoots: [], qRoots, num, den, constZero: true }; }
+    const pRoots = realRoots(num).roots; const critVals = [];
+    for (const r of [...pRoots, ...qRoots]) if (!critVals.some(v => approx(v, r.val))) critVals.push(r.val);
+    critVals.sort((a, b) => a - b);
+    const sgnAt = x => { const v = polyEvalNum(num, x) / polyEvalNum(den, x); return v < 0 ? -1 : v > 0 ? 1 : 0; };
+    const want = s => relop === '!=' ? true : relop === '=' ? false : (relop === '<' || relop === '<=') ? s < 0 : s > 0;
+    let S = []; const bounds = [NINF, ...critVals, PINF]; const segs = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const lo = bounds[i], hi = bounds[i + 1]; let t;
+      if (lo === NINF && hi === PINF) t = 0; else if (lo === NINF) t = hi - 1; else if (hi === PINF) t = lo + 1; else t = (lo + hi) / 2;
+      const sg = sgnAt(t), inSol = want(sg); segs.push({ lo, hi, t, sg, inSol }); if (inSol) S = setUnion(S, [mkInt(lo, true, hi, true)]);
+    }
+    if (eq) for (const r of pRoots) if (!qRoots.some(q => approx(q.val, r.val))) S = setUnion(S, setSingleton(r.val));
+    if (relop === '!=') { S = setFull(); for (const r of pRoots) S = removePoint(S, r.val); }
+    for (const q of qRoots) S = removePoint(S, q.val);
+    return { set: S, pRoots, qRoots, num, den, critVals, segs };
+  }
+
+  /* ============================ PARSER ============================ */
+  function tokenize(src) {
+    const s = String(src), toks = []; let i = 0; const push = (t, v) => toks.push({ t, v });
+    while (i < s.length) {
+      const c = s[i];
+      if (/\s/.test(c)) { i++; continue; }
+      const two = s.substr(i, 2);
+      if (two === '<=' || two === '=<') { push('rel', '<='); i += 2; continue; }
+      if (two === '>=' || two === '=>') { push('rel', '>='); i += 2; continue; }
+      if (two === '!=' || two === '/=') { push('rel', '!='); i += 2; continue; }
+      if (two === '&&') { push('and'); i += 2; continue; }
+      if (two === '||') { push('or'); i += 2; continue; }
+      if (c === '≤') { push('rel', '<='); i++; continue; }
+      if (c === '≥') { push('rel', '>='); i++; continue; }
+      if (c === '≠') { push('rel', '!='); i++; continue; }
+      if (c === '<') { push('rel', '<'); i++; continue; }
+      if (c === '>') { push('rel', '>'); i++; continue; }
+      if (c === '=') { push('rel', '='); i++; continue; }
+      if (c === '∧') { push('and'); i++; continue; }
+      if (c === '∨') { push('or'); i++; continue; }
+      if (c === '|') { push('bar'); i++; continue; }
+      if ('+-*/^()'.includes(c)) { push(c); i++; continue; }
+      if (c === '·' || c === '×' || c === '⋅') { push('*'); i++; continue; }
+      if (/[0-9.]/.test(c)) { let j = i + 1; while (j < s.length && /[0-9.]/.test(s[j])) j++; push('num', s.slice(i, j)); i = j; continue; }
+      if (/[A-Za-z_]/.test(c)) { let j = i + 1; while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) j++; const w = s.slice(i, j), lw = w.toLowerCase(); if (lw === 'and') push('and'); else if (lw === 'or') push('or'); else push('ident', w); i = j; continue; }
+      throw new Error(`Unexpected character "${c}".`);
+    }
+    return toks;
+  }
+
+  function parseExpr(rawToks) {
+    const toks = []; let barOpen = true;
+    for (const tk of rawToks) { if (tk.t === 'bar') { toks.push({ t: barOpen ? 'aopen' : 'aclose' }); barOpen = !barOpen; } else toks.push(tk); }
+    let p = 0, varName = null;
+    const peek = () => toks[p], eat = () => toks[p++];
+    const isPrimaryStart = tk => tk && (tk.t === 'num' || tk.t === 'ident' || tk.t === '(' || tk.t === 'aopen');
+    function atom() {
+      const tk = peek();
+      if (!tk) throw new Error('The expression ends too early.');
+      if (tk.t === 'num') { eat(); return { t: 'num', v: fracFromStr(tk.v) }; }
+      if (tk.t === '(') { eat(); const e = addsub(); if (!peek() || peek().t !== ')') throw new Error('Missing a closing ")".'); eat(); return e; }
+      if (tk.t === 'aopen') { eat(); const e = addsub(); if (!peek() || peek().t !== 'aclose') throw new Error('Missing a closing "|" for absolute value.'); eat(); return { t: 'abs', a: e }; }
+      if (tk.t === 'ident') {
+        eat(); const name = tk.v, lower = name.toLowerCase();
+        if (lower === 'abs') { if (!peek() || peek().t !== '(') throw new Error('Write abs(...) with parentheses.'); eat(); const e = addsub(); if (!peek() || peek().t !== ')') throw new Error('Missing a closing ")".'); eat(); return { t: 'abs', a: e }; }
+        if (lower === 'pi' || lower === 'e') throw new Error(`Constants like "${name}" aren't supported — use plain numbers.`);
+        if (/^(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp)$/i.test(name)) throw new Error(`The function "${name}" isn't supported — only polynomials, fractions and absolute value.`);
+        if (name.length !== 1 || !/[A-Za-z]/.test(name)) throw new Error(`"${name}" isn't a valid variable. Use a single letter like x.`);
+        if (varName && varName !== name) throw new Error(`Use one variable only — found both "${varName}" and "${name}".`);
+        varName = name; return { t: 'var' };
+      }
+      throw new Error('Expected a number, variable or "(".');
+    }
+    function power() { let base = atom(); if (peek() && peek().t === '^') { eat(); const exp = unary(); base = { t: 'pow', a: base, b: exp }; } return base; }
+    function unary() { if (peek() && peek().t === '-') { eat(); return { t: 'neg', a: unary() }; } if (peek() && peek().t === '+') { eat(); return unary(); } return power(); }
+    function term() { let left = unary(); for (;;) { const tk = peek(); if (tk && (tk.t === '*' || tk.t === '/')) { eat(); left = { t: tk.t === '*' ? 'mul' : 'div', a: left, b: unary() }; } else if (isPrimaryStart(tk)) left = { t: 'mul', a: left, b: unary() }; else break; } return left; }
+    function addsub() { let left = term(); for (;;) { const tk = peek(); if (tk && tk.t === '+') { eat(); left = { t: 'add', a: left, b: term() }; } else if (tk && tk.t === '-') { eat(); left = { t: 'sub', a: left, b: term() }; } else break; } return left; }
+    const ast = addsub(); if (p < toks.length) throw new Error('Unexpected extra input — check operators and parentheses.'); return { ast, varName };
+  }
+
+  function astConstInt(node) {
+    function ev(n) {
+      switch (n.t) {
+        case 'num': return n.v; case 'neg': return FR.neg(ev(n.a));
+        case 'add': return FR.add(ev(n.a), ev(n.b)); case 'sub': return FR.sub(ev(n.a), ev(n.b));
+        case 'mul': return FR.mul(ev(n.a), ev(n.b)); case 'div': return FR.div(ev(n.a), ev(n.b));
+        case 'pow': { const b = ev(n.b); if (b.d !== 1) throw new Error('Exponents must be whole numbers.'); let r = I(1), base = ev(n.a); for (let i = 0; i < Math.abs(b.n); i++) r = FR.mul(r, base); return b.n < 0 ? FR.div(I(1), r) : r; }
+        default: throw new Error('Exponents must be constant whole numbers.');
+      }
+    }
+    const f = ev(node); if (f.d !== 1) throw new Error('Exponents must be whole numbers.'); return f.n;
+  }
+  function collectAbs(node, list) { if (!node || typeof node !== 'object') return; if (node.t === 'abs') list.push(node); for (const k of ['a', 'b']) if (node[k]) collectAbs(node[k], list); }
+  function astToRat(node, signMap) {
+    switch (node.t) {
+      case 'num': return ratConst(node.v); case 'var': return ratX(); case 'neg': return ratNeg(astToRat(node.a, signMap));
+      case 'add': return ratAdd(astToRat(node.a, signMap), astToRat(node.b, signMap)); case 'sub': return ratSub(astToRat(node.a, signMap), astToRat(node.b, signMap));
+      case 'mul': return ratMul(astToRat(node.a, signMap), astToRat(node.b, signMap)); case 'div': return ratDiv(astToRat(node.a, signMap), astToRat(node.b, signMap));
+      case 'pow': return ratPow(astToRat(node.a, signMap), astConstInt(node.b));
+      case 'abs': { const sgn = signMap.get(node); const inner = astToRat(node.a, signMap); return sgn < 0 ? ratNeg(inner) : inner; }
+    }
+    throw new Error('Could not parse the expression.');
+  }
+
+  function solveOneRelation(astL, astR, relop) {
+    const F = { t: 'sub', a: astL, b: astR };
+    const absNodes = []; collectAbs(F, absNodes);
+    if (absNodes.length === 0) { const Frat = astToRat(F, new Map()); const res = solveRational(Frat, relop); return { set: res.set, Frat, res, hasAbs: false }; }
+    const breaks = [];
+    for (const node of absNodes) { const arg = astToRat(node.a, new Map()); for (const r of [...realRoots(arg.num).roots, ...realRoots(arg.den).roots]) if (!breaks.some(v => approx(v, r.val))) breaks.push(r.val); }
+    breaks.sort((a, b) => a - b);
+    const bounds = [NINF, ...breaks, PINF]; let sol = []; const regions = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const lo = bounds[i], hi = bounds[i + 1]; let t;
+      if (lo === NINF && hi === PINF) t = 0; else if (lo === NINF) t = hi - 1; else if (hi === PINF) t = lo + 1; else t = (lo + hi) / 2;
+      const sm = new Map();
+      for (const node of absNodes) { const arg = astToRat(node.a, new Map()); const v = polyEvalNum(arg.num, t) / polyEvalNum(arg.den, t); sm.set(node, v < 0 ? -1 : 1); }
+      const Frat = astToRat(F, sm); const res = solveRational(Frat, relop);
+      const clip = [mkInt(lo, lo === NINF, hi, hi === PINF)]; const piece = setIntersect(res.set, clip); sol = setUnion(sol, piece);
+      regions.push({ lo, hi, Frat, piece });
+    }
+    return { set: sol, hasAbs: true, breaks, regions };
+  }
+
+  function solveSingle(str) {
+    const toks = tokenize(str); const segs = []; let cur = []; const rels = []; let depth = 0, bar = 0;
+    for (const tk of toks) { if (tk.t === '(') depth++; if (tk.t === ')') depth--; if (tk.t === 'bar') bar ^= 1; if (tk.t === 'rel' && depth === 0 && bar === 0) { segs.push(cur); rels.push(tk.v); cur = []; } else cur.push(tk); }
+    segs.push(cur);
+    if (rels.length === 0) throw new Error('No comparison found — use <, >, ≤, ≥ or =.');
+    if (rels.length > 3) throw new Error('Too many comparisons chained together.');
+    const exprs = segs.map(seg => { if (!seg.length) throw new Error('A comparison is missing one of its sides.'); return parseExpr(seg); });
+    let vn = null; for (const e of exprs) if (e.varName) { if (vn && vn !== e.varName) throw new Error('Use one variable only.'); vn = e.varName; }
+    vn = vn || 'x';
+    let sol = setFull(); const parts = [];
+    for (let i = 0; i < rels.length; i++) { const one = solveOneRelation(exprs[i].ast, exprs[i + 1].ast, rels[i]); parts.push({ relop: rels[i], L: exprs[i].ast, R: exprs[i + 1].ast, ...one }); sol = setIntersect(sol, one.set); }
+    return { set: sol, varName: vn, parts, chained: rels.length > 1 };
+  }
+
+  function solveInput(input) {
+    if (!input || !input.trim()) throw new Error('Enter an inequality, e.g. 2x + 3 < 7.');
+    if (!/[<>=≤≥≠]/.test(input)) throw new Error('Add a comparison: <, >, ≤, ≥ or =.');
+    const toks = tokenize(input);
+    function splitTop(tokens, kind) { const groups = [[]]; let depth = 0, bar = 0; for (const tk of tokens) { if (tk.t === '(') depth++; if (tk.t === ')') depth--; if (tk.t === 'bar') bar ^= 1; if (tk.t === kind && depth === 0 && bar === 0) groups.push([]); else groups[groups.length - 1].push(tk); } return groups; }
+    const detok = tks => tks.map(t => t.t === 'num' || t.t === 'ident' ? t.v : t.t === 'rel' ? t.v : ({ '*': '*', '/': '/', '+': '+', '-': '-', '^': '^', '(': '(', ')': ')', bar: '|', and: ' and ', or: ' or ' }[t.t] || '')).join(' ');
+    const orGroups = splitTop(toks, 'or'); let total = null; const clauses = [];
+    for (const og of orGroups) {
+      const andGroups = splitTop(og, 'and'); let clause = setFull(); const leaves = [];
+      for (const ag of andGroups) { const r = solveSingle(detok(ag)); leaves.push(r); clause = setIntersect(clause, r.set); }
+      clauses.push({ set: clause, leaves }); total = total ? setUnion(total, clause) : clause;
+    }
+    let vn = 'x'; for (const c of clauses) for (const l of c.leaves) if (l.varName) vn = l.varName;
+    const compound = orGroups.length > 1 || clauses.some(c => c.leaves.length > 1) || clauses.some(c => c.leaves.some(l => l.chained));
+    return { set: total || [], clauses, compound, varName: vn };
+  }
+
+  /* ============================ DISPLAY HELPERS ============================ */
+  const RELDISP = { '<': '<', '<=': '≤', '>': '>', '>=': '≥', '=': '=', '!=': '≠' };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function toFracDisp(v) {
+    if (!isFinite(v)) return null;
+    const neg = v < 0; let x = Math.abs(v), h1 = 1, h0 = 0, k1 = 0, k0 = 1, b = x, it = 0;
+    do { const a = Math.floor(b); const th = h1; h1 = a * h1 + h0; h0 = th; const tk = k1; k1 = a * k1 + k0; k0 = tk; const r = b - a; if (r < 1e-12) break; b = 1 / r; it++; } while (it < 40 && k1 < 100000);
+    if (k1 > 0 && k1 < 100000 && Math.abs(v - (neg ? -1 : 1) * h1 / k1) < 1e-9) return { n: (neg ? -1 : 1) * h1, d: k1 };
+    return null;
+  }
+  function fmtVal(v) {
+    if (v === NINF) return '−∞'; if (v === PINF) return '∞';
+    if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+    const f = toFracDisp(v); if (f && f.d !== 1) return `${f.n}/${f.d}`;
+    let s = v.toFixed(4).replace(/0+$/, '').replace(/\.$/, ''); return '≈' + s;
+  }
+  // bracket-free numeric for axis ticks
+  function fmtTick(v) { if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v)); return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
+
+  function intervalNotation(set) {
+    if (!set.length) return '∅';
+    return set.map(iv => {
+      if (iv.a !== NINF && iv.b !== PINF && approx(iv.a, iv.b) && !iv.ao && !iv.bo) return `{${fmtVal(iv.a)}}`;
+      const l = (iv.a === NINF ? '(' : iv.ao ? '(' : '[') + fmtVal(iv.a);
+      const r = fmtVal(iv.b) + (iv.b === PINF ? ')' : iv.bo ? ')' : ']');
+      return l + ', ' + r;
+    }).join(' ∪ ');
+  }
+  function inequalityNotation(set, vn) {
+    if (!set.length) return 'no solution';
+    if (set.length === 1 && set[0].a === NINF && set[0].b === PINF) return 'all real numbers';
+    return set.map(iv => {
+      if (iv.a !== NINF && iv.b !== PINF && approx(iv.a, iv.b) && !iv.ao && !iv.bo) return `${vn} = ${fmtVal(iv.a)}`;
+      if (iv.a === NINF) return `${vn} ${iv.bo ? '<' : '≤'} ${fmtVal(iv.b)}`;
+      if (iv.b === PINF) return `${vn} ${iv.ao ? '>' : '≥'} ${fmtVal(iv.a)}`;
+      return `${fmtVal(iv.a)} ${iv.ao ? '<' : '≤'} ${vn} ${iv.bo ? '<' : '≤'} ${fmtVal(iv.b)}`;
+    }).join('  or  ');
+  }
+  function setBuilderNotation(set, vn) {
+    if (!set.length) return '∅';
+    if (set.length === 1 && set[0].a === NINF && set[0].b === PINF) return `{ ${vn} ∈ ℝ }`;
+    return `{ ${vn} ∈ ℝ | ${inequalityNotation(set, vn)} }`;
+  }
+
+  /* polynomial / rational pretty-print */
+  function fracStrInline(f) { return f.d === 1 ? String(f.n) : `${f.n}/${f.d}`; }
+  function polyStr(p, vn) {
+    p = polyTrim(p); if (polyIsZero(p)) return '0';
+    let out = '';
+    for (let i = p.length - 1; i >= 0; i--) {
+      const c = p[i]; if (FR.isZero(c)) continue;
+      const neg = c.n < 0; const abs = neg ? FR.neg(c) : c;
+      out += out === '' ? (neg ? '−' : '') : (neg ? ' − ' : ' + ');
+      const isOne = abs.n === 1 && abs.d === 1;
+      let coef = abs.d === 1 ? String(abs.n) : `${abs.n}/${abs.d}`;
+      if (i === 0) out += coef;
+      else { if (!isOne) out += abs.d === 1 ? coef : `(${coef})`; out += vn + (i > 1 ? `^${i}` : ''); }
+    }
+    return out;
+  }
+  // reduce a rational for display: clear denominators, drop common content, make den lead +
+  function ratReduce(R) {
+    let num = polyTrim(R.num), den = polyTrim(R.den);
+    let lcm = 1; for (const c of [...num, ...den]) lcm = lcm / gcd(lcm, c.d) * c.d;
+    let inum = num.map(c => Math.round(FR.num(FR.mul(c, I(lcm))))), iden = den.map(c => Math.round(FR.num(FR.mul(c, I(lcm)))));
+    let g = 0; for (const c of [...inum, ...iden]) g = gcd(g, c); if (g > 1) { inum = inum.map(c => c / g); iden = iden.map(c => c / g); }
+    if (iden[iden.length - 1] < 0) { inum = inum.map(c => -c); iden = iden.map(c => -c); }
+    return { num: inum.map(I), den: iden.map(I) };
+  }
+  function ratStr(R, vn) {
+    const r = ratReduce(R);
+    if (polyIsZero(r.den) || (r.den.length === 1 && r.den[0].n === 1 && r.den[0].d === 1)) return polyStr(r.num, vn);
+    return `(${polyStr(r.num, vn)}) / (${polyStr(r.den, vn)})`;
+  }
+
+  /* number-line SVG */
+  function numberLine(set) {
+    const W = 640, H = 70, M = 26, yB = 40;
+    const fin = []; for (const iv of set) { if (iv.a !== NINF) fin.push(iv.a); if (iv.b !== PINF) fin.push(iv.b); }
+    let lo, hi;
+    if (!fin.length) { lo = -6; hi = 6; } else { lo = Math.min(...fin); hi = Math.max(...fin); if (approx(lo, hi)) { lo -= 3; hi += 3; } else { const pad = (hi - lo) * 0.28 + 0.5; lo -= pad; hi += pad; } }
+    const xm = v => M + (v - lo) / (hi - lo) * (W - 2 * M);
+    const parts = [];
+    // axis
+    parts.push(`<line x1="${M - 8}" y1="${yB}" x2="${W - M + 8}" y2="${yB}" class="nl-axis"/>`);
+    parts.push(`<path d="M${M - 8} ${yB} l7 -4 v8 z" class="nl-arrow"/><path d="M${W - M + 8} ${yB} l-7 -4 v8 z" class="nl-arrow"/>`);
+    // ticks
+    const span = hi - lo; let raw = span / 9, mag = Math.pow(10, Math.floor(Math.log10(raw))), nrm = raw / mag;
+    const step = (nrm < 1.5 ? 1 : nrm < 3 ? 2 : nrm < 7 ? 5 : 10) * mag;
+    for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) {
+      if (Math.abs(t) < 1e-9) t = 0; const x = xm(t);
+      parts.push(`<line x1="${x.toFixed(1)}" y1="${yB - 4}" x2="${x.toFixed(1)}" y2="${yB + 4}" class="nl-tick"/>`);
+      parts.push(`<text x="${x.toFixed(1)}" y="${yB + 17}" class="nl-lab">${esc(fmtTick(t))}</text>`);
+    }
+    // solution segments
+    for (const iv of set) {
+      const single = iv.a !== NINF && iv.b !== PINF && approx(iv.a, iv.b) && !iv.ao && !iv.bo;
+      const x1 = iv.a === NINF ? M : xm(iv.a), x2 = iv.b === PINF ? W - M : xm(iv.b);
+      if (!single) parts.push(`<line x1="${x1.toFixed(1)}" y1="${yB}" x2="${x2.toFixed(1)}" y2="${yB}" class="nl-seg"/>`);
+      if (iv.a === NINF) parts.push(`<path d="M${M} ${yB} l9 -5 v10 z" class="nl-seg-arrow"/>`);
+      else parts.push(`<circle cx="${x1.toFixed(1)}" cy="${yB}" r="5.5" class="${iv.ao ? 'nl-open' : 'nl-closed'}"/>`);
+      if (iv.b === PINF) parts.push(`<path d="M${W - M} ${yB} l-9 -5 v10 z" class="nl-seg-arrow"/>`);
+      else if (!single) parts.push(`<circle cx="${x2.toFixed(1)}" cy="${yB}" r="5.5" class="${iv.bo ? 'nl-open' : 'nl-closed'}"/>`);
+    }
+    return `<svg class="nl-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Number-line view of the solution" preserveAspectRatio="xMidYMid meet">${parts.join('')}</svg>`;
+  }
+
+  /* sign chart for a single non-abs relation */
+  function signChart(res, vn) {
+    const { num, den, segs, pRoots, qRoots } = res;
+    if (!segs || !segs.length) return '';
+    const crit = []; // {val, kinds:Set, mult}
+    for (const r of pRoots) crit.push({ val: r.val, num: true, den: false, mult: r.mult });
+    for (const r of qRoots) { const hit = crit.find(c => approx(c.val, r.val)); if (hit) hit.den = true; else crit.push({ val: r.val, num: false, den: true, mult: r.mult }); }
+    crit.sort((a, b) => a.val - b.val);
+    if (!crit.length) return '';
+    // factor rows: one per critical point
+    const colHead = segs.map(s => {
+      const lo = s.lo === NINF ? '−∞' : fmtVal(s.lo), hi = s.hi === PINF ? '∞' : fmtVal(s.hi);
+      return `(${lo}, ${hi})`;
+    });
+    let rows = '';
+    for (const c of crit) {
+      const lab = `${vn} ${c.val < 0 ? '+' : '−'} ${fmtVal(Math.abs(c.val))}${c.mult > 1 ? `<tspan>^${c.mult}</tspan>` : ''}`;
+      const cells = segs.map(s => { const base = s.t - c.val; const sg = base < 0 ? '−' : '+'; const eff = (c.mult % 2 === 0) ? '+' : sg; return `<td class="ineq-sc ${eff === '+' ? 'pos' : 'neg'}">${eff}</td>`; }).join('');
+      rows += `<tr><th class="ineq-sc-h">(${lab})${c.den ? ' <em>÷</em>' : ''}</th>${cells}</tr>`;
+    }
+    const fRow = segs.map(s => `<td class="ineq-sc ${s.sg < 0 ? 'neg' : s.sg > 0 ? 'pos' : ''} ${s.inSol ? ' in' : ''}">${s.sg < 0 ? '−' : s.sg > 0 ? '+' : '0'}</td>`).join('');
+    const solRow = segs.map(s => `<td class="ineq-sc ${s.inSol ? 'in' : 'out'}">${s.inSol ? '✓' : '·'}</td>`).join('');
+    const head = colHead.map(h => `<th class="ineq-sc-col">${esc(h)}</th>`).join('');
+    return `<div class="ineq-scroll"><table class="ineq-sctable"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}<tr class="ineq-sc-f"><th class="ineq-sc-h">sign of f(${vn})</th>${fRow}</tr><tr class="ineq-sc-sol"><th class="ineq-sc-h">in solution?</th>${solRow}</tr></tbody></table></div><p class="ineq-note">Pick a test number in each interval and check the sign of f(${vn}). Rows marked <em>÷</em> are denominator factors — those x-values are excluded (the expression is undefined there).</p>`;
+  }
+
+  /* steps for the whole solve */
+  function buildSteps(parsed, raw) {
+    const vn = parsed.varName; let h = '';
+    const single = !parsed.compound && parsed.clauses.length === 1 && parsed.clauses[0].leaves.length === 1 && parsed.clauses[0].leaves[0].parts.length === 1;
+    if (single) {
+      const leaf = parsed.clauses[0].leaves[0], part = leaf.parts[0];
+      h += `<ol class="ineq-steps">`;
+      h += `<li><span class="ineq-step-l">Start</span><span class="mono">${esc(raw)}</span></li>`;
+      if (!part.hasAbs) {
+        h += `<li><span class="ineq-step-l">Move everything to one side</span><span class="mono">f(${vn}) = ${esc(ratStr(part.Frat, vn))} ${RELDISP[part.relop]} 0</span></li>`;
+        const z = part.res.pRoots.map(r => `${vn} = ${fmtVal(r.val)}`), ex = part.res.qRoots.map(r => `${vn} = ${fmtVal(r.val)}`);
+        if (z.length || ex.length) {
+          h += `<li><span class="ineq-step-l">Critical points</span><span>`;
+          if (z.length) h += `<span class="ineq-tag zero">zeros</span> <span class="mono">${esc(z.join(',  '))}</span>`;
+          if (ex.length) h += `${z.length ? '<br>' : ''}<span class="ineq-tag exc">excluded</span> <span class="mono">${esc(ex.join(',  '))}</span>`;
+          h += `</span></li>`;
+        } else h += `<li><span class="ineq-step-l">Critical points</span><span>None — f(${vn}) never crosses zero, so its sign is constant.</span></li>`;
+        const sc = signChart(part.res, vn); if (sc) h += `<li><span class="ineq-step-l">Sign chart</span>${sc}</li>`;
+      } else {
+        h += `<li><span class="ineq-step-l">Absolute value: split into cases</span><span>The sign of each <span class="mono">|…|</span> changes at <span class="mono">${esc(part.breaks.map(b => `${vn} = ${fmtVal(b)}`).join(',  ')) || 'no points'}</span>. On each piece rewrite <span class="mono">|g|</span> as <span class="mono">±g</span> and solve, then keep only the part in that piece:</span></li>`;
+        for (const reg of part.regions) {
+          const lo = reg.lo === NINF ? '−∞' : fmtVal(reg.lo), hi = reg.hi === PINF ? '∞' : fmtVal(reg.hi);
+          h += `<li class="ineq-sub"><span class="ineq-step-l">${esc(`(${lo}, ${hi})`)}</span><span class="mono">${esc(ratStr(reg.Frat, vn))} ${RELDISP[part.relop]} 0  →  ${esc(intervalNotation(reg.piece))}</span></li>`;
+        }
+        h += `<li><span class="ineq-step-l">Combine the pieces</span><span class="mono">${esc(intervalNotation(part.set))}</span></li>`;
+      }
+      h += `</ol>`;
+    } else {
+      h += `<ol class="ineq-steps">`;
+      h += `<li><span class="ineq-step-l">Start</span><span class="mono">${esc(raw)}</span></li>`;
+      parsed.clauses.forEach((cl, ci) => {
+        if (cl.leaves.length === 1 && !cl.leaves[0].chained) {
+          h += `<li><span class="ineq-step-l">Part</span><span class="mono">${esc(intervalNotation(cl.leaves[0].set))}</span></li>`;
+        } else {
+          cl.leaves.forEach(lf => { h += `<li class="ineq-sub"><span class="ineq-step-l">${lf.chained ? 'chained' : 'and'}</span><span class="mono">${esc(intervalNotation(lf.set))}</span></li>`; });
+          h += `<li><span class="ineq-step-l">Intersect (and)</span><span class="mono">${esc(intervalNotation(cl.set))}</span></li>`;
+        }
+      });
+      if (parsed.clauses.length > 1) h += `<li><span class="ineq-step-l">Union (or)</span><span class="mono">${esc(intervalNotation(parsed.set))}</span></li>`;
+      h += `</ol>`;
+    }
+    return h;
+  }
+
+  function resultBlock(parsed, raw) {
+    const vn = parsed.varName, set = parsed.set;
+    const copyAll = `Inequality: ${raw}\nInterval: ${intervalNotation(set)}\nSet-builder: ${setBuilderNotation(set, vn)}\nInequality form: ${inequalityNotation(set, vn)}`;
+    return `<div class="result ineq-result">
+      <button class="copy-btn" data-copytext="${escape(copyAll)}">Copy</button>
+      <div class="result-label">Solution</div>
+      <div class="ineq-big mono">${esc(intervalNotation(set))}</div>
+      ${numberLine(set)}
+      <div class="ineq-notations">
+        <div class="ineq-not"><span class="ineq-not-l">Interval</span><span class="mono" >${esc(intervalNotation(set))}</span><button class="ineq-mini" data-copytext="${escape(intervalNotation(set))}">copy</button></div>
+        <div class="ineq-not"><span class="ineq-not-l">Set-builder</span><span class="mono">${esc(setBuilderNotation(set, vn))}</span><button class="ineq-mini" data-copytext="${escape(setBuilderNotation(set, vn))}">copy</button></div>
+        <div class="ineq-not"><span class="ineq-not-l">Inequality</span><span class="mono">${esc(inequalityNotation(set, vn))}</span><button class="ineq-mini" data-copytext="${escape(inequalityNotation(set, vn))}">copy</button></div>
+      </div>
+      <details class="ineq-stepbox" ${state.showSteps ? 'open' : ''}><summary>Show the steps</summary>${buildSteps(parsed, raw)}</details>
+    </div>`;
+  }
+  function errBlock(msg) { return `<div class="result ineq-err"><div class="result-label">Can't solve that yet</div><p class="ineq-errmsg">${esc(msg)}</p><p class="ineq-errmsg ineq-dim">Supported: one variable, <span class="mono">+ − × ÷ ^</span>, parentheses, absolute value <span class="mono">|…|</span>, and <span class="mono">and</span> / <span class="mono">or</span>. Examples below.</p></div>`; }
+
+  /* ============================ SETS TAB ============================ */
+  function parseSetVal(s) {
+    s = s.trim().replace(/∞/g, 'inf').replace(/[−–]/g, '-');
+    if (/^[+-]?inf(inity)?$/i.test(s)) return s[0] === '-' ? NINF : PINF;
+    if (s.includes('/')) { const [a, b] = s.split('/'); return FR.num(fr(parseInt(a, 10), parseInt(b, 10))); }
+    return FR.num(fracFromStr(s));
+  }
+  function parseSet(str) {
+    str = String(str || '').trim().replace(/[−–]/g, '-');
+    if (!str) return [];
+    if (/^(r|ℝ|all|all reals?|reals?)$/i.test(str)) return setFull();
+    if (/^(∅|empty|none|\{\s*\})$/i.test(str)) return [];
+    // split on union symbols
+    const pieces = str.split(/\s*(?:∪|\bU\b|\bu\b)\s*/).filter(s => s.trim());
+    let out = [];
+    for (let piece of pieces) {
+      piece = piece.trim(); let s;
+      const mIv = /^([\[\(])\s*(.+?)\s*,\s*(.+?)\s*([\]\)])$/.exec(piece);
+      const mSet = /^\{\s*(.+?)\s*\}$/.exec(piece);
+      if (mIv) { const a = parseSetVal(mIv[2]), b = parseSetVal(mIv[3]); s = [mkInt(a, mIv[1] === '(', b, mIv[4] === ')')]; if (ivEmpty(s[0])) s = []; }
+      else if (mSet && !/[<>=]/.test(mSet[1])) { s = setSingleton(parseSetVal(mSet[1])); }
+      else if (/[<>=≤≥≠]/.test(piece)) { s = solveSingle(piece.replace(/^\{.*\|/, '').replace(/\}$/, '')).set; }
+      else throw new Error(`Couldn't read "${piece}". Use interval notation like [1, 5) or an inequality like x > 3.`);
+      out = setUnion(out, s);
+    }
+    return out;
+  }
+
+  /* ============================ STATE ============================ */
+  const defaults = () => ({ mode: 'solve', expr: 'x^2 - x - 6 < 0', setA: '[-3, 4)', setB: '(1, 7]', showSteps: true });
+  function load() { const s = Storage.get(SKEY, null), d = defaults(); if (!s || typeof s !== 'object') return d; return { mode: s.mode === 'sets' ? 'sets' : 'solve', expr: typeof s.expr === 'string' ? s.expr : d.expr, setA: typeof s.setA === 'string' ? s.setA : d.setA, setB: typeof s.setB === 'string' ? s.setB : d.setB, showSteps: s.showSteps !== false }; }
+  let state = load(); let saveTimer = null;
+  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => Storage.set(SKEY, state), 250); };
+
+  /* ============================ RENDER ============================ */
+  function renderSolve() {
+    const out = $('#ineq-result', root); if (!out) return;
+    try { const parsed = solveInput(state.expr); out.innerHTML = resultBlock(parsed, state.expr.trim()); }
+    catch (e) { out.innerHTML = errBlock(e.message); }
+  }
+  function renderSets() {
+    const out = $('#ineq-setresult', root); if (!out) return;
+    let A, B, err = '';
+    try { A = parseSet(state.setA); } catch (e) { err = 'Set A: ' + e.message; }
+    try { B = parseSet(state.setB); } catch (e) { err = err || ('Set B: ' + e.message); }
+    if (err) { out.innerHTML = errBlock(err); return; }
+    const opName = $('#ineq-op', root) ? $('#ineq-op', root).value : 'union';
+    let res, label, sym;
+    if (opName === 'union') { res = setUnion(A, B); label = 'A ∪ B'; sym = 'union'; }
+    else if (opName === 'intersect') { res = setIntersect(A, B); label = 'A ∩ B'; }
+    else if (opName === 'diffAB') { res = setDifference(A, B); label = 'A ∖ B'; }
+    else if (opName === 'diffBA') { res = setDifference(B, A); label = 'B ∖ A'; }
+    else if (opName === 'compA') { res = setComplement(A); label = '∁A (ℝ ∖ A)'; }
+    else if (opName === 'compB') { res = setComplement(B); label = '∁B (ℝ ∖ B)'; }
+    else { res = setUnion(A, B); label = 'A ∪ B'; }
+    const card = (name, S) => `<div class="ineq-not"><span class="ineq-not-l">${name}</span><span class="mono">${esc(intervalNotation(S))}</span></div>${numberLine(S)}`;
+    const copyAll = `A = ${intervalNotation(A)}\nB = ${intervalNotation(B)}\n${label} = ${intervalNotation(res)}`;
+    out.innerHTML = `<div class="result ineq-result">
+      <button class="copy-btn" data-copytext="${escape(copyAll)}">Copy</button>
+      <div class="ineq-setgrid">${card('A', A)}${card('B', B)}</div>
+      <div class="result-label" style="margin-top:6px">${esc(label)}</div>
+      <div class="ineq-big mono">${esc(intervalNotation(res))}</div>
+      ${numberLine(res)}
+      <div class="ineq-notations">
+        <div class="ineq-not"><span class="ineq-not-l">Interval</span><span class="mono">${esc(intervalNotation(res))}</span><button class="ineq-mini" data-copytext="${escape(intervalNotation(res))}">copy</button></div>
+        <div class="ineq-not"><span class="ineq-not-l">Set-builder</span><span class="mono">${esc(setBuilderNotation(res, 'x'))}</span><button class="ineq-mini" data-copytext="${escape(setBuilderNotation(res, 'x'))}">copy</button></div>
+        <div class="ineq-not"><span class="ineq-not-l">Inequality</span><span class="mono">${esc(inequalityNotation(res, 'x'))}</span><button class="ineq-mini" data-copytext="${escape(inequalityNotation(res, 'x'))}">copy</button></div>
+      </div>
+      <p class="ineq-note">Enter each set as interval notation (<span class="mono">[a, b]</span>, <span class="mono">(a, b)</span>, mix brackets), as an inequality (<span class="mono">x &gt; 3</span>), join pieces with <span class="mono">∪</span>, or type <span class="mono">R</span> / <span class="mono">∅</span>.</p>
+    </div>`;
+  }
+  function render() { if (state.mode === 'sets') renderSets(); else renderSolve(); }
+
+  /* ---- share-by-code ---- */
+  const b64e = bytes => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  function b64d(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeState() { return b64e(new TextEncoder().encode(JSON.stringify({ v: 1, m: state.mode, e: state.expr, a: state.setA, b: state.setB }))); }
+  function decodeState(input) { let s = String(input || '').trim(); if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1); s = s.replace(/[^A-Za-z0-9\-_]/g, ''); if (!s) return null; try { const o = JSON.parse(new TextDecoder().decode(b64d(s))); if (!o || typeof o.e !== 'string') return null; return { mode: o.m === 'sets' ? 'sets' : 'solve', expr: o.e, setA: typeof o.a === 'string' ? o.a : '', setB: typeof o.b === 'string' ? o.b : '' }; } catch { return null; } }
+
+  const EX_SOLVE = ['2x + 3 < 7', '-3 < 2x + 1 ≤ 5', '|2x - 1| ≥ 3', 'x^2 - x - 6 < 0', '(x-1)/(x+2) ≥ 0', 'x < -1 or x > 2'];
+  const PALETTE = ['<', '≤', '>', '≥', '≠', '|', '(', ')', '^', 'and', 'or'];
+
+  function shell() {
+    return `
+    <div class="ineq-tabs" role="tablist">
+      <button class="ineq-tab${state.mode === 'solve' ? ' on' : ''}" data-mode="solve" role="tab" aria-selected="${state.mode === 'solve'}">Solve</button>
+      <button class="ineq-tab${state.mode === 'sets' ? ' on' : ''}" data-mode="sets" role="tab" aria-selected="${state.mode === 'sets'}">Sets &amp; intervals</button>
+    </div>
+    <div class="ineq-pane" data-pane="solve" ${state.mode === 'solve' ? '' : 'hidden'}>
+      <p class="help">Type an inequality in one variable. Use <span class="mono">&lt; &gt; ≤ ≥</span> (or <span class="mono">&lt;= &gt;=</span>), absolute value <span class="mono">|…|</span>, powers <span class="mono">^</span>, and join with <span class="mono">and</span> / <span class="mono">or</span>. Chained form like <span class="mono">-3 &lt; 2x+1 ≤ 5</span> works too.</p>
+      <div class="ineq-palette" role="group" aria-label="Insert a symbol">${PALETTE.map(s => `<button class="ineq-sym" data-ins="${escape(s)}" type="button">${esc(s)}</button>`).join('')}</div>
+      <div class="field"><label for="ineq-expr">Inequality</label><input class="input mono" id="ineq-expr" value="${escape(state.expr)}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="e.g. x^2 - x - 6 < 0"></div>
+      <div class="ineq-examples"><span class="ineq-ex-l">Try:</span>${EX_SOLVE.map(e => `<button class="ineq-ex" data-ex="${escape(e)}" type="button">${esc(e)}</button>`).join('')}</div>
+      <div id="ineq-result" aria-live="polite"></div>
+    </div>
+    <div class="ineq-pane" data-pane="sets" ${state.mode === 'sets' ? '' : 'hidden'}>
+      <p class="help">Enter two sets, pick an operation, and see the result on a number line with all three notations. Intervals like <span class="mono">[1, 5)</span>, inequalities like <span class="mono">x ≥ 3</span>, unions with <span class="mono">∪</span>, or <span class="mono">R</span> / <span class="mono">∅</span>.</p>
+      <div class="ineq-setrow">
+        <div class="field"><label for="ineq-setA">Set A</label><input class="input mono" id="ineq-setA" value="${escape(state.setA)}" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="e.g. [-3, 4)"></div>
+        <div class="field"><label for="ineq-setB">Set B</label><input class="input mono" id="ineq-setB" value="${escape(state.setB)}" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="e.g. (1, 7]"></div>
+      </div>
+      <div class="field"><label for="ineq-op">Operation</label><select class="input" id="ineq-op">
+        <option value="union">A ∪ B  (union)</option>
+        <option value="intersect">A ∩ B  (intersection)</option>
+        <option value="diffAB">A ∖ B  (difference)</option>
+        <option value="diffBA">B ∖ A  (difference)</option>
+        <option value="compA">∁A  (complement of A)</option>
+        <option value="compB">∁B  (complement of B)</option>
+      </select></div>
+      <div id="ineq-setresult" aria-live="polite"></div>
+    </div>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn ghost sm" data-act="share">Share by code</button>
+      <button class="btn ghost sm" data-act="import">Import code</button>
+    </div>
+    <p class="ineq-foot">Brackets: <span class="mono">[ ]</span> include an endpoint, <span class="mono">( )</span> exclude it. <span class="mono">∞</span> is always open. A hollow dot on the number line means the point is excluded; a filled dot means it's included.</p>`;
+  }
+
+  root.innerHTML = shell();
+  if ($('#ineq-op', root)) render();
+  render();
+
+  /* ---- dialogs ---- */
+  function openShareDialog() {
+    const targetId = state.mode === 'sets' ? 'ineq-setresult' : 'ineq-result';
+    const code = encodeState(), link = location.href.split('#')[0] + '#inequality=' + code;
+    $('#' + targetId, root).innerHTML = `<div class="result"><div class="result-label">Share by code</div><p class="result-sub" style="margin:0 0 12px">No backend — this code carries both tabs. Paste it (or the link) into Import on another device.</p><div class="field"><label>Code</label><textarea class="input mono" id="ineq-sharecode" rows="3" readonly></textarea></div><div class="field"><label>Link</label><input class="input mono" id="ineq-sharelink" readonly></div><div class="btn-row"><button class="btn sm" data-copytext="${escape(code)}">Copy code</button><button class="btn ghost sm" data-copytext="${escape(link)}">Copy link</button><button class="btn ghost sm" data-act="back">Back</button></div></div>`;
+    $('#ineq-sharecode', root).value = code; $('#ineq-sharelink', root).value = link;
+  }
+  function openImportDialog() {
+    const targetId = state.mode === 'sets' ? 'ineq-setresult' : 'ineq-result';
+    $('#' + targetId, root).innerHTML = `<div class="result"><div class="result-label">Import code</div><p class="result-sub" style="margin:0 0 12px">Paste a #inequality=… code or link. This replaces the solver and sets inputs.</p><div class="field"><textarea class="input mono" id="ineq-importbox" rows="3" placeholder="Paste #inequality=… code or link here"></textarea></div><div class="btn-row"><button class="btn sm" data-act="import-go">Load</button><button class="btn ghost sm" data-act="back">Cancel</button></div></div>`;
+  }
+  function applyImport(data) {
+    state.mode = data.mode; if (typeof data.expr === 'string') state.expr = data.expr;
+    if (typeof data.setA === 'string' && data.setA) state.setA = data.setA;
+    if (typeof data.setB === 'string' && data.setB) state.setB = data.setB;
+    root.innerHTML = shell(); wire(); save(); render();
+  }
+
+  /* ---- events ---- */
+  let activeField = null;
+  function insertSymbol(sym) {
+    const inp = activeField || $('#ineq-expr', root); if (!inp) return;
+    const a = inp.selectionStart ?? inp.value.length, b = inp.selectionEnd ?? inp.value.length;
+    const word = /^[a-z]+$/i.test(sym); const padL = a > 0 && /\S$/.test(inp.value.slice(0, a)) ? ' ' : '';
+    const ins = (sym === '(' || sym === ')' || sym === '^') && !word ? sym : padL + sym + ' ';
+    inp.value = inp.value.slice(0, a) + ins + inp.value.slice(b); const pos = a + ins.length; inp.focus(); inp.setSelectionRange(pos, pos);
+    if (inp.id === 'ineq-expr') { state.expr = inp.value; save(); renderSolve(); }
+  }
+  function wire() {
+    activeField = $('#ineq-expr', root);
+  }
+  wire();
+  root.addEventListener('focusin', e => { if (e.target.id === 'ineq-expr') activeField = e.target; });
+  root.addEventListener('input', e => {
+    if (e.target.id === 'ineq-expr') { state.expr = e.target.value; save(); renderSolve(); }
+    else if (e.target.id === 'ineq-setA') { state.setA = e.target.value; save(); renderSets(); }
+    else if (e.target.id === 'ineq-setB') { state.setB = e.target.value; save(); renderSets(); }
+  });
+  root.addEventListener('change', e => {
+    if (e.target.id === 'ineq-op') renderSets();
+    else if (e.target.classList && e.target.tagName === 'DETAILS') {}
+  });
+  root.addEventListener('toggle', e => { if (e.target.classList.contains('ineq-stepbox')) { state.showSteps = e.target.open; save(); } }, true);
+  root.addEventListener('click', e => {
+    let b;
+    if ((b = e.target.closest('[data-copytext]'))) { copy(b.getAttribute('data-copytext') || '', b); return; }
+    if ((b = e.target.closest('[data-ins]'))) { insertSymbol(b.getAttribute('data-ins')); return; }
+    if ((b = e.target.closest('[data-ex]'))) { state.mode = 'solve'; state.expr = b.getAttribute('data-ex'); root.innerHTML = shell(); wire(); save(); render(); return; }
+    if ((b = e.target.closest('[data-mode]'))) { state.mode = b.getAttribute('data-mode'); $$('.ineq-tab', root).forEach(t => t.classList.toggle('on', t.getAttribute('data-mode') === state.mode)); $$('.ineq-pane', root).forEach(p => p.hidden = p.getAttribute('data-pane') !== state.mode); save(); render(); return; }
+    if ((b = e.target.closest('[data-act]'))) {
+      const a = b.dataset.act;
+      if (a === 'share') openShareDialog();
+      else if (a === 'import') openImportDialog();
+      else if (a === 'back') render();
+      else if (a === 'import-go') { const data = decodeState($('#ineq-importbox', root).value); if (!data) { showToast('That code didn’t decode.'); return; } applyImport(data); showToast('Imported.'); }
+    }
+  });
+
+  /* ---- scoped styles ---- */
+  if (!document.getElementById('ineq-style')) {
+    const st = document.createElement('style'); st.id = 'ineq-style';
+    st.textContent = `
+      .ineq-tabs{display:flex;gap:6px;margin:0 0 16px;border-bottom:1px solid var(--rule)}
+      .ineq-tab{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:8px 12px;cursor:pointer;margin-bottom:-1px}
+      .ineq-tab:hover{color:var(--ink-2)} .ineq-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+      .ineq-palette{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+      .ineq-sym{font-family:var(--mono);font-size:15px;line-height:1;min-width:38px;height:38px;padding:0 8px;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+      .ineq-sym:hover{border-color:var(--accent);color:var(--accent)}
+      .ineq-examples{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 4px}
+      .ineq-ex-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+      .ineq-ex{font-family:var(--mono);font-size:13px;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);padding:5px 9px;cursor:pointer}
+      .ineq-ex:hover{color:var(--ink);border-color:var(--ink-2)}
+      .ineq-setrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+      @media(max-width:560px){.ineq-setrow{grid-template-columns:1fr}}
+      .ineq-result{position:relative}
+      .ineq-big{font-size:24px;color:var(--accent);margin:6px 0 4px;word-break:break-word;font-family:var(--mono)}
+      .nl-svg{width:100%;height:auto;display:block;margin:8px 0 12px;overflow:visible}
+      .nl-axis{stroke:var(--ink-2);stroke-width:1.5} .nl-arrow{fill:var(--ink-2)}
+      .nl-tick{stroke:var(--muted);stroke-width:1} .nl-lab{fill:var(--muted);font-family:var(--mono);font-size:11px;text-anchor:middle}
+      .nl-seg{stroke:var(--accent);stroke-width:5;stroke-linecap:round} .nl-seg-arrow{fill:var(--accent)}
+      .nl-closed{fill:var(--accent);stroke:var(--accent);stroke-width:2} .nl-open{fill:var(--paper);stroke:var(--accent);stroke-width:2.5}
+      .ineq-notations{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px}
+      .ineq-not{position:relative;display:flex;align-items:baseline;gap:10px;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:9px 12px;padding-right:58px;flex-wrap:wrap}
+      .ineq-not-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);min-width:88px}
+      .ineq-not .mono{font-size:14px;color:var(--ink);word-break:break-word}
+      .ineq-mini{position:absolute;top:7px;right:8px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--muted);padding:3px 7px;cursor:pointer}
+      .ineq-mini:hover{color:var(--accent);border-color:var(--accent)}
+      .ineq-setgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px}
+      @media(max-width:560px){.ineq-setgrid{grid-template-columns:1fr}}
+      .ineq-stepbox{margin-top:14px;border:1px solid var(--rule);border-radius:3px;padding:10px 14px;background:var(--paper-2)}
+      .ineq-stepbox summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+      .ineq-stepbox summary:hover{color:var(--ink)}
+      .ineq-steps{list-style:none;margin:12px 0 2px;padding:0;counter-reset:s}
+      .ineq-steps li{position:relative;padding:8px 0 8px 0;border-top:1px solid var(--rule-2);display:flex;flex-direction:column;gap:3px}
+      .ineq-steps li:first-child{border-top:none}
+      .ineq-steps li.ineq-sub{padding-left:16px}
+      .ineq-step-l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+      .ineq-steps .mono{font-size:14px;color:var(--ink);word-break:break-word}
+      .ineq-tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid var(--rule)}
+      .ineq-tag.zero{color:var(--accent-3);border-color:color-mix(in srgb,var(--accent-3) 45%,transparent)}
+      .ineq-tag.exc{color:var(--pink);border-color:color-mix(in srgb,var(--pink) 45%,transparent)}
+      .ineq-scroll{overflow-x:auto;margin:4px 0;border:1px solid var(--rule);border-radius:3px}
+      .ineq-sctable{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13px}
+      .ineq-sctable th,.ineq-sctable td{padding:6px 12px;text-align:center;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+      .ineq-sctable thead th{background:var(--paper-2);color:var(--ink-2);font-weight:500;border-bottom:1px solid var(--rule)}
+      .ineq-sc-h{text-align:left !important;color:var(--ink-2)} .ineq-sc-h em{color:var(--pink);font-style:normal}
+      .ineq-sc.pos{color:var(--accent-3)} .ineq-sc.neg{color:var(--pink)}
+      .ineq-sc-f td{font-weight:600} .ineq-sc.in{background:var(--accent-soft);color:var(--accent)}
+      .ineq-sc-sol td.in{color:var(--accent-3)} .ineq-sc-sol td.out{color:var(--muted-2)}
+      .ineq-col-h{}
+      .ineq-note{font-size:12px;color:var(--muted);line-height:1.55;margin:8px 0 0} .ineq-note em{color:var(--pink);font-style:normal}
+      .ineq-err .ineq-errmsg{font-family:var(--sans);font-size:14px;color:var(--ink-2);line-height:1.55;margin:2px 0} .ineq-err .ineq-dim{color:var(--muted);font-size:13px}
+      .ineq-foot{font-size:12px;color:var(--muted);line-height:1.6;margin-top:16px}
+    `;
+    document.head.appendChild(st);
+  }
+
+  /* ---- incoming share link ---- */
+  (function checkShared() {
+    const h = location.hash || ''; const eq = h.indexOf('='); if (eq < 0 || !/inequality/i.test(h.slice(0, eq))) return;
+    const data = decodeState(h.slice(eq + 1)); if (!data) return;
+    setTimeout(() => { if (confirm('Load the shared inequality / sets? This replaces what’s here.')) { applyImport(data); showToast('Loaded shared work.'); } }, 350);
+  })();
+
+  return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
+}
+
 
 /* ========== ESSAY PLANNER ========== */
 function mountEssay(root) {
