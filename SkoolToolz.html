@@ -9176,9 +9176,14 @@ function mountMusic(root) {
     const yOf = pos => refY - (pos - refPos) * HALF;
     const n = Math.max(notes.length, 1);
     const W = X0 + n * DX + 20;
-    const H = TOP + 4 * SP + 46;
-    const lineTop = 30, lineBottom = clef === 'bass' ? 18 : 30; // not used directly
-    let svg = `<svg class="ms-staff" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(notes.map(noteFull).join(', '))} on a ${clef} staff">`;
+    const labelY = TOP + 4 * SP + 26;
+    // Expand the vertical view to enclose every note (plus its accidental and
+    // ledger lines) so high/low notes never clip off the fixed staff box.
+    const ys = notes.map(nt => yOf(posOf(nt)));
+    const minY = Math.min(TOP - 6, ...ys.map(y => y - 13));
+    const maxY = Math.max(labelY + 4, ...ys.map(y => y + 9));
+    const vbY = minY, vbH = maxY - minY;
+    let svg = `<svg class="ms-staff" viewBox="0 ${vbY} ${W} ${vbH}" width="${W}" height="${vbH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(notes.map(noteFull).join(', '))} on a ${clef} staff">`;
     // 5 staff lines
     for (let i = 0; i < 5; i++) { const y = TOP + i * SP; svg += `<line class="ms-line" x1="8" y1="${y}" x2="${W - 8}" y2="${y}"/>`; }
     // clef glyph
@@ -9192,7 +9197,7 @@ function mountMusic(root) {
       if (pos < botLine) for (let p = botLine - 2; p >= pos; p -= 2) svg += `<line class="ms-ledger" x1="${x - 11}" y1="${yOf(p)}" x2="${x + 11}" y2="${yOf(p)}"/>`;
       if (nt.acc !== 0) svg += `<text class="ms-acc" x="${x - 14}" y="${y + 4}">${accGlyph(nt.acc)}</text>`;
       svg += `<ellipse class="ms-head" cx="${x}" cy="${y}" rx="6.4" ry="4.9" transform="rotate(-18 ${x} ${y})"/>`;
-      svg += `<text class="ms-nlabel" x="${x}" y="${TOP + 4 * SP + 26}">${esc(noteName(nt))}</text>`;
+      svg += `<text class="ms-nlabel" x="${x}" y="${labelY}">${esc(noteName(nt))}</text>`;
     });
     svg += `</svg>`;
     return svg;
