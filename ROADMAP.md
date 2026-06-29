@@ -227,9 +227,27 @@ student actually exports or reuses.
   AST, then exact-fraction polynomial/rational arithmetic drives a sign-chart
   solver. Autosaves to localStorage and **shares by code** (`#inequality=…`).
 
-### 2.6 Music Theory Helper  *(Toolbox)*  ⬜ *not started*
-Scales, intervals, key signatures, metronome. Distinctive, on-brand-playful,
-underserved by free tools.
+### 2.6 Music Theory Helper  *(Toolbox)*  ✅ *shipped*
+Distinctive, on-brand-playful, underserved by free tools. Five tabs, all
+deterministic and offline:
+- ✅ **Scales** — major, the seven modes, harmonic/melodic minor, major/minor
+  pentatonic, blues, and whole-tone built from any root, with **correct
+  enharmonic spelling** (each diatonic degree keeps its own letter; accidentals
+  are derived), scale-degree labels, and the whole/half **step pattern**.
+- ✅ **Intervals** — name the interval between two notes (quality + number +
+  semitone count, ascending/descending) *and* build any interval up or down
+  from a note, with quality options gated to the interval number.
+- ✅ **Chords** — spell triads, suspended, 6th and 7th chords from a root +
+  quality, plus a **chord identifier** that names a set of notes (with
+  inversion) by matching pitch-class sets across every root.
+- ✅ **Keys** — key signature (sharps/flats in order), relative + parallel key,
+  and an **interactive Circle of Fifths** (click any major/minor key to load it).
+- ✅ **Metronome** — Web-Audio click with accented downbeat, adjustable BPM +
+  tempo name, time-signature beat dots, and **tap-tempo**. A lookahead scheduler
+  keeps timing tight; audio is torn down on panel close.
+- ✅ Notes render on an **SVG staff** (treble / bass clef toggle, ledger lines,
+  accidentals); a small triangle-wave synth plays scales/chords/keys.
+- ✅ Autosaves to localStorage and **shares by code** (`#music=…`), no backend.
 
 ### 2.7 Exam Cheat-Sheet Builder  *(Words/Toolbox)*  ⬜ *not started*
 Compose a one-page allowed formula sheet from the Formula Reference; print to
@@ -280,13 +298,13 @@ revisit after Phase 2.
 | Phase | Theme | Items | Status |
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
-| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | 🟡 5 / 7 shipped (Music Theory, Cheat-Sheet open) |
+| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | 🟡 6 / 7 shipped (Cheat-Sheet open) |
 | 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | ⬜ not started |
 
-**Status as of 2026-06-29:** Phase 1 is complete. Phase 2 has five of seven
-tools shipped; only the **Music Theory Helper (2.6)** and **Exam Cheat-Sheet
-Builder (2.7)** remain. Phase 3 (the Test Prep, Accessibility & Focus, and
-optional CS shelves) has not been started.
+**Status as of 2026-06-29:** Phase 1 is complete. Phase 2 has six of seven
+tools shipped; only the **Exam Cheat-Sheet Builder (2.7)** remains. Phase 3
+(the Test Prep, Accessibility & Focus, and optional CS shelves) has not been
+started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
