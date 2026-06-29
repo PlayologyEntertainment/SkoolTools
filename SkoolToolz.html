@@ -5795,10 +5795,12 @@ function registerTools() {
 }
 
 /* ========== CALCULUS SOLVER ==========
-   Symbolic derivatives with rule-by-rule shown work. The heavy engine
-   (calculus-engine.js) is lazy-loaded on first open via loadCalcEngine();
-   results render through the shared KaTeX path. Integrals & Limits are
-   roadmapped (Phase 1.1 follow-ups) and shown as upcoming. */
+   Symbolic derivatives, integrals, and limits with rule-by-rule shown work.
+   The heavy engine (calculus-engine.js) is lazy-loaded on first open via
+   ensureEngine(); results render through the shared KaTeX path. Derivatives,
+   indefinite/definite integrals (u-substitution & by-parts, plus a Simpson's-
+   rule numeric fallback), and one-sided / at-infinity limits are all live
+   (Roadmap 1.1, fully shipped). */
 function mountCalculus(root) {
   const $ = (sel, ctx) => (ctx || root).querySelector(sel);
 

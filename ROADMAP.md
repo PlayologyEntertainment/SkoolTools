@@ -54,13 +54,18 @@ badge so students can see what's coming. On release they flip to a `NEW` (or
 The highest-confidence work. These tools already have traffic; depth maps
 directly to real classroom jobs (AP courses, college intro sequences, labs).
 
-### 1.1 Calculus Solver  *(new tool, Numbers shelf — but logically a "deepen")*
+### 1.1 Calculus Solver  *(new tool, Numbers shelf — but logically a "deepen")*  ✅ *shipped*
 The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
-- Symbolic **derivatives** with rule-by-rule steps (power, product, quotient,
+- ✅ Symbolic **derivatives** with rule-by-rule steps (power, product, quotient,
   chain, trig, exp/log).
-- **Indefinite & definite integrals** with shown substitution / by-parts steps.
-- **Limits** (including one-sided and limits at infinity).
-- Lazy-loaded symbolic engine; results render via the existing LaTeX path.
+- ✅ **Indefinite & definite integrals** with shown work — linear & general
+  u-substitution and by-parts steps, standard-table antiderivatives, and a
+  Simpson's-rule numeric fallback for definite integrals that lack a closed form.
+- ✅ **Limits** with direct-substitution and indeterminate-form handling,
+  including one-sided (left/right) limits and limits at ±∞.
+- ✅ Lazy-loaded symbolic engine (`calculus-engine.js`, fetched via `<script>` on
+  first open so it also works from a local `file://` copy, then cached); results
+  render through the shared KaTeX/LaTeX path.
 - *Why first:* pure show-work, no accounts, closes the loudest gap.
 
 ### 1.2 Graphing Calculator → multi-function + tables  ✅ *shipped*
@@ -135,13 +140,20 @@ The single biggest curricular gap for late-HS (AP Calc AB/BC) and college.
   **.txt** (hanging-indent), plus a print-friendly **Print / PDF** view — no
   backend, no account.
 
-### 1.8 Notes / Essay Planner → outline-to-draft scaffolding
-- Structural (not AI) scaffold: thesis → topic sentences → evidence slots →
-  transition prompts.
-- Export to `.md` and print-to-PDF.
+### 1.8 Notes / Essay Planner → outline-to-draft scaffolding  ✅ *shipped*
+- ✅ Structural (not AI) **Scaffold** tab: hook + context → body paragraphs, each
+  with a **transition prompt**, **topic sentence**, and repeatable **evidence
+  slots** (quote → source → analysis) → restatement + closing. Nothing is
+  generated for the student — the tool only frames the skeleton they fill in.
+- ✅ **Transition-prompt suggestions** tuned to the essay type (argumentative /
+  expository / analytical / narrative).
+- ✅ Companion **Thesis · Outline · Sources · Draft · Checklist** tabs, with a live
+  word-goal counter on a pasted draft and a copyable outline / source list.
+- ✅ **Export to `.md`** (full plan *or* draft skeleton) and **print-to-PDF**
+  (full plan or draft skeleton); everything autosaves to localStorage.
 
-**Phase 1 exit criteria:** all eight items shipped; lazy-load path proven on the
-Calculus Solver; performance budget re-verified; a11y pass on new UI.
+**Phase 1 exit criteria:** ✅ all eight items shipped; ✅ lazy-load path proven on
+the Calculus Solver; performance budget re-verified; a11y pass on new UI.
 
 ---
 
@@ -150,9 +162,14 @@ Calculus Solver; performance budget re-verified; a11y pass on new UI.
 New standalone tools that fit the current IA. Each is a distinct artifact a
 student actually exports or reuses.
 
-### 2.1 Concept Map / Mind Map  *(Study)*
-Node-and-edge canvas; drag to arrange; export PNG + JSON. The most-requested
-study artifact the app currently lacks.
+### 2.1 Concept Map / Mind Map  *(Study)*  ✅ *shipped*
+- ✅ **Node-and-edge canvas** (SVG for interaction): add nodes, drag to arrange,
+  connect with edges, edit/recolor, with fit-to-view.
+- ✅ **Multiple maps** kept side by side and persisted in localStorage.
+- ✅ **Export PNG** (dark / white / transparent backgrounds, rendered via
+  Canvas-2D) and **export / import JSON**.
+- ✅ **Share-by-code** (`#mindmap=…` code + link, no backend) — paste a code or
+  link to import a map as a new copy.
 
 ### 2.2 Lab Report Builder  *(Lab ↔ Words bridge)*  ✅ *shipped*
 - ✅ Full standard template: title/info (name, partners, course, instructor,
@@ -169,8 +186,15 @@ study artifact the app currently lacks.
   table renders as a Markdown / aligned-text table), **localStorage autosave**,
   and **share-by-code** (`#labreport=…` code + link, no backend).
 
-### 2.3 Matrix Calculator  *(Numbers)*
-Add/multiply, determinant, inverse, **RREF with steps**. Linear algebra + AP CS.
+### 2.3 Matrix Calculator  *(Numbers)*  ✅ *shipped*
+- ✅ **Add / subtract / multiply**, scalar multiply, transpose, and integer
+  matrix powers.
+- ✅ **Determinant**, **inverse**, **RREF with the row-operation steps shown**,
+  rank, trace, and **solve Ax = b**.
+- ✅ All arithmetic is **exact over the rationals** (BigInt fractions) with a
+  fraction⇄decimal display toggle — no floating-point drift.
+- ✅ Workspace autosaves to localStorage and **shares by code** (`#matrix=…`),
+  no backend. Linear algebra + AP CS.
 
 ### 2.4 Truth Table / Logic  *(Numbers, or future CS group)*  ✅ *shipped*
 - ✅ **Expression parser** with no `eval` — a hand-written tokenizer +
@@ -193,22 +217,29 @@ Add/multiply, determinant, inverse, **RREF with steps**. Linear algebra + AP CS.
   **share-by-code** (`#truthtable=…` code + link, no backend). Discrete math,
   CS, and philosophy-logic units.
 
-### 2.5 Inequality / Interval Solver  *(Numbers)*
-Solve and visualize on a number line; interval & set notation output.
+### 2.5 Inequality / Interval Solver  *(Numbers)*  ✅ *shipped*
+- ✅ Solve **linear, compound, absolute-value, polynomial, and rational**
+  inequalities in one variable and **visualize the solution on a number line**.
+- ✅ Output in **interval, set-builder, and inequality** notation (each copyable).
+- ✅ A second **interval / set algebra** tab (union, intersection, complement,
+  difference) sharing the same number-line view.
+- ✅ **No `eval`:** a hand-written tokenizer + recursive-descent parser build an
+  AST, then exact-fraction polynomial/rational arithmetic drives a sign-chart
+  solver. Autosaves to localStorage and **shares by code** (`#inequality=…`).
 
-### 2.6 Music Theory Helper  *(Toolbox)*
+### 2.6 Music Theory Helper  *(Toolbox)*  ⬜ *not started*
 Scales, intervals, key signatures, metronome. Distinctive, on-brand-playful,
 underserved by free tools.
 
-### 2.7 Exam Cheat-Sheet Builder  *(Words/Toolbox)*
+### 2.7 Exam Cheat-Sheet Builder  *(Words/Toolbox)*  ⬜ *not started*
 Compose a one-page allowed formula sheet from the Formula Reference; print to
 PDF. Maps to real exam policies (a permitted, integrity-safe use).
 
 ---
 
-## Phase 3 — New shelves (categories)
+## Phase 3 — New shelves (categories)  ⬜ *not started*
 
-### 3.1 🎯 Test Prep shelf
+### 3.1 🎯 Test Prep shelf  ⬜ *not started*
 Curated, deterministic, content-driven — **not** AI. Reuses the Flashcards and
 Math Practice engines.
 - SAT / ACT **timed math drill**.
@@ -219,7 +250,7 @@ Math Practice engines.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
-### 3.2 ♿ Accessibility & Focus shelf
+### 3.2 ♿ Accessibility & Focus shelf  ⬜ *not started*
 Fulfills a11y promises and surfaces them as first-class tools.
 - **Dyslexia-friendly mode** (Atkinson Hyperlegible, wider spacing, 1.8 line
   height) as a global toggle + a reading surface.
@@ -227,7 +258,7 @@ Fulfills a11y promises and surfaces them as first-class tools.
 - **Text-to-speech** via the browser `SpeechSynthesis` API (offline, free).
 - **Enhanced Focus Lock** (builds on the existing tool).
 
-### 3.3 (Optional) 💻 CS shelf
+### 3.3 (Optional) 💻 CS shelf  ⬜ *not started*
 If we want to consolidate scattered CS tools: Code Playground + Truth Table +
 Matrix + Base Converter + a Regex tester, pulled onto one shelf. Lower priority;
 revisit after Phase 2.
@@ -246,11 +277,35 @@ revisit after Phase 2.
 
 ## Sequencing summary
 
-| Phase | Theme | Items | Priority |
-|------|-------|-------|----------|
-| **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | **Now** |
-| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | Next |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | After |
+| Phase | Theme | Items | Status |
+|------|-------|-------|--------|
+| **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
+| 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | 🟡 5 / 7 shipped (Music Theory, Cheat-Sheet open) |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | ⬜ not started |
+
+**Status as of 2026-06-29:** Phase 1 is complete. Phase 2 has five of seven
+tools shipped; only the **Music Theory Helper (2.6)** and **Exam Cheat-Sheet
+Builder (2.7)** remain. Phase 3 (the Test Prep, Accessibility & Focus, and
+optional CS shelves) has not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
+
+---
+
+## Shipped beyond this roadmap (v1.0 tools not tracked above)
+
+The v2.0 roadmap only enumerates the tools it *changes*. For completeness, these
+tools already ship in the app and are **part of the v1.0 baseline** (they predate
+this roadmap, which the intro counts as "~39 tools across six shelves"). They are
+not Phase 1–3 work — listed here only so the doc reflects everything that's live:
+
+- **Vocabulary Builder** *(Words)* — word lists with SRS quizzing.
+- **Language Drill** *(Words)* — conjugation + vocab trainer.
+- **Grammar & Spellcheck** *(Words)* — offline spelling/grammar/style checks.
+- **Assignments & Planner** *(Plan)* — due dates, classes, checkboxes.
+- **Schedule Builder** *(Plan)* — weekly class & period grid.
+- **Code Playground** *(Toolbox)* — JS · Python (Pyodide) · HTML. *(The Phase 3.3
+  CS shelf would consolidate this with Truth Table, Matrix, and Base Converter.)*
+- **Focus Lock** *(Study)* — fullscreen, hide tabs, countdown. *(Phase 3.2's
+  "Enhanced Focus Lock" builds on this existing tool.)*
