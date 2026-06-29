@@ -4902,8 +4902,8 @@ function registerTools() {
     desc:'Count, reading level, reading time.', tag:'upgraded',
     keywords:['words','characters','reading','time'], mount: mountWordCount });
   TOOLS.push({ id:'citation', shelf:'words', icon:'📚', name:'Citation Helper',
-    desc:'MLA · APA · Chicago.', tag:'upgraded',
-    keywords:['cite','mla','apa','chicago','reference','bibliography'], mount: mountCitation });
+    desc:'MLA · APA · Chicago. DOI/ISBN autofill + annotated bibliography.', tag:'upgraded',
+    keywords:['cite','mla','apa','chicago','reference','bibliography','doi','isbn','annotated'], mount: mountCitation });
   TOOLS.push({ id:'essay', shelf:'words', icon:'📑', name:'Essay Planner',
     desc:'Thesis, outline, sources, word goal.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist'], mount: mountEssay });
   TOOLS.push({ id:'vocab', shelf:'words', icon:'🗂️', name:'Vocabulary Builder',
@@ -7154,87 +7154,377 @@ function mountWordCount(root) {
 
 /* ========== CITATION HELPER ========== */
 function mountCitation(root) {
-  root.innerHTML = `
-    <div class="tabs">
-      <button class="tab active" data-style="mla">MLA 9</button>
-      <button class="tab" data-style="apa">APA 7</button>
-      <button class="tab" data-style="chicago">Chicago</button>
-    </div>
-    <div class="tabs" style="border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-top:-18px;margin-bottom:18px">
-      <button class="tab active" data-src="book">Book</button>
-      <button class="tab" data-src="web">Website</button>
-      <button class="tab" data-src="journal">Journal</button>
-    </div>
-    <div id="fields"></div>
-    <div class="result">
-      <button class="copy-btn" id="cp">Copy</button>
-      <div class="result-label">Citation</div>
-      <div id="out" style="font-family:var(--serif);font-size:17px;line-height:1.5;color:var(--ink);padding-right:60px">—</div>
-    </div>
-    <p class="help">Outputs a starting point — always re-check against your assignment's required style guide.</p>
-  `;
-  let style = 'mla', src = 'book';
+  /* ── field sets per source type ── */
   const fieldsByType = {
     book: ['Author', 'Title', 'Publisher', 'Year', 'City'],
     web:  ['Author', 'Page title', 'Site name', 'Year', 'URL', 'Accessed (YYYY-MM-DD)'],
     journal: ['Author', 'Article title', 'Journal', 'Volume', 'Issue', 'Year', 'Pages', 'DOI']
   };
-  const stateKey = () => `cite:${src}`;
+  const styleLabel = () => ({ mla:'MLA 9th edition', apa:'APA 7th edition', chicago:'Chicago (notes–bibliography)' }[S.style]);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  const renderFields = () => {
-    const stored = Storage.get(stateKey(), {});
-    const f = fieldsByType[src];
-    $('#fields', root).innerHTML = f.map(name => `
-      <div class="field"><label>${name}</label>
-        <input class="input" data-field="${name}" value="${escape(stored[name] || '')}">
-      </div>`).join('');
-    $$('input[data-field]', root).forEach(i => i.addEventListener('input', () => {
-      const obj = Storage.get(stateKey(), {});
-      obj[i.dataset.field] = i.value;
-      Storage.set(stateKey(), obj);
-      build();
-    }));
-    build();
-  };
-  const get = (k) => ($$('input[data-field]', root).find(i => i.dataset.field === k)?.value || '').trim();
-  const build = () => {
+  /* ── state (one bibliography, one shared style, a draft per source) ── */
+  const KEY = 'cite:v2';
+  const defaults = () => ({ style:'mla', src:'book', drafts:{ book:{}, web:{}, journal:{} }, entries:[] });
+  let S = Object.assign(defaults(), Storage.get(KEY, null) || {});
+  S.drafts  = Object.assign({ book:{}, web:{}, journal:{} }, S.drafts || {});
+  S.entries = Array.isArray(S.entries) ? S.entries : [];
+  if (!fieldsByType[S.src]) S.src = 'book';
+  // one-time migration from the old per-source keys
+  ['book','web','journal'].forEach(s => {
+    const old = Storage.get('cite:' + s, null);
+    if (old && typeof old === 'object' && !Object.keys(S.drafts[s]).length) S.drafts[s] = old;
+  });
+  const persist = () => Storage.set(KEY, S);
+
+  /* ── citation formatting (pure: style + source + field map → HTML) ── */
+  const tidy = (s) => s
+    .replace(/\s+/g, ' ').replace(/\.{2,}/g, '.').replace(/\s+\./g, '.')
+    .replace(/\(\s*\)/g, '').replace(/,\s*,/g, ',').replace(/,\s*\./g, '.').trim();
+  function formatCitation(style, src, f) {
+    const v = (k) => (f[k] || '').trim();
+    const author = v('Author'), year = v('Year');
     let out = '';
-    const author = get('Author'), year = get('Year');
     if (src === 'book') {
-      const title = get('Title'), pub = get('Publisher'), city = get('City');
+      const title = v('Title'), pub = v('Publisher'), city = v('City');
       if (style === 'mla') out = `${author}. <em>${title}</em>. ${pub}, ${year}.`;
       else if (style === 'apa') out = `${author} (${year}). <em>${title}</em>. ${pub}.`;
       else out = `${author}. <em>${title}</em>. ${city}: ${pub}, ${year}.`;
     } else if (src === 'web') {
-      const t = get('Page title'), site = get('Site name'), url = get('URL'), acc = get('Accessed (YYYY-MM-DD)');
+      const t = v('Page title'), site = v('Site name'), url = v('URL'), acc = v('Accessed (YYYY-MM-DD)');
       if (style === 'mla') out = `${author}. "${t}." <em>${site}</em>, ${year}, ${url}. Accessed ${acc}.`;
       else if (style === 'apa') out = `${author} (${year}). ${t}. <em>${site}</em>. ${url}`;
       else out = `${author}. "${t}." <em>${site}</em>. ${year}. ${url}.`;
     } else {
-      const t = get('Article title'), j = get('Journal'), v = get('Volume'), iss = get('Issue'), pg = get('Pages'), doi = get('DOI');
-      if (style === 'mla') out = `${author}. "${t}." <em>${j}</em>, vol. ${v}, no. ${iss}, ${year}, pp. ${pg}.`;
-      else if (style === 'apa') out = `${author} (${year}). ${t}. <em>${j}, ${v}</em>(${iss}), ${pg}. ${doi ? 'https://doi.org/' + doi : ''}`;
-      else out = `${author}. "${t}." <em>${j}</em> ${v}, no. ${iss} (${year}): ${pg}.`;
+      const t = v('Article title'), j = v('Journal'), vol = v('Volume'), iss = v('Issue'), pg = v('Pages'), doi = v('DOI');
+      if (style === 'mla') out = `${author}. "${t}." <em>${j}</em>, vol. ${vol}, no. ${iss}, ${year}, pp. ${pg}.`;
+      else if (style === 'apa') out = `${author} (${year}). ${t}. <em>${j}, ${vol}</em>(${iss}), ${pg}. ${doi ? 'https://doi.org/' + doi : ''}`;
+      else out = `${author}. "${t}." <em>${j}</em> ${vol}, no. ${iss} (${year}): ${pg}.`;
     }
-    out = out.replace(/\s+/g, ' ').replace(/\.{2,}/g, '.').replace(/\s+\./g, '.').replace(/\(\s*\)/g,'').trim();
-    if (!out || out.length < 3) out = '—';
-    $('#out', root).innerHTML = out;
-  };
+    out = tidy(out);
+    return out.replace(/<[^>]+>/g, '').replace(/[^a-z0-9]/gi, '').length < 2 ? '' : out;
+  }
+  const plainCite = (e) => formatCitation(S.style, e.src, e.fields).replace(/<[^>]+>/g, '');
+  const mdCite    = (e) => formatCitation(S.style, e.src, e.fields).replace(/<em>(.*?)<\/em>/g, '*$1*').replace(/<[^>]+>/g, '');
+
+  /* ── author-name normalisation for autofill ── */
+  function splitName(full) {
+    full = String(full || '').trim();
+    if (!full) return null;
+    if (full.includes(',')) { const [fam, giv] = full.split(','); return { family: fam.trim(), given: (giv || '').trim() }; }
+    const parts = full.split(/\s+/);
+    if (parts.length === 1) return { family: parts[0], given: '' };
+    return { family: parts.pop(), given: parts.join(' ') };
+  }
+  function formatAuthors(list) {
+    list = (list || []).filter(a => a && (a.family || a.given));
+    if (!list.length) return '';
+    const lastFirst = (a) => a.family ? `${a.family}${a.given ? ', ' + a.given : ''}` : a.given;
+    const firstLast = (a) => [a.given, a.family].filter(Boolean).join(' ');
+    if (list.length === 1) return lastFirst(list[0]);
+    if (list.length === 2) return `${lastFirst(list[0])}, and ${firstLast(list[1])}`;
+    return `${lastFirst(list[0])}, et al.`;
+  }
+  const year4 = (s) => (String(s || '').match(/\d{4}/) || [''])[0];
+
+  /* ── online lookups (the only network use in the app) ── */
+  async function fetchDOI(doi) {
+    const r = await fetch('https://api.crossref.org/works/' + encodeURIComponent(doi), { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('not found');
+    const m = (await r.json()).message;
+    const yr = ((m.issued || m['published-print'] || m['published-online'] || {})['date-parts'] || [[]])[0][0] || '';
+    const authors = formatAuthors((m.author || []).map(a => ({ family: a.family, given: a.given })));
+    if (m.type === 'book' || m.type === 'monograph') {
+      return { src: 'book', fields: { Author: authors, Title: (m.title || [])[0] || '', Publisher: m.publisher || '', Year: String(yr), City: m['publisher-location'] || '' } };
+    }
+    return { src: 'journal', fields: {
+      Author: authors, 'Article title': (m.title || [])[0] || '', Journal: (m['container-title'] || [])[0] || '',
+      Volume: m.volume || '', Issue: m.issue || '', Year: String(yr), Pages: m.page || '', DOI: m.DOI || doi } };
+  }
+  async function fetchISBN(isbn) {
+    // Open Library first (most privacy-aligned), then Google Books for coverage.
+    try {
+      const r = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+      if (r.ok) {
+        const d = (await r.json())['ISBN:' + isbn];
+        if (d) return { src: 'book', fields: {
+          Author: formatAuthors((d.authors || []).map(a => splitName(a.name))),
+          Title: d.title || '', Publisher: (d.publishers || [])[0]?.name || '',
+          Year: year4(d.publish_date), City: (d.publish_places || [])[0]?.name || '' } };
+      }
+    } catch { /* fall through to Google Books */ }
+    const r2 = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    if (!r2.ok) throw new Error('not found');
+    const vinfo = (await r2.json()).items?.[0]?.volumeInfo;
+    if (!vinfo) throw new Error('not found');
+    return { src: 'book', fields: {
+      Author: formatAuthors((vinfo.authors || []).map(splitName)),
+      Title: vinfo.title + (vinfo.subtitle ? ': ' + vinfo.subtitle : ''),
+      Publisher: vinfo.publisher || '', Year: year4(vinfo.publishedDate), City: '' } };
+  }
+
+  /* ── markup ── */
+  root.innerHTML = `
+    <style>
+      .cite-look-row{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+      .cite-look-row .input{flex:1}
+      .cite-look-row .btn{white-space:nowrap}
+      .cite-disclose{margin-top:-4px}
+      .cite-biblio-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px;padding-top:18px;border-top:1px solid var(--rule)}
+      .cite-biblio-head h3{font-family:var(--serif);font-weight:500;font-size:21px;letter-spacing:-.015em;margin:0}
+      .cite-count{color:var(--muted);font-family:var(--mono);font-size:14px}
+      .cite-entry{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px;margin-top:12px}
+      .cite-entry-cite{font-family:var(--serif);font-size:16px;line-height:1.5;color:var(--ink);margin-bottom:10px}
+      .cite-note{min-height:46px;font-size:14px}
+      .cite-entry-bar{display:flex;align-items:center;gap:8px;margin-top:10px}
+      .cite-entry-bar .sp{flex:1}
+      .cite-badge{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);border:1px solid var(--rule);border-radius:2px;padding:2px 7px}
+      .cite-print{display:none}
+      @media print{
+        .panel-backdrop,.panel-head,.panel-foot,.toast{display:none!important}
+        .panel{position:static!important;transform:none!important;box-shadow:none!important;border:none!important;max-height:none!important;width:100%!important;background:#fff!important}
+        .panel-body{overflow:visible!important;background:#fff!important;padding:0!important}
+        .cite-tool > *:not(.cite-print){display:none!important}
+        .cite-print{display:block!important;color:#000;font-family:Georgia,'Times New Roman',serif;padding:.25in 0}
+        .cite-print h1{font-size:20px;margin:0 0 4px}
+        .cite-print .cp-style{font-size:11px;color:#444;margin:0 0 18px;text-transform:uppercase;letter-spacing:.1em}
+        .cite-print .cp-cite{font-size:13px;line-height:1.5;margin:0 0 2px;text-indent:-2em;margin-left:2em}
+        .cite-print .cp-note{font-size:12px;line-height:1.5;margin:0 0 14px 2em;color:#222}
+        @page{margin:.75in}
+      }
+    </style>
+    <div class="cite-tool">
+      <div class="tabs">
+        <button class="tab" data-style="mla">MLA 9</button>
+        <button class="tab" data-style="apa">APA 7</button>
+        <button class="tab" data-style="chicago">Chicago</button>
+      </div>
+      <div class="tabs" style="border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-top:-18px;margin-bottom:16px">
+        <button class="tab" data-src="book">Book</button>
+        <button class="tab" data-src="web">Website</button>
+        <button class="tab" data-src="journal">Journal</button>
+      </div>
+      <div class="cite-look-row">
+        <input class="input mono" id="cite-look" placeholder="Paste a DOI or ISBN to autofill…" autocomplete="off" aria-label="DOI or ISBN">
+        <button class="btn sm" id="cite-look-btn">Look up</button>
+      </div>
+      <p class="help cite-disclose" id="cite-look-msg" role="status" aria-live="polite"></p>
+      <p class="help cite-disclose">Autofill queries <b>Crossref</b> (DOI) or <b>Open Library / Google Books</b> (ISBN) — the only time this tool touches the network. Nothing else ever leaves your device. Always check what comes back.</p>
+      <div id="fields"></div>
+      <div class="result">
+        <button class="copy-btn" id="cp">Copy</button>
+        <div class="result-label">Preview</div>
+        <div id="out" style="font-family:var(--serif);font-size:17px;line-height:1.5;color:var(--ink);padding-right:60px">—</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn sm" id="cite-add">+ Add to bibliography</button>
+        <button class="btn ghost sm" id="cite-clear">Clear fields</button>
+      </div>
+      <p class="help">Outputs a starting point — always re-check against your assignment's required style guide.</p>
+
+      <div class="cite-biblio-head">
+        <h3>Bibliography <span class="cite-count">(<span id="cite-n">0</span>)</span></h3>
+        <div class="btn-row" style="margin:0">
+          <button class="btn ghost sm" id="cite-sort">Sort A–Z</button>
+          <button class="btn ghost sm" id="cite-copyall">Copy all</button>
+          <button class="btn ghost sm" id="cite-md">.md</button>
+          <button class="btn ghost sm" id="cite-txt">.txt</button>
+          <button class="btn ghost sm" id="cite-print">Print / PDF</button>
+        </div>
+      </div>
+      <div id="cite-biblio"></div>
+      <div class="cite-print" aria-hidden="true"></div>
+    </div>
+  `;
+
+  /* ── element refs ── */
+  const lookInput = $('#cite-look', root), lookBtn = $('#cite-look-btn', root);
+  const setLookMsg = (msg, ok) => { const m = $('#cite-look-msg', root); m.innerHTML = msg || ''; m.style.color = ok ? 'var(--accent-3)' : 'var(--muted)'; };
+
+  /* ── builder ── */
+  const build = () => { $('#out', root).innerHTML = formatCitation(S.style, S.src, S.drafts[S.src]) || '—'; };
+  function renderFields() {
+    const f = S.drafts[S.src];
+    $('#fields', root).innerHTML = fieldsByType[S.src].map(name => `
+      <div class="field"><label>${name}</label>
+        <input class="input" data-field="${escape(name)}" value="${escape(f[name] || '')}">
+      </div>`).join('');
+    $$('#fields input[data-field]', root).forEach(i => i.addEventListener('input', () => {
+      S.drafts[S.src][i.dataset.field] = i.value;
+      persist();
+      build();
+    }));
+    build();
+  }
+  function syncTabs() {
+    $$('.tab[data-style]', root).forEach(x => x.classList.toggle('active', x.dataset.style === S.style));
+    $$('.tab[data-src]', root).forEach(x => x.classList.toggle('active', x.dataset.src === S.src));
+  }
+
+  /* ── bibliography list ── */
+  function renderBiblio() {
+    $('#cite-n', root).textContent = S.entries.length;
+    const wrap = $('#cite-biblio', root);
+    if (!S.entries.length) {
+      wrap.innerHTML = `<p class="help" style="margin:6px 0 0">No sources yet. Build a citation above and hit <b>+ Add to bibliography</b> — each one gets a note field for your annotation.</p>`;
+      return;
+    }
+    wrap.innerHTML = S.entries.map((e, i) => `
+      <div class="cite-entry" data-id="${e.id}">
+        <div class="cite-entry-cite">${formatCitation(S.style, e.src, e.fields) || '<span style="color:var(--muted)">(incomplete — Edit to finish)</span>'}</div>
+        <textarea class="input cite-note" data-id="${e.id}" rows="2" placeholder="Annotation — summary, relevance, credibility…">${escape(e.note || '')}</textarea>
+        <div class="cite-entry-bar">
+          <span class="cite-badge">${e.src}</span>
+          <span class="sp"></span>
+          <button class="btn ghost sm" data-act="up" data-id="${e.id}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+          <button class="btn ghost sm" data-act="down" data-id="${e.id}" ${i === S.entries.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+          <button class="btn ghost sm" data-act="edit" data-id="${e.id}">Edit</button>
+          <button class="btn ghost sm" data-act="remove" data-id="${e.id}" style="color:var(--accent)">Remove</button>
+        </div>
+      </div>`).join('');
+  }
+
+  /* ── export ── */
+  function buildPrint() {
+    const items = S.entries.map(e => {
+      let html = `<p class="cp-cite">${formatCitation(S.style, e.src, e.fields) || '[incomplete entry]'}</p>`;
+      if (e.note) html += `<p class="cp-note">${escape(e.note)}</p>`;
+      return html;
+    }).join('');
+    return `<h1>Annotated Bibliography</h1><p class="cp-style">${styleLabel()}</p>${items}`;
+  }
+  function downloadFile(name, content, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    showToast('Exported ' + name.split('.').pop().toUpperCase());
+  }
+  const hasEntries = () => S.entries.length || (showToast('No sources to export yet.'), false);
+
+  /* ── events: tabs ── */
   root.addEventListener('click', (e) => {
     const t = e.target.closest('.tab');
     if (!t) return;
-    if (t.dataset.style) {
-      style = t.dataset.style;
-      t.parentElement.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-    } else if (t.dataset.src) {
-      src = t.dataset.src;
-      t.parentElement.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-      renderFields(); return;
-    }
-    build();
+    if (t.dataset.style) { S.style = t.dataset.style; persist(); syncTabs(); build(); renderBiblio(); }
+    else if (t.dataset.src) { S.src = t.dataset.src; persist(); syncTabs(); renderFields(); }
   });
+
+  /* ── events: autofill ── */
+  async function doLookup() {
+    const raw = lookInput.value.trim();
+    if (!raw) { setLookMsg('Paste a DOI or ISBN first.'); return; }
+    if (!navigator.onLine) { setLookMsg("You're offline — fill the fields in manually."); return; }
+    const doi = (raw.match(/10\.\d{4,9}\/[^\s"<>]+/) || [])[0];
+    const isbn = raw.replace(/[^0-9Xx]/g, '');
+    let task;
+    if (doi) task = fetchDOI(doi);
+    else if (/^(\d{9}[\dXx]|\d{13})$/.test(isbn)) task = fetchISBN(isbn);
+    else { setLookMsg('That doesn’t look like a DOI or ISBN.'); return; }
+    lookBtn.disabled = true; lookBtn.textContent = 'Looking up…'; setLookMsg('');
+    try {
+      const res = await task;
+      S.src = res.src;
+      S.drafts[S.src] = Object.assign({}, S.drafts[S.src], res.fields);
+      persist();
+      syncTabs();
+      renderFields();
+      setLookMsg('Filled — check every field against your style guide.', true);
+    } catch {
+      setLookMsg('No match found, or the service is unreachable. Enter the fields manually.');
+    } finally {
+      lookBtn.disabled = false; lookBtn.textContent = 'Look up';
+    }
+  }
+  lookBtn.addEventListener('click', doLookup);
+  lookInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } });
+
+  /* ── events: builder actions ── */
   $('#cp', root).addEventListener('click', () => copy($('#out', root).textContent, $('#cp', root)));
+  $('#cite-add', root).addEventListener('click', () => {
+    const fields = Object.assign({}, S.drafts[S.src]);
+    if (!formatCitation(S.style, S.src, fields)) { showToast('Fill in some fields first.'); return; }
+    S.entries.push({ id: uid(), src: S.src, fields, note: '' });
+    persist();
+    renderBiblio();
+    showToast('Added to bibliography.');
+  });
+  $('#cite-clear', root).addEventListener('click', () => {
+    S.drafts[S.src] = {};
+    persist();
+    renderFields();
+    lookInput.value = ''; setLookMsg('');
+  });
+
+  /* ── events: bibliography list ── */
+  const biblio = $('#cite-biblio', root);
+  biblio.addEventListener('input', (e) => {
+    const ta = e.target.closest('.cite-note');
+    if (!ta) return;
+    const en = S.entries.find(x => x.id === ta.dataset.id);
+    if (en) { en.note = ta.value; persist(); }
+  });
+  biblio.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const idx = S.entries.findIndex(x => x.id === b.dataset.id);
+    if (idx < 0) return;
+    const act = b.dataset.act;
+    if (act === 'remove') {
+      if (S.entries[idx].note && !confirm('Remove this source and its annotation?')) return;
+      S.entries.splice(idx, 1);
+    } else if (act === 'up' && idx > 0) {
+      [S.entries[idx - 1], S.entries[idx]] = [S.entries[idx], S.entries[idx - 1]];
+    } else if (act === 'down' && idx < S.entries.length - 1) {
+      [S.entries[idx + 1], S.entries[idx]] = [S.entries[idx], S.entries[idx + 1]];
+    } else if (act === 'edit') {
+      const en = S.entries[idx];
+      S.src = en.src;
+      S.drafts[en.src] = Object.assign({}, en.fields);
+      S.entries.splice(idx, 1);
+      syncTabs();
+      renderFields();
+      showToast('Loaded into the builder — edit, then re-add.');
+    }
+    persist();
+    renderBiblio();
+  });
+
+  /* ── events: export ── */
+  $('#cite-sort', root).addEventListener('click', () => {
+    if (!hasEntries()) return;
+    S.entries.sort((a, b) => plainCite(a).toLowerCase().localeCompare(plainCite(b).toLowerCase()));
+    persist();
+    renderBiblio();
+  });
+  $('#cite-copyall', root).addEventListener('click', () => {
+    if (!hasEntries()) return;
+    const text = S.entries.map(e => plainCite(e) + (e.note ? '\n    ' + e.note : '')).join('\n\n');
+    copy(text, $('#cite-copyall', root));
+  });
+  $('#cite-md', root).addEventListener('click', () => {
+    if (!hasEntries()) return;
+    let md = `# Annotated Bibliography\n\n_${styleLabel()}_\n\n`;
+    md += S.entries.map(e => mdCite(e) + (e.note ? '\n\n  > ' + e.note.replace(/\n/g, '\n  > ') : '')).join('\n\n');
+    downloadFile('annotated-bibliography.md', md + '\n', 'text/markdown');
+  });
+  $('#cite-txt', root).addEventListener('click', () => {
+    if (!hasEntries()) return;
+    const txt = `Annotated Bibliography (${styleLabel()})\n\n` +
+      S.entries.map(e => plainCite(e) + (e.note ? '\n    ' + e.note : '')).join('\n\n');
+    downloadFile('annotated-bibliography.txt', txt + '\n', 'text/plain');
+  });
+  $('#cite-print', root).addEventListener('click', () => {
+    if (!hasEntries()) return;
+    $('.cite-print', root).innerHTML = buildPrint();
+    window.print();
+  });
+
+  /* ── init ── */
+  syncTabs();
   renderFields();
+  renderBiblio();
 }
 
 /* ========== VOCABULARY BUILDER ========== */
