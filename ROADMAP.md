@@ -172,9 +172,26 @@ study artifact the app currently lacks.
 ### 2.3 Matrix Calculator  *(Numbers)*
 Add/multiply, determinant, inverse, **RREF with steps**. Linear algebra + AP CS.
 
-### 2.4 Truth Table / Logic  *(Numbers, or future CS group)*
-Generate truth tables; evaluate logical expressions. Discrete math, CS, and
-philosophy-logic units.
+### 2.4 Truth Table / Logic  *(Numbers, or future CS group)*  ✅ *shipped*
+- ✅ **Expression parser** with no `eval` — a hand-written tokenizer +
+  precedence-climbing parser builds an AST. Accepts every common notation
+  interchangeably: words (`AND OR NOT XOR NAND NOR XNOR IMPLIES IFF`), logic
+  symbols (`∧ ∨ ¬ ⊕ → ↔ ↑ ↓`), programming (`&& || ! ^`), and ASCII shorthand
+  (`& | ~ -> <->`), plus digital-logic postfix complement (`A'`). A clickable
+  **symbol palette** inserts operators at the caret.
+- ✅ **Full truth table** with **subexpression columns** (each distinct
+  sub-formula gets its own column, simple → full, with the root column
+  highlighted), a fraction-free `T/F`↔`1/0` toggle, and standard
+  all-true-at-top row ordering. **Classifies** the expression as tautology /
+  contradiction / contingent with a true-row count.
+- ✅ **Normal forms** derived from the table: **DNF** (sum of products /
+  minterms) and **CNF** (product of sums / maxterms), each copyable.
+- ✅ **Equivalence checker**: enter a second expression and it reports whether
+  the two are logically equivalent across the union of their variables, naming
+  the first differing assignment when they aren't.
+- ✅ **Print-free workflow**: localStorage autosave, copy-as-TSV table, and
+  **share-by-code** (`#truthtable=…` code + link, no backend). Discrete math,
+  CS, and philosophy-logic units.
 
 ### 2.5 Inequality / Interval Solver  *(Numbers)*
 Solve and visualize on a number line; interval & set notation output.
