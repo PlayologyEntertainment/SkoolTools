@@ -38,6 +38,7 @@
   --purple-deep:  #8B1FD6;   /* deep saturated purple — Numbers emphasis */
   --pink:         #FF3D9A;
   --orange:       #FF8C00;
+  --amber:        #F5C542;   /* warm amber — Code shelf */
   /* Type */
   --serif: 'Fraunces', ui-serif, Georgia, serif;
   --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
@@ -190,7 +191,7 @@ input,textarea,select{font:inherit;color:inherit}
 .mast-title{display:flex;justify-content:center;padding:18px 28px 2px}
 @media (max-width:720px){.mast-title{padding:14px 16px 2px}}
 .mast-brandmark{
-  width:min(54vw,190px);aspect-ratio:531/512;
+  width:min(40.5vw,142.5px);aspect-ratio:531/512;
   transition:transform .25s cubic-bezier(.2,.7,.2,1);
 }
 .brand:hover .mast-brandmark{transform:rotate(-2deg) scale(1.04)}
@@ -303,9 +304,10 @@ main{padding:28px 28px 80px}
 }
 .rail-head .label{display:inline-flex;align-items:center;gap:6px}
 .rail-head .label.pin::before{
-  content:"";display:inline-block;width:0;height:0;
-  border-left:5px solid transparent;border-right:5px solid transparent;
-  border-bottom:8px solid var(--accent-2);
+  content:"";display:inline-block;width:11px;height:11px;
+  background:var(--accent-2);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z'/%3E%3C/svg%3E") no-repeat center/contain;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z'/%3E%3C/svg%3E") no-repeat center/contain;
   transform:translateY(-1px);
 }
 .rail-head .label.recent::before{
@@ -366,6 +368,7 @@ main{padding:28px 28px 80px}
 .tool[data-shelf="words"],   .panel[data-shelf="words"]   {--cat-color:var(--accent-3)}
 .tool[data-shelf="lab"],     .panel[data-shelf="lab"]     {--cat-color:var(--accent-4)}
 .tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink)}
+.tool[data-shelf="code"],    .panel[data-shelf="code"]    {--cat-color:var(--amber)}
 
 /* Inside an open applet panel, the emphasis color (--accent) is derived
    from the applet's category color so each tool's UI matches its shelf.
@@ -708,6 +711,39 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
   .splash-logo{animation:none}
   .splash-brandmark{animation:none}
 }
+
+/* =========================================================
+   REGEX TESTER
+   ========================================================= */
+.rx-patbar{display:flex;align-items:center;gap:8px}
+.rx-patbar .input{flex:1}
+.rx-slash{font-family:var(--mono);font-size:20px;color:var(--muted);user-select:none;line-height:1}
+.rx-curflags{min-width:1ch;color:var(--accent);font-size:14px;font-weight:600}
+.rx-flags{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:12px}
+.rx-flag{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+.rx-flag b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.rx-flag input{accent-color:var(--accent);cursor:pointer}
+.rx-error{margin-top:12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;
+  color:var(--pink);background:#FF3D9A14;border:1px solid #FF3D9A40;border-radius:3px;padding:8px 10px}
+.rx-preview{white-space:pre-wrap;word-break:break-word;line-height:1.75;font-size:14px;
+  color:var(--ink-2);min-height:40px}
+.rx-mark{background:color-mix(in srgb, var(--accent) 30%, transparent);color:var(--ink);
+  border-radius:2px;padding:0 1px;box-shadow:inset 0 -2px 0 var(--accent)}
+.rx-mark.rx-empty{padding:0;box-shadow:none;outline:2px solid var(--accent);outline-offset:0;border-radius:1px}
+.rx-count{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);margin-left:6px}
+.rx-opt{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400}
+.rx-replout{white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:14px;
+  color:var(--ink);padding-right:60px;min-height:24px}
+.rx-match{border:1px solid var(--rule);border-radius:3px;padding:10px 12px;margin-top:12px;background:var(--paper-2)}
+.rx-match h4{margin:0 0 6px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink);font-weight:600}
+.rx-match h4 .rx-at{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px}
+.rx-grouprow{display:flex;gap:12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;
+  padding:4px 0;border-top:1px dashed var(--rule)}
+.rx-grouprow:first-of-type{border-top:0}
+.rx-gname{color:var(--muted);min-width:72px;flex-shrink:0}
+.rx-gval{color:var(--ink);word-break:break-word;white-space:pre-wrap}
+.rx-gval i{color:var(--muted-2);font-style:italic}
 
 /* =========================================================
    NOTES TOOL
@@ -2611,6 +2647,7 @@ const SHELVES = [
   { id: 'numbers', name: 'Numbers', color: 'var(--accent)' },
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
   { id: 'lab',     name: 'Lab',     color: 'var(--accent-4)' },
+  { id: 'code',    name: 'Code',    color: 'var(--amber)' },
   { id: 'toolbox', name: 'Toolbox', color: 'var(--pink)' },
 ];
 
@@ -5677,21 +5714,12 @@ function registerTools() {
   TOOLS.push({ id:'fraction', shelf:'numbers', icon:'½', name:'Fraction Helper',
     desc:'Simplify, decimal, mixed.',
     keywords:['fraction','simplify','decimal','mixed'], mount: mountFraction });
-  TOOLS.push({ id:'base', shelf:'numbers', icon:'🔢', name:'Base Converter',
-    desc:'Bin · oct · dec · hex · any.',
-    keywords:['binary','hex','octal','base','radix'], mount: mountBase });
   TOOLS.push({ id:'gcdlcm', shelf:'numbers', icon:'🔣', name:'GCD & LCM',
     desc:'With Euclidean steps.',
     keywords:['gcd','lcm','greatest','common','divisor','factor'], mount: mountGcdLcm });
   TOOLS.push({ id:'npr-ncr', shelf:'numbers', icon:'🎲', name:'nPr & nCr',
     desc:'Permutations & combinations.',
     keywords:['permutation','combination','choose','npr','ncr','factorial'], mount: mountNprNcr });
-  TOOLS.push({ id:'matrix', shelf:'numbers', icon:'▦', name:'Matrix Calculator',
-    desc:'Add, multiply, det, inverse, RREF with steps.', tag:'new',
-    keywords:['matrix','matrices','linear algebra','determinant','inverse','rref','row reduction','transpose','multiply','rank','trace','gaussian','elimination','solve','system','identity','ap cs'], mount: mountMatrix });
-  TOOLS.push({ id:'truthtable', shelf:'numbers', icon:'⊤', name:'Truth Table',
-    desc:'Truth tables, equivalence, DNF/CNF.', tag:'new',
-    keywords:['truth table','logic','boolean','proposition','propositional','tautology','contradiction','contingent','satisfiable','equivalence','equivalent','dnf','cnf','normal form','minterm','maxterm','implication','conditional','biconditional','xor','nand','nor','and','or','not','negation','conjunction','disjunction','discrete math','cs','philosophy','logic gates'], mount: mountTruthTable });
   TOOLS.push({ id:'inequality', shelf:'numbers', icon:'≷', name:'Inequality Solver',
     desc:'Solve & graph on a number line; interval + set notation.', tag:'new',
     keywords:['inequality','inequalities','interval','set','number line','set builder','solve','linear','quadratic','polynomial','rational','absolute value','compound','union','intersection','complement','sign chart','algebra','precalculus','notation','solution set'], mount: mountInequality });
@@ -5720,6 +5748,22 @@ function registerTools() {
   TOOLS.push({ id:'formulas', shelf:'lab', icon:'📖', name:'Formula Reference',
     desc:'LaTeX-rendered, searchable.', tag:'upgraded', keywords:['formula','equation','reference','math','physics','chemistry','algebra','calculus','trig','geometry','stats'],
     mount: mountFormulas });
+
+  /* ============== CODE ============== */
+  TOOLS.push({ id:'code', shelf:'code', icon:'{}', name:'Code Playground',
+    desc:'JS · Python (Pyodide) · HTML.', tag:'new', keywords:['code','javascript','python','html'], mount: mountCode });
+  TOOLS.push({ id:'truthtable', shelf:'code', icon:'⊤', name:'Truth Table',
+    desc:'Truth tables, equivalence, DNF/CNF.', tag:'new',
+    keywords:['truth table','logic','boolean','proposition','propositional','tautology','contradiction','contingent','satisfiable','equivalence','equivalent','dnf','cnf','normal form','minterm','maxterm','implication','conditional','biconditional','xor','nand','nor','and','or','not','negation','conjunction','disjunction','discrete math','cs','philosophy','logic gates'], mount: mountTruthTable });
+  TOOLS.push({ id:'matrix', shelf:'code', icon:'▦', name:'Matrix Calculator',
+    desc:'Add, multiply, det, inverse, RREF with steps.', tag:'new',
+    keywords:['matrix','matrices','linear algebra','determinant','inverse','rref','row reduction','transpose','multiply','rank','trace','gaussian','elimination','solve','system','identity','ap cs'], mount: mountMatrix });
+  TOOLS.push({ id:'base', shelf:'code', icon:'🔢', name:'Base Converter',
+    desc:'Bin · oct · dec · hex · any.',
+    keywords:['binary','hex','octal','base','radix'], mount: mountBase });
+  TOOLS.push({ id:'regex', shelf:'code', icon:'.*', name:'Regex Tester',
+    desc:'Live match highlighting, groups, flags, replace.', tag:'new',
+    keywords:['regex','regexp','regular expression','pattern','match','matches','replace','substitute','capture','group','named group','flags','global','case insensitive','multiline','dotall','sticky','test','validate','cs','javascript'], mount: mountRegex });
 
   /* ============== WORDS ============== */
   TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
@@ -5790,8 +5834,6 @@ function registerTools() {
   TOOLS.push({ id:'list', shelf:'toolbox', icon:'🔀', name:'List Utility',
     desc:'Pick, shuffle, sort, dedupe.', tag:'upgraded',
     keywords:['list','shuffle','pick','sort'], mount: mountList });
-  TOOLS.push({ id:'code', shelf:'toolbox', icon:'{}', name:'Code Playground',
-    desc:'JS · Python (Pyodide) · HTML.', tag:'new', keywords:['code','javascript','python','html'], mount: mountCode });
   TOOLS.push({ id:'music', shelf:'toolbox', icon:'🎵', name:'Music Theory',
     desc:'Scales, intervals, chords, keys, metronome — on a staff.', tag:'new',
     keywords:['music','theory','scale','scales','mode','major','minor','pentatonic','blues','dorian','interval','intervals','chord','chords','triad','seventh','key','key signature','circle of fifths','staff','notation','treble','bass','clef','metronome','tempo','bpm','sharp','flat','accidental','note','pitch','degree','tap tempo'], mount: mountMusic });
@@ -12079,6 +12121,184 @@ function mountTextCase(root) {
     out.textContent = ops[b.dataset.fn](t.value) || '—';
   });
   $('#cp', root).addEventListener('click', () => copy(out.textContent, $('#cp', root)));
+}
+
+/* ========== REGEX TESTER ==========
+   Live regex matching: pattern + flag toggles, highlighted matches over the
+   test string, per-match capture groups (numbered + named), and an optional
+   replace preview. All client-side via the native RegExp engine. */
+function mountRegex(root) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const FLAGS = [
+    ['g','global',     'Find all matches rather than stopping at the first'],
+    ['i','ignore case','Case-insensitive matching'],
+    ['m','multiline',  '^ and $ match at line breaks'],
+    ['s','dotall',     '. also matches newlines'],
+    ['u','unicode',    'Treat the pattern as a sequence of Unicode code points'],
+    ['y','sticky',     'Match only starting at lastIndex'],
+  ];
+
+  root.innerHTML = `
+    <div class="field">
+      <label for="rx-pat">Pattern</label>
+      <div class="rx-patbar">
+        <span class="rx-slash">/</span>
+        <input class="input mono" id="rx-pat" autocomplete="off" spellcheck="false"
+               placeholder="\\b\\w+\\b" value="\\b\\w+\\b">
+        <span class="rx-slash">/</span>
+        <span class="rx-curflags mono" id="rx-curflags"></span>
+      </div>
+      <div class="rx-flags" id="rx-flags">
+        ${FLAGS.map(([f,n,t]) => `<label class="rx-flag" title="${t}"><input type="checkbox" data-flag="${f}"${f==='g'?' checked':''}><b>${f}</b> ${n}</label>`).join('')}
+      </div>
+      <div class="rx-error" id="rx-error" hidden></div>
+    </div>
+
+    <div class="field">
+      <label for="rx-test">Test string</label>
+      <textarea class="input mono" id="rx-test" rows="6" spellcheck="false"
+        placeholder="Paste text to search…">The quick brown fox jumps over 13 lazy dogs in 2024.</textarea>
+    </div>
+
+    <div class="result" style="margin-top:4px">
+      <div class="result-label">Matches <span class="rx-count" id="rx-count">—</span></div>
+      <div class="rx-preview mono" id="rx-preview">—</div>
+    </div>
+
+    <div class="field" style="margin-top:18px">
+      <label for="rx-rep">Replacement <span class="rx-opt">optional · $1 $&amp; $&lt;name&gt;</span></label>
+      <input class="input mono" id="rx-rep" autocomplete="off" spellcheck="false" placeholder="e.g.  [$&amp;]">
+    </div>
+    <div class="result" id="rx-repwrap" hidden>
+      <button class="copy-btn" id="rx-repcopy">Copy</button>
+      <div class="result-label">Replace result</div>
+      <div class="rx-replout mono" id="rx-replout"></div>
+    </div>
+
+    <div id="rx-groups"></div>
+  `;
+
+  const patEl   = $('#rx-pat', root);
+  const testEl  = $('#rx-test', root);
+  const repEl   = $('#rx-rep', root);
+  const curFl   = $('#rx-curflags', root);
+  const errEl   = $('#rx-error', root);
+  const preview = $('#rx-preview', root);
+  const countEl = $('#rx-count', root);
+  const repWrap = $('#rx-repwrap', root);
+  const repOut  = $('#rx-replout', root);
+  const groupsEl= $('#rx-groups', root);
+
+  const flags = () => FLAGS.map(([f]) => f)
+    .filter(f => $(`input[data-flag="${f}"]`, root).checked).join('');
+
+  // Collect every match. exec advances lastIndex for global/sticky regexes;
+  // for neither we report just the first match (native single-match behaviour).
+  function collect(re, text) {
+    const out = [];
+    if (!re.global && !re.sticky) {
+      const m = re.exec(text);
+      if (m) out.push(m);
+      return out;
+    }
+    let m, guard = 0;
+    re.lastIndex = 0;
+    while ((m = re.exec(text)) !== null) {
+      out.push(m);
+      if (m.index === re.lastIndex) re.lastIndex++; // avoid looping on zero-length
+      if (++guard > 100000) break;
+    }
+    return out;
+  }
+
+  function run() {
+    const pat = patEl.value;
+    const fl  = flags();
+    curFl.textContent = fl;
+
+    // Reset transient UI
+    errEl.hidden = true; errEl.textContent = '';
+
+    if (!pat) {
+      preview.innerHTML = esc(testEl.value) || '—';
+      countEl.textContent = '—';
+      groupsEl.innerHTML = '';
+      repWrap.hidden = true;
+      return;
+    }
+
+    let re;
+    try {
+      re = new RegExp(pat, fl);
+    } catch (err) {
+      errEl.hidden = false;
+      errEl.textContent = '⚠ ' + err.message;
+      preview.innerHTML = esc(testEl.value) || '—';
+      countEl.textContent = '—';
+      groupsEl.innerHTML = '';
+      repWrap.hidden = true;
+      return;
+    }
+
+    const text = testEl.value;
+    const matches = collect(re, text);
+
+    // Highlighted preview
+    let html = '', last = 0;
+    for (const m of matches) {
+      const s = m.index, en = m.index + m[0].length;
+      html += esc(text.slice(last, s));
+      const empty = m[0].length === 0;
+      html += `<mark class="rx-mark${empty ? ' rx-empty' : ''}">${empty ? '' : esc(m[0])}</mark>`;
+      last = en;
+    }
+    html += esc(text.slice(last));
+    preview.innerHTML = html || '—';
+
+    countEl.textContent = matches.length === 0 ? 'no matches'
+      : matches.length === 1 ? '1 match' : `${matches.length} matches`;
+
+    // Per-match capture groups
+    if (matches.length === 0) {
+      groupsEl.innerHTML = '';
+    } else {
+      groupsEl.innerHTML = matches.map((m, i) => {
+        const rows = [];
+        rows.push(`<div class="rx-grouprow"><span class="rx-gname">full</span><span class="rx-gval">${m[0].length ? esc(m[0]) : '<i>(empty)</i>'}</span></div>`);
+        for (let g = 1; g < m.length; g++) {
+          const v = m[g];
+          rows.push(`<div class="rx-grouprow"><span class="rx-gname">group ${g}</span><span class="rx-gval">${v === undefined ? '<i>undefined</i>' : (v.length ? esc(v) : '<i>(empty)</i>')}</span></div>`);
+        }
+        if (m.groups) {
+          for (const [name, v] of Object.entries(m.groups)) {
+            rows.push(`<div class="rx-grouprow"><span class="rx-gname">&lt;${esc(name)}&gt;</span><span class="rx-gval">${v === undefined ? '<i>undefined</i>' : (v.length ? esc(v) : '<i>(empty)</i>')}</span></div>`);
+          }
+        }
+        return `<div class="rx-match"><h4>Match ${i + 1} <span class="rx-at">at index ${m.index}</span></h4>${rows.join('')}</div>`;
+      }).join('');
+    }
+
+    // Replace preview
+    if (repEl.value !== '') {
+      try {
+        repOut.textContent = text.replace(re, repEl.value);
+        repWrap.hidden = false;
+      } catch (err) {
+        repOut.textContent = '⚠ ' + err.message;
+        repWrap.hidden = false;
+      }
+    } else {
+      repWrap.hidden = true;
+    }
+  }
+
+  patEl.addEventListener('input', run);
+  testEl.addEventListener('input', run);
+  repEl.addEventListener('input', run);
+  $$('input[data-flag]', root).forEach(cb => cb.addEventListener('change', run));
+  $('#rx-repcopy', root).addEventListener('click', () => copy(repOut.textContent, $('#rx-repcopy', root)));
+
+  run();
 }
 
 /* ========== POMODORO ========== */
