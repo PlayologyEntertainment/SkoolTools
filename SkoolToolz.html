@@ -1534,6 +1534,93 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
 }
 
 /* =========================================================
+   AP FLASHCARD PACKS TOOL
+   (browser chrome only — study view reuses the .fc-* classes)
+   ========================================================= */
+.ap-shell{display:flex;flex-direction:column;gap:0;min-height:520px;height:100%}
+.ap-body{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* Loading / error states while the content module fetches */
+.ap-status{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:48px 24px;text-align:center;gap:14px;
+}
+.ap-status-ico{font-size:40px;line-height:1}
+.ap-status-spin{
+  width:30px;height:30px;border-radius:50%;
+  border:3px solid var(--rule);border-top-color:var(--accent);
+  animation:ap-spin .8s linear infinite;
+}
+@keyframes ap-spin{to{transform:rotate(360deg)}}
+.ap-status-title{font-family:var(--serif);font-weight:500;font-size:20px;color:var(--ink)}
+.ap-status-sub{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--muted);max-width:38ch;line-height:1.5}
+
+/* Browser */
+.ap-browse{
+  flex:1;overflow-y:auto;padding:4px 2px 8px;
+  scrollbar-width:thin;scrollbar-color:var(--muted-2) transparent;
+}
+.ap-browse::-webkit-scrollbar{width:6px}
+.ap-browse::-webkit-scrollbar-thumb{background:var(--muted-2);border-radius:3px}
+.ap-intro{
+  font-family:var(--serif);font-style:italic;font-size:14px;color:var(--muted);
+  line-height:1.55;padding:12px 2px 16px;border-bottom:1px solid var(--rule);margin-bottom:4px;
+}
+.ap-cat{margin-top:18px}
+.ap-cat-head{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-3);margin:0 0 10px;display:flex;align-items:baseline;gap:8px;
+}
+.ap-cat-head span{color:var(--muted);letter-spacing:.1em}
+.ap-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;
+}
+.ap-pack{
+  display:flex;flex-direction:column;gap:6px;text-align:left;cursor:pointer;
+  background:var(--paper-2);border:1px solid var(--rule);border-radius:4px;
+  padding:14px 14px 13px;
+  transition:transform .1s,box-shadow .12s,border-color .12s;
+}
+.ap-pack:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 0 var(--ink);border-color:var(--ink-2)}
+.ap-pack:active{transform:translate(0,0);box-shadow:none}
+.ap-pack-top{display:flex;align-items:center;gap:9px}
+.ap-pack-ico{font-size:24px;line-height:1;flex-shrink:0}
+.ap-pack-name{
+  font-family:var(--serif);font-weight:500;font-size:16px;letter-spacing:-.01em;
+  color:var(--ink);line-height:1.2;
+}
+.ap-pack-blurb{
+  font-family:var(--serif);font-style:italic;font-size:12.5px;color:var(--muted);line-height:1.45;
+}
+.ap-pack-meta{
+  margin-top:auto;display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);
+}
+.ap-pack-count{
+  background:var(--paper-3);color:var(--muted);padding:2px 7px;border-radius:99px;
+}
+.ap-pack-due{color:var(--accent-3)}
+
+/* Study top bar (back + per-pack actions), sits above the reused .fc-study view */
+.ap-study-top{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:0 0 12px;border-bottom:1px solid var(--rule);flex-shrink:0;
+}
+.ap-study-top .spacer{flex:1}
+.ap-study-title{
+  font-family:var(--serif);font-weight:500;font-size:16px;color:var(--ink);
+  display:flex;align-items:center;gap:8px;min-width:0;
+}
+.ap-study-title .ap-study-ico{font-size:18px}
+.ap-back-btn{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--rule);border-radius:99px;
+  padding:5px 12px;cursor:pointer;white-space:nowrap;
+  transition:color .12s,border-color .12s,background .12s;
+}
+.ap-back-btn:hover{color:var(--ink);border-color:var(--ink-2);background:var(--paper-3)}
+
+/* =========================================================
    PERIODIC TABLE TOOL
    ========================================================= */
 .pt-shell{display:flex;flex-direction:column;gap:0;height:100%}
@@ -4186,6 +4273,395 @@ mitochondria&#9;the powerhouse of the cell"></textarea>
   };
 }
 
+/* ========== AP FLASHCARD PACKS ==========
+   A browser over original-authored, AP-aligned decks. Content lives in a
+   lazy-loaded module (ap-packs.js) fetched on first open (mirrors the
+   calculus engine), then cached. Study runs the same SM-2-lite scheduler as
+   the Flashcards tool; each pack can be forked into the user's own
+   Flashcards (flashcards:v2) or shared as a Flashcards-compatible code. */
+function mountAPPacks(root) {
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  /* ── Per-pack SRS progress: { [packId]: { [cardIndex]: {interval,ef,reps,due} } } ── */
+  const SKEY = 'appacks:v1';
+  let prog = (() => {
+    try { const s = Storage.get(SKEY, null); return (s && typeof s === 'object') ? s : {}; }
+    catch { return {}; }
+  })();
+  function saveProg() { Storage.set(SKEY, prog); }
+
+  /* ── SM-2 lite — identical scheduler to the Flashcards tool ── */
+  function sm2(card, rating) {
+    let { interval = 0, ef = 2.5, reps = 0 } = card;
+    if (rating === 0) { reps = 0; interval = 1; }
+    else {
+      reps += 1;
+      if (reps === 1)      interval = 1;
+      else if (reps === 2) interval = 6;
+      else                 interval = Math.round(interval * ef);
+      ef = Math.max(1.3, ef + 0.1 - (3 - rating) * (0.08 + (3 - rating) * 0.02));
+    }
+    interval = Math.min(interval, 365);
+    return { interval, ef, reps, due: Date.now() + interval * 86400000 };
+  }
+  function previewInterval(card, rating) {
+    return sm2({ interval: card.interval || 0, ef: card.ef || 2.5, reps: card.reps || 0 }, rating).interval;
+  }
+  function fmtDays(d) {
+    if (d <= 0)  return 'soon';
+    if (d === 1) return '1 day';
+    if (d < 30)  return d + ' days';
+    if (d < 60)  return '1 mo';
+    if (d < 365) return Math.round(d / 30) + ' mo';
+    return '1 yr';
+  }
+
+  /* ── Share-by-code: emits the same payload the Flashcards tool reads
+       (#flashcards=CODE), so AP packs share straight into personal decks. ── */
+  function b64urlEncode(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function encodeDeck(name, cards) {
+    const payload = { v: 1, n: name, c: cards.map(c => [c[0], c[1]]) };
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  }
+
+  /* ── Copy a pack into the user's own Flashcards decks (flashcards:v2) ── */
+  function copyToFlashcards(pack) {
+    const FKEY = 'flashcards:v2';
+    let fs; try { fs = Storage.get(FKEY, null); } catch { fs = null; }
+    if (!fs || !Array.isArray(fs.decks)) fs = { decks: [], activeDeck: null };
+    const deck = { id: uid(), name: pack.name, cards: pack.cards.map(c => ({ id: uid(), front: c[0], back: c[1] })) };
+    fs.decks.push(deck); fs.activeDeck = deck.id;
+    Storage.set(FKEY, fs);
+    showToast(`Added “${pack.name}” to your Flashcards (${pack.cards.length} cards).`);
+  }
+
+  /* ── State ── */
+  let PACKS = null, CATS = null;
+  let view = 'browse';        // 'browse' | 'study' | 'share'
+  let curPack = null;
+  let flipped = false, sessionQueue = [], sessionDone = [];
+  let sessionStats = { again: 0, hard: 0, good: 0, easy: 0 };
+
+  root.innerHTML = `<div class="ap-shell"><div class="ap-body" id="ap-body"></div></div>`;
+  const body = root.querySelector('#ap-body');
+
+  /* ── Lazy-load the content module (script tag → file:// safe, then cached) ── */
+  let loadStarted = false;
+  function ensurePacks(cb) {
+    if (window.APPacks) { cb(true); return; }
+    const queue = (mountAPPacks._q = mountAPPacks._q || []);
+    queue.push(cb);
+    if (loadStarted) return;
+    loadStarted = true;
+    const s = document.createElement('script');
+    s.src = 'ap-packs.js';
+    s.onload  = () => queue.splice(0).forEach(fn => fn(!!window.APPacks));
+    s.onerror = () => queue.splice(0).forEach(fn => fn(false));
+    document.head.appendChild(s);
+  }
+
+  function showLoading() {
+    body.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-spin"></div>
+        <div class="ap-status-title">Loading packs…</div>
+        <div class="ap-status-sub">Fetching the AP deck library. This loads once, then works offline.</div>
+      </div>`;
+  }
+  function showError() {
+    body.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-ico">📡</div>
+        <div class="ap-status-title">Couldn’t load the packs.</div>
+        <div class="ap-status-sub">The deck file (ap-packs.js) didn’t load. Make sure it sits next to the app, then reopen this tool.</div>
+        <button class="btn" id="ap-retry">Try again</button>
+      </div>`;
+    body.querySelector('#ap-retry')?.addEventListener('click', () => { loadStarted = false; boot(); });
+  }
+
+  /* ── Per-pack helpers ── */
+  function packProgress(packId) { return prog[packId] || (prog[packId] = {}); }
+  function dueCount(pack) {
+    const p = prog[pack.id] || {}; const now = Date.now();
+    return pack.cards.reduce((n, _, i) => { const c = p[i]; return n + (!c || !c.due || c.due <= now ? 1 : 0); }, 0);
+  }
+  function buildStudyCards(pack) {
+    const p = packProgress(pack.id);
+    return pack.cards.map((pair, i) => {
+      const s = p[i] || {};
+      return { idx: i, front: pair[0], back: pair[1], interval: s.interval || 0, ef: s.ef || 2.5, reps: s.reps || 0, due: s.due || 0 };
+    });
+  }
+  function buildQueue(cards) {
+    const now = Date.now();
+    const due = cards.filter(c => !c.due || c.due <= now);
+    const notDue = cards.filter(c => c.due && c.due > now);
+    return [...due.sort(() => Math.random() - .5), ...notDue].slice(0, 20);
+  }
+
+  /* ─────────────────────────── BROWSE ──────────────────────────── */
+  function renderBrowse() {
+    body._cleanup?.(); body._cleanup = null;
+    view = 'browse'; curPack = null;
+    let html = `<div class="ap-intro">Original, AP-aligned decks — built for SkoolToolz, never copied from the exam. Pick a pack to study it here with spaced repetition, or copy it into your own <b>Flashcards</b> to edit and mix.</div>`;
+    for (const cat of CATS) {
+      const packs = PACKS.filter(p => p.cat === cat.id);
+      if (!packs.length) continue;
+      html += `<div class="ap-cat"><div class="ap-cat-head">${escape(cat.name)} <span>${packs.length} pack${packs.length !== 1 ? 's' : ''}</span></div><div class="ap-grid">`;
+      for (const p of packs) {
+        const due = dueCount(p);
+        html += `<button class="ap-pack" data-pack="${escape(p.id)}">
+          <div class="ap-pack-top"><span class="ap-pack-ico">${escape(p.icon)}</span><span class="ap-pack-name">${escape(p.name)}</span></div>
+          <div class="ap-pack-blurb">${escape(p.blurb)}</div>
+          <div class="ap-pack-meta"><span class="ap-pack-count">${p.cards.length} cards</span>${due ? `<span class="ap-pack-due">${due} due</span>` : `<span>reviewed</span>`}</div>
+        </button>`;
+      }
+      html += `</div></div>`;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'ap-browse';
+    wrap.innerHTML = html;
+    body.innerHTML = ''; body.appendChild(wrap);
+    wrap.querySelectorAll('.ap-pack').forEach(btn =>
+      btn.addEventListener('click', () => { curPack = PACKS.find(p => p.id === btn.dataset.pack); if (curPack) startSession(); }));
+  }
+
+  /* ── Shared study top bar ── */
+  function topBar() {
+    return `
+      <div class="ap-study-top">
+        <button class="ap-back-btn" id="ap-back">← Packs</button>
+        <div class="ap-study-title"><span class="ap-study-ico">${escape(curPack.icon)}</span>${escape(curPack.name)}</div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="ap-copy-fc">+ Flashcards</button>
+        <button class="btn ghost sm" id="ap-share">↗ Share</button>
+      </div>`;
+  }
+  function wireTop() {
+    body.querySelector('#ap-back')?.addEventListener('click', () => { body._cleanup?.(); renderBrowse(); });
+    body.querySelector('#ap-copy-fc')?.addEventListener('click', () => copyToFlashcards(curPack));
+    body.querySelector('#ap-share')?.addEventListener('click', () => { body._cleanup?.(); renderShare(); });
+  }
+
+  /* ─────────────────────────── STUDY ──────────────────────────── */
+  function startSession() {
+    sessionQueue = buildQueue(buildStudyCards(curPack));
+    sessionDone = []; sessionStats = { again: 0, hard: 0, good: 0, easy: 0 }; flipped = false;
+    renderStudy();
+  }
+
+  function renderStudy() {
+    body._cleanup?.(); body._cleanup = null;
+    view = 'study';
+
+    if (sessionQueue.length === 0 && sessionDone.length === 0) {
+      const allFuture = buildStudyCards(curPack).every(c => c.due && c.due > Date.now());
+      if (allFuture) { showAllDone(); return; }
+      startSession(); return;
+    }
+    if (sessionQueue.length === 0) { showSessionDone(); return; }
+
+    const card = sessionQueue[0];
+    const total = sessionQueue.length + sessionDone.length;
+    const progress = sessionDone.length / total;
+
+    body.innerHTML = topBar() + `
+      <div class="fc-study">
+        <div class="fc-progress-wrap">
+          <div class="fc-progress-bar"><div class="fc-progress-fill" style="width:${Math.round(progress*100)}%"></div></div>
+          <div class="fc-progress-meta"><span>${sessionDone.length} / ${total}</span><span>${escape(curPack.name)}</span></div>
+        </div>
+        <div class="fc-card-stage" id="fc-card-stage" role="button" aria-label="Flip card" tabindex="0">
+          <div class="fc-card-inner" id="fc-card-inner">
+            <div class="fc-card-face front">
+              <div class="fc-face-label">Term</div>
+              <div class="fc-face-text">${escape(card.front)}</div>
+              <div class="fc-flip-hint">Tap to flip</div>
+            </div>
+            <div class="fc-card-face back">
+              <div class="fc-face-label">Definition</div>
+              <div class="fc-face-text">${escape(card.back)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="fc-ratings" id="fc-ratings" style="opacity:0;pointer-events:none;transition:opacity .25s">
+          <button class="fc-rating-btn again" data-rating="0"><span class="rb-label">Again</span><span class="rb-hint">soon</span></button>
+          <button class="fc-rating-btn hard" data-rating="1"><span class="rb-label">Hard</span><span class="rb-hint">${fmtDays(previewInterval(card, 1))}</span></button>
+          <button class="fc-rating-btn good" data-rating="2"><span class="rb-label">Good</span><span class="rb-hint">${fmtDays(previewInterval(card, 2))}</span></button>
+          <button class="fc-rating-btn easy" data-rating="3"><span class="rb-label">Easy</span><span class="rb-hint">${fmtDays(previewInterval(card, 3))}</span></button>
+        </div>
+        <div class="fc-srs-note" id="fc-srs-note" style="opacity:0;transition:opacity .25s">SM-2 lite · your rating sets when this card comes back</div>
+      </div>`;
+    wireTop();
+
+    const stage   = body.querySelector('#fc-card-stage');
+    const inner   = body.querySelector('#fc-card-inner');
+    const ratings = body.querySelector('#fc-ratings');
+    const srsNote = body.querySelector('#fc-srs-note');
+
+    function flip() {
+      if (flipped) return;
+      flipped = true;
+      inner.classList.add('flipped');
+      ratings.style.opacity = '1';
+      ratings.style.pointerEvents = 'auto';
+      if (srsNote) srsNote.style.opacity = '1';
+    }
+    stage.addEventListener('click', flip);
+    stage.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); }});
+
+    function onKey(e) {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      if (!flipped) { if (e.key === ' ' || e.key === 'f') flip(); return; }
+      if (e.key === '1') rate(0);
+      if (e.key === '2') rate(1);
+      if (e.key === '3') rate(2);
+      if (e.key === '4') rate(3);
+    }
+    document.addEventListener('keydown', onKey);
+    body._cleanup = () => document.removeEventListener('keydown', onKey);
+
+    ratings.querySelectorAll('.fc-rating-btn').forEach(btn =>
+      btn.addEventListener('click', () => rate(+btn.dataset.rating)));
+
+    function rate(r) {
+      const names = ['again', 'hard', 'good', 'easy'];
+      sessionStats[names[r]]++;
+      Object.assign(card, sm2(card, r));
+      packProgress(curPack.id)[card.idx] = { interval: card.interval, ef: card.ef, reps: card.reps, due: card.due };
+      saveProg();
+      if (r === 0) {
+        sessionQueue.shift();
+        sessionQueue.splice(Math.min(2, sessionQueue.length), 0, card);
+      } else {
+        sessionQueue.shift();
+        sessionDone.push(card);
+      }
+      flipped = false;
+      body._cleanup?.();
+      renderStudy();
+    }
+  }
+
+  function showSessionDone() {
+    const s = sessionStats;
+    body.innerHTML = topBar() + `
+      <div class="fc-study">
+        <div class="fc-done">
+          <div class="fc-done-icon">🎉</div>
+          <div class="fc-done-title">Session complete.</div>
+          <div class="fc-done-sub">Cards are scheduled. Come back tomorrow for the next batch — or copy this pack into your Flashcards to keep it.</div>
+          <div class="fc-done-stats">
+            <div class="fc-done-stat green"><b>${s.easy}</b>Easy</div>
+            <div class="fc-done-stat"><b>${s.good}</b>Good</div>
+            <div class="fc-done-stat yellow"><b>${s.hard}</b>Hard</div>
+            <div class="fc-done-stat red"><b>${s.again}</b>Again</div>
+          </div>
+          <div class="btn-row" style="justify-content:center;margin-top:4px">
+            <button class="btn" id="ap-restart">Study again</button>
+            <button class="btn ghost" id="ap-done-back">More packs</button>
+          </div>
+        </div>
+      </div>`;
+    wireTop();
+    body.querySelector('#ap-restart')?.addEventListener('click', () => { sessionDone = []; startSession(); });
+    body.querySelector('#ap-done-back')?.addEventListener('click', () => renderBrowse());
+  }
+
+  function showAllDone() {
+    const withDue = buildStudyCards(curPack).filter(c => c.due);
+    const nextDue = withDue.length ? Math.min(...withDue.map(c => c.due)) : Date.now();
+    const hrs = Math.max(0, Math.round((nextDue - Date.now()) / 3600000));
+    const when = hrs < 1 ? 'soon' : hrs < 24 ? `in ~${hrs}h` : `in ~${Math.round(hrs / 24)}d`;
+    body.innerHTML = topBar() + `
+      <div class="fc-study">
+        <div class="fc-done">
+          <div class="fc-done-icon">✅</div>
+          <div class="fc-done-title">All caught up.</div>
+          <div class="fc-done-sub">Every card in this pack is scheduled for later. Next review ${when}.</div>
+          <div class="btn-row" style="justify-content:center;margin-top:4px">
+            <button class="btn" id="ap-cram">Study anyway</button>
+            <button class="btn ghost" id="ap-reset">Reset progress</button>
+          </div>
+        </div>
+      </div>`;
+    wireTop();
+    body.querySelector('#ap-cram')?.addEventListener('click', () => {
+      sessionQueue = buildStudyCards(curPack).sort(() => Math.random() - .5).slice(0, 20);
+      sessionDone = []; sessionStats = { again: 0, hard: 0, good: 0, easy: 0 }; flipped = false;
+      renderStudy();
+    });
+    body.querySelector('#ap-reset')?.addEventListener('click', () => {
+      if (confirm('Reset spaced-repetition progress for this pack?')) { delete prog[curPack.id]; saveProg(); startSession(); }
+    });
+  }
+
+  /* ─────────────────────────── SHARE ──────────────────────────── */
+  function renderShare() {
+    body._cleanup?.(); body._cleanup = null;
+    view = 'share';
+    const code = encodeDeck(curPack.name, curPack.cards);
+    const base = (location.origin && location.origin !== 'null')
+      ? location.origin + location.pathname
+      : location.href.split('#')[0];
+    const url = base + '#flashcards=' + code;
+
+    body.innerHTML = `
+      <div class="ap-study-top">
+        <button class="ap-back-btn" id="ap-back2">← Packs</button>
+        <div class="ap-study-title"><span class="ap-study-ico">${escape(curPack.icon)}</span>${escape(curPack.name)}</div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" id="ap-study-go">Study</button>
+      </div>
+      <div class="fc-io">
+        <div class="fc-io-sec">
+          <div class="fc-io-head">Share “${escape(curPack.name)}” <span>${curPack.cards.length} cards</span></div>
+          <div class="fc-share-note">These decks are original SkoolToolz content, free to pass on. The code <i>is</i> the deck — a friend pastes it into <b>Flashcards → Import</b> for their own copy. (Your review progress isn’t included.)</div>
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Share code</div>
+          <textarea class="fc-io-text mono" id="ap-code" rows="3" readonly>${escape(code)}</textarea>
+          <div class="fc-io-target"><span class="fc-io-count">${code.length} chars</span><button class="btn sm" id="ap-copy-code">Copy code</button></div>
+        </div>
+        <div class="fc-io-sec">
+          <div class="fc-io-head">Share link <span>opens straight into Flashcards</span></div>
+          <textarea class="fc-io-text mono" id="ap-url" rows="2" readonly>${escape(url)}</textarea>
+          <div class="fc-io-target"><button class="btn ghost sm" id="ap-copy-url" style="margin-left:auto">Copy link</button></div>
+        </div>
+        <div class="fc-io-sec">
+          <div class="fc-io-head">Add to my decks <span>edit · mix · keep</span></div>
+          <div class="fc-io-sub">Copy this pack into your personal Flashcards tool, where you can edit cards and keep your own spaced-repetition progress.</div>
+          <div class="fc-io-target"><button class="btn ghost sm" id="ap-copy-fc2" style="margin-left:auto">+ Add to Flashcards</button></div>
+        </div>
+      </div>`;
+    body.querySelector('#ap-back2')?.addEventListener('click', () => renderBrowse());
+    body.querySelector('#ap-study-go')?.addEventListener('click', () => startSession());
+    body.querySelector('#ap-copy-code')?.addEventListener('click', (e) => { body.querySelector('#ap-code').select(); copy(code, e.currentTarget); });
+    body.querySelector('#ap-copy-url')?.addEventListener('click', (e) => { body.querySelector('#ap-url').select(); copy(url, e.currentTarget); });
+    body.querySelector('#ap-copy-fc2')?.addEventListener('click', () => copyToFlashcards(curPack));
+  }
+
+  /* ── Boot: lazy-load content, then show the browser ── */
+  function boot() {
+    showLoading();
+    ensurePacks(ok => {
+      if (!ok || !window.APPacks || !Array.isArray(window.APPacks.packs)) { showError(); return; }
+      PACKS = window.APPacks.packs;
+      CATS  = (Array.isArray(window.APPacks.categories) && window.APPacks.categories.length)
+        ? window.APPacks.categories
+        : [{ id: undefined, name: 'Packs' }];
+      renderBrowse();
+    });
+  }
+  boot();
+
+  return { unmount() { body._cleanup?.(); } };
+}
+
 /* ========== PERIODIC TABLE ========== */
 function mountPeriodic(root) {
   /* ── Element data: all 118 ── */
@@ -5786,8 +6262,8 @@ function registerTools() {
     desc:'Timed multiple-choice & grid-in math practice.', tag:'new',
     keywords:['sat','act','math','drill','timed','practice','multiple choice','grid-in','digital sat','test prep','algebra','geometry','quiz','question bank'], mount: mountMathDrill });
   TOOLS.push({ id:'appacks', shelf:'testprep', icon:'🎴', name:'AP Flashcard Packs',
-    desc:'Subject decks built for AP exams.', status:'soon', tag:'new',
-    keywords:['ap','flashcard','packs','decks','subject','biology','calculus','history','srs','test prep'] });
+    desc:'Original AP subject decks · study, copy & share.', tag:'new',
+    keywords:['ap','flashcard','packs','decks','subject','biology','chemistry','physics','environmental','calculus','statistics','history','psychology','geography','government','csp','srs','test prep'], mount: mountAPPacks });
 
   /* ============== ACCESSIBILITY & FOCUS ============== */
   TOOLS.push({ id:'reader', shelf:'a11y', icon:'📏', name:'Reading Ruler',

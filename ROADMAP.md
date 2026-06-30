@@ -269,13 +269,12 @@ policies (a permitted, integrity-safe use).
 
 ---
 
-## Phase 3 — New shelves (categories)  ⬜ *not started*
+## Phase 3 — New shelves (categories)  🔄 *in progress*
 
-### 3.1 🎯 Test Prep shelf  🔄 *in progress — 4 / 5 shipped*
+### 3.1 🎯 Test Prep shelf  ✅ *complete — 5 / 5 shipped*
 Curated, deterministic, content-driven — **not** AI. New shelf (`testprep`, neon
 crimson). Built easy-wins-first; the last content-heavy applet (AP flashcard
-packs) is live in the UI as a `SOON` card while its original-authored content is
-built out.
+packs) shipped with its original-authored deck library, completing the shelf.
 
 - ✅ **Score Goal** *(was "What score do I need")* — reverse-engineers the SAT,
   ACT, or AP score you still need. SAT solves the missing 200–800 section from a
@@ -305,8 +304,19 @@ built out.
   KaTeX path. Real test questions are copyrighted, so every question is built to
   match the style and difficulty — nothing is copied. Config persists to
   localStorage; nothing leaves the device.
-- ⬜ AP-aligned **flashcard packs** *(SOON)* — original-authored subject decks +
-  pack browser, reusing the Flashcards SRS / share-by-code engine.
+- ✅ AP-aligned **flashcard packs** — **13 original-authored subject decks**
+  (~449 term→definition cards) across Sciences (Biology, Chemistry, Physics 1,
+  Environmental Science), History & Social Science (US/World/European History,
+  Psychology, Human Geography, US Gov), and Math & CS (Calculus AB/BC,
+  Statistics, CS Principles). A grouped **pack browser** opens each deck into an
+  **in-tool study view** running the same **SM-2-lite** scheduler as Flashcards
+  (per-pack progress in `appacks:v1`, due counts on each card). Every pack can be
+  **copied into the student's own Flashcards** (`flashcards:v2`) to edit/mix, or
+  **shared by code** via the Flashcards-compatible `#flashcards=…` string/link —
+  reusing the Flashcards SRS / share-by-code engine, no backend. All content is
+  original to SkoolToolz (nothing copied from the exam); the deck library is a
+  **lazy-loaded module** (`ap-packs.js`, fetched on first open, then cached) so
+  the single-file fast-paint budget holds.
 - ✅ **Cheat-Sheet Builder** — relocated here from Toolbox (see 2.7); an
   exam-prep tool, it belongs on this shelf.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
@@ -366,17 +376,19 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 4 / 5 · A11y & Focus 3 / 4 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep ✅ 5 / 5 · A11y & Focus 3 / 4 |
 
 **Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
-Builder, 2.7**) are shipped. **Phase 3 has begun:** the Test Prep shelf (3.1) is
-live with its three self-contained tools — **Score Goal**, **Exam Countdown**, and
-**Free-Response Pacer** — shipped easy-wins-first, joined now by the **SAT / ACT
-Math Drill**, which uses original parameterized question generators (SAT + ACT
-formats, quick and full-timed sections, raw + estimated scaled scoring, and a
-worked-solution review). Only **AP flashcard packs** remains a `SOON` card,
-pending original-authored content. **Accessibility & Focus (3.2) has begun:** the shelf
+Builder, 2.7**) are shipped. **Phase 3 is well underway:** the Test Prep shelf
+(3.1) is now **complete (5 / 5)** — its three self-contained tools (**Score
+Goal**, **Exam Countdown**, **Free-Response Pacer**) plus the **SAT / ACT Math
+Drill** (original parameterized generators, SAT + ACT formats, quick and
+full-timed sections, raw + estimated scaled scoring, and a worked-solution
+review), joined now by the **AP Flashcard Packs**: 13 original-authored AP
+subject decks (~449 cards) in a grouped pack browser with in-tool SM-2-lite
+study, copy-into-Flashcards, and Flashcards-compatible share codes, with the
+deck library lazy-loaded from `ap-packs.js`. **Accessibility & Focus (3.2) has begun:** the shelf
 is live with **Reading Ruler**, **Read Aloud** (text-to-speech), and the
 **Enhanced Focus Lock** — which builds on the original Focus Lock (now removed
 from Study) and adds configurable break cycles, offline Web-Audio soundscapes,
