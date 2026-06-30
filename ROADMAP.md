@@ -322,11 +322,11 @@ packs) shipped with its original-authored deck library, completing the shelf.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
-### 3.2 ♿ Accessibility & Focus shelf  🔄 *in progress — 3 / 4 shipped*
+### 3.2 ♿ Accessibility & Focus shelf  ✅ *complete — 4 / 4 shipped*
 Fulfills a11y promises and surfaces them as first-class tools. New shelf —
 **Focus** (`a11y`, warm light brown `--brown` `#9F8170`), sequenced above Study.
-Built contained-tools-first; the two cross-cutting applets are live in the UI as
-`SOON` cards.
+Built contained-tools-first; all four tools — including the cross-cutting
+**Dyslexia-friendly mode** — now ship.
 - ✅ **Reading Ruler** — paste a passage and read it on a calmer, **tinted
   surface** (7 Irlen-style background tints) with a movable **reading ruler /
   typoscope**: a clear band that follows the pointer (or ↑/↓ keys) and dims
@@ -338,9 +338,16 @@ Built contained-tools-first; the two cross-cutting applets are live in the UI as
   picker, speed + pitch controls, play / pause / resume / stop, and **live
   word highlighting** driven by `boundary` events. Degrades gracefully where
   voices or boundary events are unavailable.
-- ⬜ **Dyslexia-friendly mode** *(SOON)* — Atkinson Hyperlegible (embedded as
-  base64 for true offline), wider spacing, 1.8 line height — as a **global
-  app-wide toggle** plus a reading surface.
+- ✅ **Dyslexia-friendly mode** — **Atkinson Hyperlegible embedded as base64**
+  (latin regular / bold / italic via `@font-face`, no network) drives a **global
+  app-wide toggle**: flipping it on adds `.dys` to `<html>`, which swaps the
+  `--sans` / `--serif` type to Atkinson everywhere and opens up line height (1.8)
+  and letter / word spacing — monospace (code / math) is left untouched. Three
+  live, persisted sliders tune line height + letter / word spacing, with a
+  reading-surface **preview** (showing all three faces) that renders even while
+  the mode is off. State persists in localStorage and is re-applied at boot
+  (no flash). Also fixes the Reading Ruler's "readable font", which referenced
+  Atkinson but had no face to load.
 - ✅ **Enhanced Focus Lock** — builds on the original Study-shelf Focus Lock,
   which has now **moved onto this shelf** (and been removed from Study). Adds
   **configurable work/break cycles** (25/5 · 50/10 · 90/15 presets + custom work,
@@ -376,7 +383,7 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep ✅ 5 / 5 · A11y & Focus 3 / 4 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep ✅ 5 / 5 · A11y & Focus ✅ 4 / 4 |
 
 **Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
@@ -388,12 +395,14 @@ full-timed sections, raw + estimated scaled scoring, and a worked-solution
 review), joined now by the **AP Flashcard Packs**: 13 original-authored AP
 subject decks (~449 cards) in a grouped pack browser with in-tool SM-2-lite
 study, copy-into-Flashcards, and Flashcards-compatible share codes, with the
-deck library lazy-loaded from `ap-packs.js`. **Accessibility & Focus (3.2) has begun:** the shelf
-is live with **Reading Ruler**, **Read Aloud** (text-to-speech), and the
+deck library lazy-loaded from `ap-packs.js`. **Accessibility & Focus (3.2) is now complete (4 / 4):** the shelf
+is live with **Reading Ruler**, **Read Aloud** (text-to-speech), the
 **Enhanced Focus Lock** — which builds on the original Focus Lock (now removed
 from Study) and adds configurable break cycles, offline Web-Audio soundscapes,
-and informational session stats. **Dyslexia-friendly mode** remains the one
-`SOON` card on this shelf. The optional CS shelf (3.3) has not been started.
+and informational session stats — and the **Dyslexia-friendly mode**, a global
+app-wide toggle backed by an embedded (base64) Atkinson Hyperlegible that swaps
+the whole app's type and opens up spacing, with live persisted controls and a
+preview. The optional CS shelf (3.3) has not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
