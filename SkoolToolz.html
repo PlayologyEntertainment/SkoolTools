@@ -39,6 +39,7 @@
   --pink:         #FF3D9A;
   --orange:       #FF8C00;
   --amber:        #F5C542;   /* warm amber — Code shelf */
+  --red:          #FF4D5E;   /* neon crimson — Test Prep shelf */
   /* Type */
   --serif: 'Fraunces', ui-serif, Georgia, serif;
   --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
@@ -369,6 +370,7 @@ main{padding:28px 28px 80px}
 .tool[data-shelf="lab"],     .panel[data-shelf="lab"]     {--cat-color:var(--accent-4)}
 .tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink)}
 .tool[data-shelf="code"],    .panel[data-shelf="code"]    {--cat-color:var(--amber)}
+.tool[data-shelf="testprep"],.panel[data-shelf="testprep"]{--cat-color:var(--red)}
 
 /* Inside an open applet panel, the emphasis color (--accent) is derived
    from the applet's category color so each tool's UI matches its shelf.
@@ -2644,6 +2646,7 @@ async function copy(text, btn) {
 const SHELVES = [
   { id: 'plan',    name: 'Plan',    color: 'var(--orange)' },
   { id: 'study',   name: 'Study',   color: 'var(--accent-2)' },
+  { id: 'testprep',name: 'Test Prep', color: 'var(--red)' },
   { id: 'numbers', name: 'Numbers', color: 'var(--accent)' },
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
   { id: 'lab',     name: 'Lab',     color: 'var(--accent-4)' },
@@ -5764,6 +5767,23 @@ function registerTools() {
   TOOLS.push({ id:'regex', shelf:'code', icon:'.*', name:'Regex Tester',
     desc:'Live match highlighting, groups, flags, replace.', tag:'new',
     keywords:['regex','regexp','regular expression','pattern','match','matches','replace','substitute','capture','group','named group','flags','global','case insensitive','multiline','dotall','sticky','test','validate','cs','javascript'], mount: mountRegex });
+
+  /* ============== TEST PREP ============== */
+  TOOLS.push({ id:'testscore', shelf:'testprep', icon:'🎯', name:'Score Goal',
+    desc:'SAT · ACT · AP — what you need to hit your target.', tag:'new',
+    keywords:['sat','act','ap','score','goal','target','need','composite','scaled','superscore','section','standardized','test','exam'], mount: mountTestScore });
+  TOOLS.push({ id:'examcountdown', shelf:'testprep', icon:'⏳', name:'Exam Countdown',
+    desc:'Days until AP exams & your own finals.', tag:'new',
+    keywords:['countdown','exam','ap','finals','test','date','days','until','college board','schedule','sat','act'], mount: mountExamCountdown });
+  TOOLS.push({ id:'frqtimer', shelf:'testprep', icon:'⏲️', name:'Free-Response Pacer',
+    desc:'Pace AP free-response questions by the clock.', tag:'new',
+    keywords:['frq','free response','free-response','pacing','pacer','timer','ap','dbq','leq','essay','timing','trainer','section'], mount: mountFrqTimer });
+  TOOLS.push({ id:'mathdrill', shelf:'testprep', icon:'✏️', name:'SAT / ACT Math Drill',
+    desc:'Timed multiple-choice & grid-in math practice.', status:'soon', tag:'new',
+    keywords:['sat','act','math','drill','timed','practice','multiple choice','grid-in','digital sat','test prep'] });
+  TOOLS.push({ id:'appacks', shelf:'testprep', icon:'🎴', name:'AP Flashcard Packs',
+    desc:'Subject decks built for AP exams.', status:'soon', tag:'new',
+    keywords:['ap','flashcard','packs','decks','subject','biology','calculus','history','srs','test prep'] });
 
   /* ============== WORDS ============== */
   TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
@@ -13150,6 +13170,472 @@ function mountFinalGrade(root) {
     else $('#sub', root).innerHTML = `Doable. Don't panic.`;
   };
   ['#cur','#wgt','#tgt'].forEach(s => $(s, root).addEventListener('input', calc));
+}
+
+/* =========================================================
+   TEST PREP — Score Goal
+   Reverse-engineers the SAT / ACT / AP score a student needs.
+   Pure arithmetic, nothing leaves the device.
+   ========================================================= */
+function mountTestScore(root) {
+  root.innerHTML = `
+    <p class="help">Enter what you already have (or expect), set a target, and it solves for the rest. Just arithmetic — no scores leave your device.</p>
+    <div class="tabs">
+      <button class="tab active" data-tab="sat">SAT</button>
+      <button class="tab" data-tab="act">ACT</button>
+      <button class="tab" data-tab="ap">AP</button>
+    </div>
+    <div id="tsbody"></div>
+  `;
+  const body = () => $('#tsbody', root);
+  const colorFor = (cls) => cls === 'good' ? 'var(--accent-3)' : cls === 'bad' ? 'var(--red)' : 'var(--muted)';
+
+  /* ---- SAT: two 200–800 sections, total 400–1600 ---- */
+  function renderSAT() {
+    body().innerHTML = `
+      <div class="grid-3">
+        <div class="field"><label>Reading &amp; Writing</label><input class="input mono" id="rw" type="number" min="200" max="800" step="10" placeholder="200–800" inputmode="numeric"></div>
+        <div class="field"><label>Math</label><input class="input mono" id="ma" type="number" min="200" max="800" step="10" placeholder="200–800" inputmode="numeric"></div>
+        <div class="field"><label>Target total</label><input class="input mono" id="tgt" type="number" min="400" max="1600" step="10" placeholder="1400" inputmode="numeric"></div>
+      </div>
+      <div class="result"><div class="result-label" id="lab">You need</div><div class="result-big" id="out">—</div><div class="result-sub" id="sub">Fill in the section(s) you have, then a target total.</div></div>
+      <p class="help" style="margin-top:10px">Tip: schools that <b>superscore</b> take your best Reading &amp; Writing and best Math across every sitting — a weak section on one date isn't fatal.</p>
+    `;
+    const calc = () => {
+      const b = body();
+      const rw = parseFloat($('#rw', b).value), ma = parseFloat($('#ma', b).value), tgt = parseFloat($('#tgt', b).value);
+      const out = $('#out', b), sub = $('#sub', b), lab = $('#lab', b);
+      sub.style.color = '';
+      const known = [rw, ma].filter(Number.isFinite);
+      const sum = known.reduce((a, x) => a + x, 0);
+      if (!Number.isFinite(tgt)) {
+        if (known.length === 2) { lab.textContent = 'Current total'; out.textContent = sum; sub.textContent = 'Add a target total to see what you still need.'; }
+        else { lab.textContent = 'You need'; out.textContent = '—'; sub.textContent = 'Fill in the section(s) you have, then a target total.'; }
+        return;
+      }
+      const blanks = 2 - known.length;
+      if (blanks === 2) { lab.textContent = 'You need'; out.textContent = '—'; sub.textContent = 'Enter at least one section to solve for the other.'; return; }
+      if (blanks === 0) {
+        const gap = tgt - sum;
+        lab.textContent = 'Current total'; out.textContent = sum;
+        sub.style.color = colorFor(gap <= 0 ? 'good' : 'bad');
+        sub.innerHTML = gap <= 0 ? `At or above your <b>${tgt}</b> target by ${-gap}.` : `<b>${gap}</b> short of ${tgt} — raise either section.`;
+        return;
+      }
+      const need = tgt - sum;
+      const which = Number.isFinite(rw) ? 'Math' : 'Reading & Writing';
+      lab.textContent = 'Need on ' + which;
+      out.textContent = Math.min(800, Math.max(200, Math.round(need / 10) * 10));
+      let cls, msg;
+      if (need <= 200) { cls = 'good'; msg = `Locked in — even the 200 floor on ${which} clears your target.`; }
+      else if (need > 800) { cls = 'bad'; msg = `Out of reach in one sitting — a perfect 800 on ${which} still leaves you ${need - 800} short. Lower the target or split it across dates (superscore).`; }
+      else { cls = 'ok'; msg = `Doable on ${which}. Don't panic.`; }
+      sub.style.color = colorFor(cls); sub.innerHTML = msg;
+    };
+    ['#rw', '#ma', '#tgt'].forEach(s => $(s, body()).addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---- ACT: four 1–36 sections, composite = rounded mean ---- */
+  function renderACT() {
+    body().innerHTML = `
+      <div class="grid-2">
+        <div class="field"><label>English</label><input class="input mono act-s" id="en" type="number" min="1" max="36" step="1" placeholder="1–36" inputmode="numeric"></div>
+        <div class="field"><label>Math</label><input class="input mono act-s" id="mt" type="number" min="1" max="36" step="1" placeholder="1–36" inputmode="numeric"></div>
+        <div class="field"><label>Reading</label><input class="input mono act-s" id="rd" type="number" min="1" max="36" step="1" placeholder="1–36" inputmode="numeric"></div>
+        <div class="field"><label>Science</label><input class="input mono act-s" id="sc" type="number" min="1" max="36" step="1" placeholder="1–36" inputmode="numeric"></div>
+      </div>
+      <div class="field"><label>Target composite (1–36)</label><input class="input mono" id="tgt" type="number" min="1" max="36" step="1" placeholder="30" inputmode="numeric"></div>
+      <div class="result"><div class="result-label" id="lab">You need</div><div class="result-big" id="out">—</div><div class="result-sub" id="sub">Leave the sections you haven't taken blank.</div></div>
+      <p class="help" style="margin-top:10px">Your composite is the <b>average of the four sections, rounded</b> (an exact .5 rounds up). The figure below is the score needed on <i>each</i> remaining section, assuming you spread the work evenly.</p>
+    `;
+    const calc = () => {
+      const b = body();
+      const vals = ['#en', '#mt', '#rd', '#sc'].map(s => parseFloat($(s, b).value));
+      const tgt = parseFloat($('#tgt', b).value);
+      const out = $('#out', b), sub = $('#sub', b), lab = $('#lab', b);
+      sub.style.color = '';
+      const known = vals.filter(Number.isFinite);
+      const sum = known.reduce((a, x) => a + x, 0);
+      const blanks = 4 - known.length;
+      if (!Number.isFinite(tgt)) {
+        if (blanks === 0) { lab.textContent = 'Your composite'; out.textContent = Math.round(sum / 4); sub.textContent = 'Add a target composite to see what you need.'; }
+        else { lab.textContent = 'You need'; out.textContent = '—'; sub.textContent = 'Enter your sections and a target composite.'; }
+        return;
+      }
+      if (blanks === 0) {
+        const comp = Math.round(sum / 4), gap = tgt - comp;
+        lab.textContent = 'Your composite'; out.textContent = comp;
+        sub.style.color = colorFor(gap <= 0 ? 'good' : 'bad');
+        sub.innerHTML = gap <= 0 ? `At or above your <b>${tgt}</b> target.` : `<b>${gap}</b> point${gap !== 1 ? 's' : ''} below ${tgt} — you'll need a retake to raise it.`;
+        return;
+      }
+      // minimum total so round(total/4) >= tgt  ⇔  total >= 4·tgt − 2
+      const need = Math.ceil((4 * tgt - 2 - sum) / blanks);
+      lab.textContent = blanks === 1 ? 'Need on the last section' : `Need on each of ${blanks}`;
+      out.textContent = Math.min(36, Math.max(1, need));
+      let cls, msg;
+      if (need <= 1) { cls = 'good'; msg = `You're already there — even a 1 on what's left clears it.`; }
+      else if (need > 36) { cls = 'bad'; msg = `Out of reach — a perfect 36 on every remaining section still falls short. Lower the target.`; }
+      else { cls = 'ok'; msg = blanks === 1 ? `A ${need} on your last section does it.` : `Average ${need} across the ${blanks} remaining sections.`; }
+      sub.style.color = colorFor(cls); sub.innerHTML = msg;
+    };
+    ['#en', '#mt', '#rd', '#sc', '#tgt'].forEach(s => $(s, body()).addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---- AP: weighted MC + FRQ composite vs an (editable) cut band ---- */
+  function renderAP() {
+    body().innerHTML = `
+      <p class="help">AP scores (1–5) come from a raw composite of multiple-choice + free-response, mapped through cut scores the College Board <b>doesn't publish</b> and that drift year to year. The bands below are <i>typical</i> — edit the threshold to match your class's practice exams.</p>
+      <div class="grid-2">
+        <div class="field"><label>Multiple-choice weight (%)</label><input class="input mono" id="mw" type="number" min="0" max="100" step="1" value="50" inputmode="numeric"></div>
+        <div class="field"><label>Your MC score (% correct)</label><input class="input mono" id="ms" type="number" min="0" max="100" step="1" placeholder="70" inputmode="numeric"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Target AP score</label><select class="input" id="band">
+          <option value="75">5 &nbsp;(≈ 75%+ composite)</option>
+          <option value="62">4 &nbsp;(≈ 62%+ composite)</option>
+          <option value="50">3 &nbsp;(≈ 50%+ composite)</option>
+        </select></div>
+        <div class="field"><label>Composite threshold (%)</label><input class="input mono" id="thr" type="number" min="0" max="100" step="1" value="75" inputmode="numeric"></div>
+      </div>
+      <div class="result"><div class="result-label">Need on free-response</div><div class="result-big" id="out">—</div><div class="result-sub" id="sub">Enter your multiple-choice score.</div></div>
+    `;
+    const b = body();
+    $('#band', b).addEventListener('change', () => { $('#thr', b).value = $('#band', b).value; calc(); });
+    const calc = () => {
+      const mw = parseFloat($('#mw', b).value), ms = parseFloat($('#ms', b).value), thr = parseFloat($('#thr', b).value);
+      const out = $('#out', b), sub = $('#sub', b);
+      sub.style.color = '';
+      if (![mw, thr].every(Number.isFinite) || mw < 0 || mw > 100) { out.textContent = '—'; sub.textContent = 'Check the weight and threshold.'; return; }
+      if (!Number.isFinite(ms)) { out.textContent = '—'; sub.textContent = 'Enter your multiple-choice score.'; return; }
+      const frw = 100 - mw;
+      const mcContrib = ms * (mw / 100);
+      if (frw <= 0) {
+        out.textContent = ms >= thr ? '✓' : '✕';
+        sub.style.color = colorFor(ms >= thr ? 'good' : 'bad');
+        sub.innerHTML = ms >= thr ? `All weight is on multiple-choice and you're over the ${thr}% line.` : `All weight is on multiple-choice — at ${ms}% you're under the ${thr}% line.`;
+        return;
+      }
+      const need = (thr - mcContrib) / (frw / 100);
+      out.textContent = Math.min(100, Math.max(0, Math.round(need))) + '%';
+      let cls, msg;
+      if (need <= 0) { cls = 'good'; msg = `Your multiple-choice alone already clears ${thr}% — anything on the free-response is gravy.`; }
+      else if (need > 100) { cls = 'bad'; msg = `Even a perfect free-response leaves you under ${thr}%. You'd need to lift the multiple-choice score.`; }
+      else { cls = 'ok'; msg = `Score about <b>${Math.round(need)}%</b> on the free-response to reach a ${thr}% composite.`; }
+      sub.style.color = colorFor(cls); sub.innerHTML = msg;
+    };
+    ['#mw', '#ms', '#thr'].forEach(s => $(s, b).addEventListener('input', calc));
+    calc();
+  }
+
+  const renderers = { sat: renderSAT, act: renderACT, ap: renderAP };
+  renderSAT();
+  root.addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (!t || !t.dataset.tab) return;
+    $$('.tab', root).forEach(x => x.classList.toggle('active', x === t));
+    (renderers[t.dataset.tab] || renderSAT)();
+  });
+}
+
+/* =========================================================
+   TEST PREP — Exam Countdown
+   Bundled (year-marked) official AP window + user-added dates.
+   ========================================================= */
+/* AP exams run the first two full weeks of May. Rather than ship a table that
+   goes stale every year, compute the window from that rule and auto-roll to the
+   next upcoming cycle. Per-subject dates/times still come from the student's
+   own College Board notice — the bundled set is the administration window. */
+const AP_NOTE = 'Official College Board administration window (computed from the standard first-two-full-weeks-of-May calendar). Confirm your exact per-subject date & time on your AP registration.';
+function apWindow(year) {
+  const dow = new Date(year, 4, 1).getDay();            // weekday of May 1
+  const firstMon = 1 + ((1 - dow + 7) % 7);             // first Monday on/after May 1
+  const mk = (d) => `${year}-05-${String(d).padStart(2, '0')}`;
+  return { year, exams: [
+    { name: 'AP Exams — Week 1 begins', date: mk(firstMon) },
+    { name: 'AP Exams — Week 1 ends',   date: mk(firstMon + 4) },
+    { name: 'AP Exams — Week 2 begins', date: mk(firstMon + 7) },
+    { name: 'AP Exams — Week 2 ends',   date: mk(firstMon + 11) },
+    { name: 'AP Late-Testing window',   date: mk(firstMon + 14) },
+  ] };
+}
+function upcomingApWindow() {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const wk = apWindow(now.getFullYear());
+  const week2End = new Date(wk.exams[3].date + 'T00:00:00');
+  return now <= week2End ? wk : apWindow(now.getFullYear() + 1);
+}
+const AP_SUBJECTS = ['AP Biology','AP Calculus AB','AP Calculus BC','AP Chemistry','AP Computer Science A','AP Computer Science Principles','AP English Language','AP English Literature','AP Environmental Science','AP Human Geography','AP Macroeconomics','AP Microeconomics','AP Physics 1','AP Physics 2','AP Physics C','AP Precalculus','AP Psychology','AP Spanish Language','AP Statistics','AP U.S. Government','AP U.S. History','AP World History','SAT','ACT','Final Exam'];
+
+function mountExamCountdown(root) {
+  const SKEY = 'testprep:countdown';
+  let items = Storage.get(SKEY, []);
+  const save = () => Storage.set(SKEY, items);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const apWin = upcomingApWindow();
+
+  root.innerHTML = `
+    <p class="help">Count down to every exam that matters. Bundled AP dates are a starting point — add your own finals and test dates, all stored only on this device.</p>
+    <div class="grid-3" style="align-items:end">
+      <div class="field"><label>Exam name</label><input class="input" id="ec-name" list="ec-subjects" placeholder="AP Biology, Chem final…" autocomplete="off"></div>
+      <div class="field"><label>Date</label><input class="input mono" id="ec-date" type="date"></div>
+      <div class="field"><button class="btn" id="ec-add" style="width:100%">+ Add exam</button></div>
+    </div>
+    <datalist id="ec-subjects">${AP_SUBJECTS.map(s => `<option value="${escape(s)}">`).join('')}</datalist>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 14px">
+      <button class="btn ghost" id="ec-loadap">Load AP ${apWin.year} window</button>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer"><input type="checkbox" id="ec-hide"> Hide past exams</label>
+    </div>
+    <div id="ec-list"></div>
+  `;
+
+  const daysUntil = (dateStr) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(dateStr + 'T00:00:00');
+    return Math.round((d - today) / 86400000);
+  };
+
+  const renderList = () => {
+    const wrap = $('#ec-list', root);
+    const hidePast = $('#ec-hide', root).checked;
+    const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date));
+    const shown = sorted.filter(it => !(hidePast && daysUntil(it.date) < 0));
+    if (shown.length === 0) {
+      wrap.innerHTML = `<p class="help" style="text-align:center;padding:24px 0">No exams yet. Add one above, or load the AP 2026 window.</p>`;
+      return;
+    }
+    wrap.innerHTML = shown.map(it => {
+      const d = daysUntil(it.date);
+      let big, sub, accent;
+      if (d > 0) { big = `${d}`; sub = `day${d !== 1 ? 's' : ''} away`; accent = d <= 7 ? 'var(--red)' : d <= 30 ? 'var(--orange)' : 'var(--accent-3)'; }
+      else if (d === 0) { big = 'Today'; sub = 'good luck'; accent = 'var(--red)'; }
+      else { big = `${-d}`; sub = `day${-d !== 1 ? 's' : ''} ago`; accent = 'var(--muted)'; }
+      const dateLabel = new Date(it.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      return `<div class="ec-row" data-id="${it.id}" style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--rule,#222);border-radius:10px;margin-bottom:8px;background:var(--paper-2,#0a0a0a)">
+        <div style="min-width:64px;text-align:center">
+          <div class="mono" style="font-size:28px;font-weight:700;line-height:1;color:${accent}">${big}</div>
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">${sub}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escape(it.name)}</div>
+          <div style="font-size:13px;color:var(--muted)">${dateLabel}</div>
+        </div>
+        <button class="btn ghost ec-del" data-id="${it.id}" aria-label="Remove" title="Remove" style="flex:none">✕</button>
+      </div>`;
+    }).join('');
+  };
+
+  const add = () => {
+    const name = $('#ec-name', root).value.trim();
+    const date = $('#ec-date', root).value;
+    if (!name || !date) { showToast('Enter both a name and a date.'); return; }
+    items.push({ id: uid(), name, date });
+    save(); $('#ec-name', root).value = ''; $('#ec-date', root).value = '';
+    renderList(); $('#ec-name', root).focus();
+  };
+
+  $('#ec-add', root).addEventListener('click', add);
+  $('#ec-name', root).addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+  $('#ec-date', root).addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+  $('#ec-hide', root).addEventListener('change', renderList);
+  $('#ec-loadap', root).addEventListener('click', () => {
+    let n = 0;
+    for (const ex of apWin.exams) {
+      if (items.some(it => it.name === ex.name && it.date === ex.date)) continue;
+      items.push({ id: uid(), name: ex.name, date: ex.date }); n++;
+    }
+    save(); renderList();
+    showToast(n ? `Added ${n} AP ${apWin.year} date${n !== 1 ? 's' : ''}. ${AP_NOTE}` : `AP ${apWin.year} dates already loaded.`, 4600);
+  });
+  $('#ec-list', root).addEventListener('click', (e) => {
+    const del = e.target.closest('.ec-del');
+    if (!del) return;
+    items = items.filter(it => it.id !== del.dataset.id);
+    save(); renderList();
+  });
+
+  renderList();
+}
+
+/* =========================================================
+   TEST PREP — Free-Response Pacer
+   Multi-phase pacing timer with editable per-question budgets.
+   ========================================================= */
+function mountFrqTimer(root) {
+  const SKEY = 'testprep:frq';
+  const PRESETS = {
+    calc:   { name: 'AP Calculus AB/BC — Free Response', phases: [['Q1', 15], ['Q2', 15], ['Q3', 15], ['Q4', 15], ['Q5', 15], ['Q6', 15]] },
+    bio:    { name: 'AP Biology — Free Response', phases: [['Long Q1', 20], ['Long Q2', 20], ['Short Q3', 12], ['Short Q4', 13], ['Short Q5', 12], ['Short Q6', 13]] },
+    apush:  { name: 'AP U.S. History — DBQ + LEQ', phases: [['DBQ (incl. 15-min read)', 60], ['Long Essay (LEQ)', 40]] },
+    eng:    { name: 'AP English — Three Essays', phases: [['Reading period', 15], ['Essay 1', 40], ['Essay 2', 40], ['Essay 3', 40]] },
+    custom: { name: 'Custom', phases: [['Question 1', 10], ['Question 2', 10]] },
+  };
+  let phases = Storage.get(SKEY, null) || PRESETS.calc.phases.map(p => ({ label: p[0], mins: p[1] }));
+
+  let timer = null, actx = null;
+  let running = false, paused = false, idx = 0, remain = 0;
+
+  const beep = (freq = 880, dur = 0.18) => {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = freq; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0.0001, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3, actx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch {}
+  };
+  const fmt = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+  const totalMins = () => phases.reduce((a, p) => a + (p.mins || 0), 0);
+
+  /* ---------- SETUP VIEW ---------- */
+  function renderSetup() {
+    clearInterval(timer); timer = null; running = false; paused = false;
+    root.innerHTML = `
+      <p class="help">Practice finishing each free-response question inside its time budget. Pick a preset or build your own — it counts each question down and beeps when it's time to move on. Times are typical and fully editable.</p>
+      <div class="field"><label>Preset</label><select class="input" id="fr-preset">
+        ${Object.entries(PRESETS).map(([k, v]) => `<option value="${k}">${escape(v.name)}</option>`).join('')}
+      </select></div>
+      <div id="fr-phases"></div>
+      <button class="btn ghost" id="fr-addq" style="margin:4px 0 14px">+ Add question</button>
+      <div class="result"><div class="result-label">Total time</div><div class="result-big" id="fr-total">—</div><div class="result-sub">${phases.length} phase${phases.length !== 1 ? 's' : ''}</div></div>
+      <button class="btn" id="fr-start" style="width:100%;margin-top:12px">▶ Start pacing</button>
+    `;
+    const list = $('#fr-phases', root);
+    const drawPhases = () => {
+      list.innerHTML = phases.map((p, i) => `
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <input class="input fr-lab" data-i="${i}" value="${escape(p.label)}" placeholder="Question ${i + 1}" style="flex:1">
+          <input class="input mono fr-min" data-i="${i}" type="number" min="1" max="180" step="1" value="${p.mins}" style="width:80px" inputmode="numeric">
+          <span style="color:var(--muted);font-size:13px">min</span>
+          <button class="btn ghost fr-del" data-i="${i}" aria-label="Remove" title="Remove" style="flex:none">✕</button>
+        </div>`).join('');
+      $('#fr-total', root).textContent = totalMins() + ' min';
+      $('.result-sub', root).textContent = `${phases.length} phase${phases.length !== 1 ? 's' : ''}`;
+    };
+    drawPhases();
+    list.addEventListener('input', (e) => {
+      const i = +e.target.dataset.i;
+      if (e.target.classList.contains('fr-lab')) phases[i].label = e.target.value;
+      else if (e.target.classList.contains('fr-min')) { phases[i].mins = Math.max(0, parseInt(e.target.value) || 0); $('#fr-total', root).textContent = totalMins() + ' min'; }
+      Storage.set(SKEY, phases);
+      $('#fr-preset', root).value = 'custom';
+    });
+    list.addEventListener('click', (e) => {
+      const del = e.target.closest('.fr-del'); if (!del) return;
+      if (phases.length <= 1) { showToast('Keep at least one question.'); return; }
+      phases.splice(+del.dataset.i, 1); Storage.set(SKEY, phases); drawPhases(); $('#fr-preset', root).value = 'custom';
+    });
+    $('#fr-addq', root).addEventListener('click', () => {
+      phases.push({ label: 'Question ' + (phases.length + 1), mins: 10 }); Storage.set(SKEY, phases); drawPhases(); $('#fr-preset', root).value = 'custom';
+    });
+    $('#fr-preset', root).addEventListener('change', (e) => {
+      const p = PRESETS[e.target.value]; if (!p) return;
+      phases = p.phases.map(x => ({ label: x[0], mins: x[1] })); Storage.set(SKEY, phases); drawPhases();
+    });
+    $('#fr-start', root).addEventListener('click', () => {
+      if (totalMins() <= 0) { showToast('Set some time first.'); return; }
+      beep(660, 0.05); // also unlocks audio on the user gesture
+      startRun();
+    });
+  }
+
+  /* ---------- RUN VIEW ---------- */
+  function startRun() { idx = 0; running = true; paused = false; remain = phases[0].mins * 60; renderRun(); tick(); timer = setInterval(tick, 250); }
+
+  function renderRun() {
+    const elapsedBefore = phases.slice(0, idx).reduce((a, p) => a + p.mins * 60, 0);
+    const totalSecs = totalMins() * 60;
+    root.innerHTML = `
+      <div style="text-align:center;padding:8px 0 4px">
+        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Question ${idx + 1} of ${phases.length}</div>
+        <div style="font-family:var(--serif,serif);font-size:20px;margin:2px 0 6px" id="fr-label">${escape(phases[idx].label)}</div>
+        <div class="mono" id="fr-clock" style="font-size:72px;font-weight:700;line-height:1">${fmt(remain)}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px" id="fr-overall"></div>
+      </div>
+      <div style="height:8px;background:var(--paper-3,#111);border-radius:6px;overflow:hidden;margin:14px 0">
+        <div id="fr-bar" style="height:100%;width:0;background:var(--red);transition:width .25s linear"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="fr-pause" style="flex:1">❚❚ Pause</button>
+        <button class="btn ghost" id="fr-next" style="flex:1">Next ▶</button>
+        <button class="btn ghost" id="fr-stop" style="flex:none">Reset</button>
+      </div>
+      <div id="fr-overview" style="margin-top:16px"></div>
+    `;
+    $('#fr-pause', root).addEventListener('click', togglePause);
+    $('#fr-next', root).addEventListener('click', () => advance(true));
+    $('#fr-stop', root).addEventListener('click', () => { clearInterval(timer); renderSetup(); });
+    drawOverview();
+    paintRun(elapsedBefore, totalSecs);
+  }
+
+  function drawOverview() {
+    const ov = $('#fr-overview', root); if (!ov) return;
+    ov.innerHTML = phases.map((p, i) => {
+      const state = i < idx ? 'done' : i === idx ? 'now' : 'todo';
+      const color = state === 'now' ? 'var(--red)' : state === 'done' ? 'var(--accent-3)' : 'var(--muted)';
+      const mark = state === 'done' ? '✓' : i + 1;
+      return `<div style="display:flex;justify-content:space-between;padding:6px 10px;border-left:3px solid ${color};margin-bottom:4px;${state === 'now' ? 'background:var(--paper-2,#0a0a0a)' : ''}">
+        <span style="color:${color}">${mark}. ${escape(p.label)}</span><span class="mono" style="color:var(--muted)">${p.mins} min</span></div>`;
+    }).join('');
+  }
+
+  function paintRun(elapsedBefore, totalSecs) {
+    const clock = $('#fr-clock', root); if (!clock) return;
+    clock.textContent = fmt(remain);
+    const phaseSecs = phases[idx].mins * 60;
+    clock.style.color = remain <= 0 ? 'var(--red)' : remain <= 60 ? 'var(--orange)' : '';
+    const done = elapsedBefore + (phaseSecs - Math.max(0, remain));
+    $('#fr-bar', root).style.width = Math.min(100, (done / totalSecs) * 100) + '%';
+    const overallRemain = totalSecs - done;
+    $('#fr-overall', root).textContent = `${fmt(Math.max(0, overallRemain))} left overall`;
+  }
+
+  let lastTs = 0;
+  function tick() {
+    const now = Date.now();
+    if (running && !paused) {
+      if (lastTs) remain -= (now - lastTs) / 1000;
+      if (remain <= 0) { beep(880, 0.25); advance(false); lastTs = now; return; }
+    }
+    lastTs = now;
+    const elapsedBefore = phases.slice(0, idx).reduce((a, p) => a + p.mins * 60, 0);
+    paintRun(elapsedBefore, totalMins() * 60);
+  }
+
+  function advance(manual) {
+    if (idx >= phases.length - 1) { finish(); return; }
+    idx++; remain = phases[idx].mins * 60; lastTs = Date.now();
+    if (manual) beep(660, 0.08);
+    renderRun();
+  }
+
+  function togglePause() {
+    paused = !paused; lastTs = Date.now();
+    const btn = $('#fr-pause', root); if (btn) btn.textContent = paused ? '▶ Resume' : '❚❚ Pause';
+  }
+
+  function finish() {
+    clearInterval(timer); timer = null; running = false;
+    beep(523, 0.4);
+    root.innerHTML = `
+      <div style="text-align:center;padding:32px 0">
+        <div style="font-size:48px">⏱️</div>
+        <div style="font-family:var(--serif,serif);font-size:26px;margin:8px 0">Time's up — pencils down.</div>
+        <p class="help">You paced through all ${phases.length} question${phases.length !== 1 ? 's' : ''} (${totalMins()} min planned). The real exam rewards exactly this: a steady, budgeted rhythm.</p>
+        <button class="btn" id="fr-again" style="margin-top:12px">Run it again</button>
+      </div>
+    `;
+    $('#fr-again', root).addEventListener('click', renderSetup);
+  }
+
+  renderSetup();
+  return { unmount() { clearInterval(timer); try { actx && actx.close(); } catch {} } };
 }
 
 /* ========== DATE CALCULATOR ========== */

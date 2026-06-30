@@ -271,14 +271,31 @@ policies (a permitted, integrity-safe use).
 
 ## Phase 3 — New shelves (categories)  ⬜ *not started*
 
-### 3.1 🎯 Test Prep shelf  ⬜ *not started*
-Curated, deterministic, content-driven — **not** AI. Reuses the Flashcards and
-Math Practice engines.
-- SAT / ACT **timed math drill**.
-- AP-aligned **flashcard packs** (subject decks).
-- **"What score do I need"** (extends Final Grade for standardized exams).
-- **Free-response timing trainer**.
-- **AP / finals exam-date countdown**.
+### 3.1 🎯 Test Prep shelf  🔄 *in progress — 3 / 5 shipped*
+Curated, deterministic, content-driven — **not** AI. New shelf (`testprep`, neon
+crimson). Built easy-wins-first; the two content-heavy applets are live in the UI
+as `SOON` cards while their original-authored content is built out.
+
+- ✅ **Score Goal** *(was "What score do I need")* — reverse-engineers the SAT,
+  ACT, or AP score you still need. SAT solves the missing 200–800 section from a
+  target total (with a superscore note); ACT solves the score needed on each
+  remaining 1–36 section for a target composite (rounding-aware); AP solves the
+  free-response % needed to clear an editable cut-score band from a weighted
+  multiple-choice score. Pure arithmetic, nothing leaves the device.
+- ✅ **Exam Countdown** — counts down to every exam. Bundled official **AP
+  administration window is *computed*** from the standard first-two-full-weeks-of-
+  May rule (auto-rolls to the next upcoming cycle, so it never goes stale) and the
+  student adds their own finals / test dates (AP-subject autocomplete). Colour-
+  coded urgency (≤7d red, ≤30d amber), hide-past toggle, localStorage only.
+- ✅ **Free-Response Pacer** *(was "free-response timing trainer")* — multi-phase
+  pacing timer with editable per-question budgets and subject presets (AP Calc,
+  Bio, APUSH DBQ+LEQ, English). Big countdown, overall-time readout, progress bar,
+  phase overview, Web-Audio beep at each transition, pause / next / reset.
+- ⬜ SAT / ACT **timed math drill** *(SOON)* — original-authored question bank,
+  both SAT and ACT formats, section timing, scoring, wrong-answer review. Real
+  test questions are copyrighted, so all content is original.
+- ⬜ AP-aligned **flashcard packs** *(SOON)* — original-authored subject decks +
+  pack browser, reusing the Flashcards SRS / share-by-code engine.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
@@ -313,12 +330,16 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | ⬜ not started |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 |
 
-**Status as of 2026-06-29:** Phases 1 and 2 are complete — all eight Phase 1
+**Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
-Builder, 2.7**) are shipped. Phase 3 (the Test Prep, Accessibility & Focus, and
-optional CS shelves) has not been started.
+Builder, 2.7**) are shipped. **Phase 3 has begun:** the Test Prep shelf (3.1) is
+live with its three self-contained tools — **Score Goal**, **Exam Countdown**, and
+**Free-Response Pacer** — shipped easy-wins-first. The two content-heavy applets
+(SAT/ACT math drill, AP flashcard packs) are surfaced as `SOON` cards pending
+original-authored content. Accessibility & Focus (3.2) and the optional CS shelf
+(3.3) have not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
