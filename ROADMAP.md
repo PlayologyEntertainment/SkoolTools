@@ -249,7 +249,7 @@ deterministic and offline:
   accidentals); a small triangle-wave synth plays scales/chords/keys.
 - ✅ Autosaves to localStorage and **shares by code** (`#music=…`), no backend.
 
-### 2.7 Exam Cheat-Sheet Builder  *(Toolbox)*  ✅ *shipped*
+### 2.7 Exam Cheat-Sheet Builder  *(Test Prep — moved from Toolbox)*  ✅ *shipped*
 Compose a one-page allowed formula sheet, then print to PDF. Maps to real exam
 policies (a permitted, integrity-safe use).
 - ✅ Builds from the **shared Formula Reference library** (lifted to module scope
@@ -296,6 +296,8 @@ as `SOON` cards while their original-authored content is built out.
   test questions are copyrighted, so all content is original.
 - ⬜ AP-aligned **flashcard packs** *(SOON)* — original-authored subject decks +
   pack browser, reusing the Flashcards SRS / share-by-code engine.
+- ✅ **Cheat-Sheet Builder** — relocated here from Toolbox (see 2.7); an
+  exam-prep tool, it belongs on this shelf.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
