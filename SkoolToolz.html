@@ -37,6 +37,7 @@
   --purple:       #B98BFF;
   --purple-deep:  #8B1FD6;   /* deep saturated purple — Numbers emphasis */
   --pink:         #FF3D9A;
+  --pink-light:   #FF8FC8;   /* soft rose — Toolbox shelf (distinct from Test Prep crimson) */
   --orange:       #FF8C00;
   --amber:        #F5C542;   /* warm amber — Code shelf */
   --red:          #FF4D5E;   /* neon crimson — Test Prep shelf */
@@ -368,7 +369,7 @@ main{padding:28px 28px 80px}
 .tool[data-shelf="numbers"], .panel[data-shelf="numbers"] {--cat-color:var(--purple-deep)}
 .tool[data-shelf="words"],   .panel[data-shelf="words"]   {--cat-color:var(--accent-3)}
 .tool[data-shelf="lab"],     .panel[data-shelf="lab"]     {--cat-color:var(--accent-4)}
-.tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink)}
+.tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink-light)}
 .tool[data-shelf="code"],    .panel[data-shelf="code"]    {--cat-color:var(--amber)}
 .tool[data-shelf="testprep"],.panel[data-shelf="testprep"]{--cat-color:var(--red)}
 
@@ -2651,7 +2652,7 @@ const SHELVES = [
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
   { id: 'lab',     name: 'Lab',     color: 'var(--accent-4)' },
   { id: 'code',    name: 'Code',    color: 'var(--amber)' },
-  { id: 'toolbox', name: 'Toolbox', color: 'var(--pink)' },
+  { id: 'toolbox', name: 'Toolbox', color: 'var(--pink-light)' },
 ];
 
 const TOOLS = []; // populated by registerTools() below
