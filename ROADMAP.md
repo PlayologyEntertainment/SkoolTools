@@ -301,13 +301,27 @@ as `SOON` cards while their original-authored content is built out.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
-### 3.2 ♿ Accessibility & Focus shelf  ⬜ *not started*
-Fulfills a11y promises and surfaces them as first-class tools.
-- **Dyslexia-friendly mode** (Atkinson Hyperlegible, wider spacing, 1.8 line
-  height) as a global toggle + a reading surface.
-- **Reading Ruler** and **color overlay** for long passages.
-- **Text-to-speech** via the browser `SpeechSynthesis` API (offline, free).
-- **Enhanced Focus Lock** (builds on the existing tool).
+### 3.2 ♿ Accessibility & Focus shelf  🔄 *in progress — 2 / 4 shipped*
+Fulfills a11y promises and surfaces them as first-class tools. New shelf
+(`a11y`, soft lavender `--purple`). Built contained-tools-first; the two
+cross-cutting applets are live in the UI as `SOON` cards.
+- ✅ **Reading Ruler** — paste a passage and read it on a calmer, **tinted
+  surface** (7 Irlen-style background tints) with a movable **reading ruler /
+  typoscope**: a clear band that follows the pointer (or ↑/↓ keys) and dims
+  everything above and below. Adjustable text size, line spacing, ruler height,
+  and a high-legibility "readable font" toggle. Pure DOM/CSS, no network;
+  settings persist in localStorage.
+- ✅ **Read Aloud** *(text-to-speech)* — speaks any pasted text via the browser
+  `SpeechSynthesis` API (offline, free, nothing leaves the device). Voice
+  picker, speed + pitch controls, play / pause / resume / stop, and **live
+  word highlighting** driven by `boundary` events. Degrades gracefully where
+  voices or boundary events are unavailable.
+- ⬜ **Dyslexia-friendly mode** *(SOON)* — Atkinson Hyperlegible (embedded as
+  base64 for true offline), wider spacing, 1.8 line height — as a **global
+  app-wide toggle** plus a reading surface.
+- ⬜ **Enhanced Focus Lock** *(SOON)* — builds on the existing Study-shelf Focus
+  Lock; on release it **moves onto this shelf** and gains break cycles,
+  soundscapes, and session stats.
 
 ### 3.3 (Optional) 💻 CS shelf  ⬜ *not started*
 If we want to consolidate scattered CS tools: Code Playground + Truth Table +
@@ -332,7 +346,7 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 · A11y & Focus 2 / 4 |
 
 **Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
@@ -340,8 +354,10 @@ Builder, 2.7**) are shipped. **Phase 3 has begun:** the Test Prep shelf (3.1) is
 live with its three self-contained tools — **Score Goal**, **Exam Countdown**, and
 **Free-Response Pacer** — shipped easy-wins-first. The two content-heavy applets
 (SAT/ACT math drill, AP flashcard packs) are surfaced as `SOON` cards pending
-original-authored content. Accessibility & Focus (3.2) and the optional CS shelf
-(3.3) have not been started.
+original-authored content. **Accessibility & Focus (3.2) has begun:** the shelf
+is live with **Reading Ruler** and **Read Aloud** (text-to-speech) shipped
+contained-tools-first; **Dyslexia-friendly mode** and **Enhanced Focus Lock** are
+surfaced as `SOON` cards. The optional CS shelf (3.3) has not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.

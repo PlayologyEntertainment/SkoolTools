@@ -372,6 +372,7 @@ main{padding:28px 28px 80px}
 .tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink-light)}
 .tool[data-shelf="code"],    .panel[data-shelf="code"]    {--cat-color:var(--amber)}
 .tool[data-shelf="testprep"],.panel[data-shelf="testprep"]{--cat-color:var(--red)}
+.tool[data-shelf="a11y"],    .panel[data-shelf="a11y"]    {--cat-color:var(--purple)}
 
 /* Inside an open applet panel, the emphasis color (--accent) is derived
    from the applet's category color so each tool's UI matches its shelf.
@@ -2648,6 +2649,7 @@ const SHELVES = [
   { id: 'plan',    name: 'Plan',    color: 'var(--orange)' },
   { id: 'study',   name: 'Study',   color: 'var(--accent-2)' },
   { id: 'testprep',name: 'Test Prep', color: 'var(--red)' },
+  { id: 'a11y',    name: 'Accessibility & Focus', color: 'var(--purple)' },
   { id: 'numbers', name: 'Numbers', color: 'var(--accent)' },
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
   { id: 'lab',     name: 'Lab',     color: 'var(--accent-4)' },
@@ -5788,6 +5790,20 @@ function registerTools() {
   TOOLS.push({ id:'appacks', shelf:'testprep', icon:'🎴', name:'AP Flashcard Packs',
     desc:'Subject decks built for AP exams.', status:'soon', tag:'new',
     keywords:['ap','flashcard','packs','decks','subject','biology','calculus','history','srs','test prep'] });
+
+  /* ============== ACCESSIBILITY & FOCUS ============== */
+  TOOLS.push({ id:'reader', shelf:'a11y', icon:'📏', name:'Reading Ruler',
+    desc:'Track lines with a ruler; tint long passages.', tag:'new',
+    keywords:['reading','ruler','typoscope','line','tracker','overlay','tint','color','colour','irlen','dyslexia','focus','passage','readable','spacing','accessibility','a11y','low vision'], mount: mountReadingRuler });
+  TOOLS.push({ id:'readaloud', shelf:'a11y', icon:'🔊', name:'Read Aloud',
+    desc:'Text-to-speech with offline browser voices.', tag:'new',
+    keywords:['text to speech','text-to-speech','tts','read aloud','speech','voice','listen','narrate','speak','speechsynthesis','accessibility','a11y','dyslexia','audio'], mount: mountReadAloud });
+  TOOLS.push({ id:'dyslexia', shelf:'a11y', icon:'🔤', name:'Dyslexia-Friendly Mode',
+    desc:'Atkinson Hyperlegible, wider spacing — app-wide.', status:'soon', tag:'new',
+    keywords:['dyslexia','dyslexic','atkinson','hyperlegible','font','readable','legible','spacing','line height','accessibility','a11y','reading','low vision'] });
+  TOOLS.push({ id:'focusplus', shelf:'a11y', icon:'🧘', name:'Enhanced Focus Lock',
+    desc:'Focus sessions with breaks, soundscapes & stats.', status:'soon', tag:'new',
+    keywords:['focus','lock','pomodoro','break','soundscape','white noise','distraction','session','study','deep work','accessibility','adhd'] });
 
   /* ============== WORDS ============== */
   TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
@@ -12967,6 +12983,368 @@ function mountFocusLock(root) {
       document.removeEventListener('keydown', onOverlayKey);
       exitFullscreen();
       document.title = 'SkoolToolz — by Playology';
+    }
+  };
+}
+
+/* ========== READING RULER (Accessibility & Focus) ==========
+   Paste a passage, then read it on a tinted surface with a movable
+   reading ruler (a clear band that dims everything above & below).
+   Pure DOM/CSS — no Web API, no network. Settings persist locally. */
+function mountReadingRuler(root) {
+  const SKEY = 'a11y:reader';
+  const SAMPLE = `Paste your own reading here, or start with this.
+
+A reading ruler — sometimes called a typoscope — is a strip that isolates one line at a time so your eye does not skip or double back. It is a low-tech aid that helps a lot of readers, not only those with dyslexia or visual stress.
+
+Move your pointer over the text (or use the ↑ / ↓ keys) and the clear band follows along, dimming the rest. Pick a background tint if a coloured overlay makes the words sit still for you. Nudge the size and spacing until the line feels comfortable.
+
+Nothing here leaves your device.`;
+
+  // tint presets: [id, label, swatch bg, surface bg, text color]
+  const TINTS = [
+    ['dark',  'Dark',  '#14101F', 'var(--paper-2)', 'var(--ink)'],
+    ['cream', 'Cream', '#FBF3DD', '#FBF3DD', '#2B2620'],
+    ['peach', 'Peach', '#FCEBDD', '#FCEBDD', '#2B2420'],
+    ['rose',  'Rose',  '#FBE6EC', '#FBE6EC', '#2B2026'],
+    ['mint',  'Mint',  '#E0F5E9', '#E0F5E9', '#1E2B24'],
+    ['sky',   'Sky',   '#E2EEFB', '#E2EEFB', '#1E2630'],
+    ['grey',  'Grey',  '#E9E9EF', '#E9E9EF', '#232330'],
+  ];
+
+  const defaults = { text: SAMPLE, tint: 'cream', size: 20, lh: 1.9, band: 44, readable: true, ruler: true };
+  const st = Object.assign({}, defaults, Storage.get(SKEY, {}));
+  const save = () => Storage.set(SKEY, st);
+
+  root.innerHTML = `
+    <style>
+    .rr{display:flex;flex-direction:column;gap:14px}
+    .rr-edit textarea{min-height:120px}
+    .rr-bar{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;
+      padding:14px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+    .rr-grp{display:flex;flex-direction:column;gap:6px}
+    .rr-grp > .lbl{margin:0}
+    .rr-tints{display:flex;gap:6px;flex-wrap:wrap}
+    .rr-sw{width:26px;height:26px;border-radius:3px;border:2px solid var(--rule);cursor:pointer;padding:0;
+      transition:transform .1s,border-color .1s}
+    .rr-sw:hover{transform:translateY(-1px)}
+    .rr-sw.on{border-color:var(--accent-2);box-shadow:0 0 0 2px var(--accent-soft)}
+    .rr-range{display:flex;align-items:center;gap:8px}
+    .rr-range input[type=range]{width:130px;accent-color:var(--accent)}
+    .rr-range .val{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:42px;text-align:right}
+    .rr-toggles{display:flex;gap:18px;align-items:center}
+    .rr-toggle{display:inline-flex;gap:8px;align-items:center;cursor:pointer;font-size:14px;color:var(--ink-2)}
+    .rr-toggle input{width:16px;height:16px;accent-color:var(--accent)}
+    .rr-surface{position:relative;overflow:auto;max-height:58vh;border:1px solid var(--rule);border-radius:3px;
+      padding:26px 30px;outline:none}
+    .rr-surface:focus-visible{box-shadow:0 0 0 2px var(--accent-2)}
+    .rr-text{position:relative;z-index:1;white-space:pre-wrap;font-family:var(--sans)}
+    .rr-text.readable{font-family:"Atkinson Hyperlegible","Verdana","Tahoma",ui-sans-serif,system-ui,sans-serif;letter-spacing:.01em;word-spacing:.06em}
+    .rr-band{position:absolute;left:0;right:0;z-index:2;pointer-events:none;
+      box-shadow:0 0 0 9999px rgba(8,4,18,.55);
+      border-top:2px solid var(--accent-2);border-bottom:2px solid var(--accent-2)}
+    .rr-band.off{display:none}
+    .rr-hint{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    </style>
+    <div class="rr">
+      <p class="help">Paste a passage, then read it on a calmer surface. The clear band follows your pointer (or the ↑ / ↓ keys) and dims the rest of the page.</p>
+
+      <div class="rr-edit field" style="margin:0">
+        <label for="rr-input">Reading text</label>
+        <textarea class="input" id="rr-input" spellcheck="false" placeholder="Paste what you need to read…"></textarea>
+        <div class="btn-row">
+          <button class="btn ghost sm" id="rr-sample">Load sample</button>
+          <button class="btn ghost sm" id="rr-clear">Clear</button>
+        </div>
+      </div>
+
+      <div class="rr-bar">
+        <div class="rr-grp">
+          <span class="lbl">Background tint</span>
+          <div class="rr-tints" id="rr-tints">
+            ${TINTS.map(t => `<button class="rr-sw" data-tint="${t[0]}" title="${t[1]}" aria-label="${t[1]} tint" style="background:${t[2]}"></button>`).join('')}
+          </div>
+        </div>
+        <div class="rr-grp">
+          <span class="lbl">Text size</span>
+          <div class="rr-range"><input type="range" id="rr-size" min="14" max="34" step="1"><span class="val" id="rr-size-v"></span></div>
+        </div>
+        <div class="rr-grp">
+          <span class="lbl">Line spacing</span>
+          <div class="rr-range"><input type="range" id="rr-lh" min="12" max="28" step="1"><span class="val" id="rr-lh-v"></span></div>
+        </div>
+        <div class="rr-grp">
+          <span class="lbl">Ruler height</span>
+          <div class="rr-range"><input type="range" id="rr-band" min="26" max="90" step="2"><span class="val" id="rr-band-v"></span></div>
+        </div>
+        <div class="rr-grp">
+          <span class="lbl">Options</span>
+          <div class="rr-toggles">
+            <label class="rr-toggle"><input type="checkbox" id="rr-readable"> Readable font</label>
+            <label class="rr-toggle"><input type="checkbox" id="rr-ruler"> Ruler</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="rr-hint" id="rr-tip">Pointer or ↑/↓ to move the ruler · click the surface first for keys</div>
+      <div class="rr-surface" id="rr-surface" tabindex="0" role="document" aria-label="Reading surface">
+        <div class="rr-text" id="rr-display"></div>
+        <div class="rr-band" id="rr-bandel"></div>
+      </div>
+    </div>`;
+
+  const $$ = sel => root.querySelector(sel);
+  const surface = $$('#rr-surface');
+  const display = $$('#rr-display');
+  const bandEl  = $$('#rr-bandel');
+  const input   = $$('#rr-input');
+
+  function applyTint() {
+    const t = TINTS.find(x => x[0] === st.tint) || TINTS[1];
+    surface.style.background = t[3];
+    display.style.color = t[4];
+    root.querySelectorAll('.rr-sw').forEach(b => b.classList.toggle('on', b.dataset.tint === st.tint));
+  }
+  function applyType() {
+    display.style.fontSize = st.size + 'px';
+    display.style.lineHeight = st.lh;
+    display.classList.toggle('readable', st.readable);
+    $$('#rr-size-v').textContent = st.size + 'px';
+    $$('#rr-lh-v').textContent = st.lh.toFixed(1);
+    $$('#rr-band-v').textContent = st.band + 'px';
+  }
+  function applyRuler() {
+    bandEl.style.height = st.band + 'px';
+    bandEl.classList.toggle('off', !st.ruler);
+  }
+  function setBandY(y) {
+    const max = surface.scrollHeight - st.band;
+    bandY = Math.max(0, Math.min(max, y));
+    bandEl.style.top = bandY + 'px';
+  }
+  let bandY = 0;
+
+  // init values
+  input.value = st.text;
+  display.textContent = st.text || '';
+  $$('#rr-size').value = st.size;
+  $$('#rr-lh').value = Math.round(st.lh * 10);
+  $$('#rr-band').value = st.band;
+  $$('#rr-readable').checked = st.readable;
+  $$('#rr-ruler').checked = st.ruler;
+  applyTint(); applyType(); applyRuler();
+  setBandY(st.band); // park near the top
+
+  // text editing
+  input.addEventListener('input', () => { st.text = input.value; display.textContent = input.value; save(); });
+  $$('#rr-sample').addEventListener('click', () => { st.text = SAMPLE; input.value = SAMPLE; display.textContent = SAMPLE; save(); });
+  $$('#rr-clear').addEventListener('click', () => { st.text = ''; input.value = ''; display.textContent = ''; save(); input.focus(); });
+
+  // tints
+  $$('#rr-tints').addEventListener('click', e => {
+    const b = e.target.closest('.rr-sw'); if (!b) return;
+    st.tint = b.dataset.tint; applyTint(); save();
+  });
+
+  // ranges
+  $$('#rr-size').addEventListener('input', e => { st.size = +e.target.value; applyType(); save(); });
+  $$('#rr-lh').addEventListener('input', e => { st.lh = +e.target.value / 10; applyType(); save(); });
+  $$('#rr-band').addEventListener('input', e => { st.band = +e.target.value; applyRuler(); setBandY(bandY); save(); });
+
+  // toggles
+  $$('#rr-readable').addEventListener('change', e => { st.readable = e.target.checked; applyType(); save(); });
+  $$('#rr-ruler').addEventListener('change', e => { st.ruler = e.target.checked; applyRuler(); save(); });
+
+  // ruler follows the pointer inside the surface
+  surface.addEventListener('pointermove', e => {
+    if (!st.ruler) return;
+    const r = surface.getBoundingClientRect();
+    setBandY(e.clientY - r.top + surface.scrollTop - st.band / 2);
+  });
+  // keyboard nudging (surface must be focused)
+  surface.addEventListener('keydown', e => {
+    if (!st.ruler) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setBandY(bandY + Math.round(st.size * st.lh)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setBandY(bandY - Math.round(st.size * st.lh)); }
+  });
+
+  return {};
+}
+
+/* ========== READ ALOUD — Text-to-Speech (Accessibility & Focus) ==========
+   Browser SpeechSynthesis: pick a voice, set rate/pitch, play/pause/stop,
+   with live word highlighting via boundary events. Fully offline & free. */
+function mountReadAloud(root) {
+  const SKEY = 'a11y:tts';
+  const synth = window.speechSynthesis;
+
+  if (!synth || typeof window.SpeechSynthesisUtterance === 'undefined') {
+    root.innerHTML = `<p class="help">This browser doesn't expose the speech-synthesis voices SkoolToolz needs for Read Aloud. Try a recent Chrome, Edge, Safari, or Firefox.</p>`;
+    return {};
+  }
+
+  const SAMPLE = `Paste anything you'd rather hear than read. Pick a voice, set the pace, and press play — the word being spoken lights up as it goes.
+
+All of this runs on voices already built into your browser, so nothing is sent anywhere and it keeps working offline.`;
+
+  const st = Object.assign({ text: SAMPLE, voice: '', rate: 1, pitch: 1 }, Storage.get(SKEY, {}));
+  const save = () => Storage.set(SKEY, st);
+
+  root.innerHTML = `
+    <style>
+    .ra{display:flex;flex-direction:column;gap:14px}
+    .ra-row{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end}
+    .ra-grp{display:flex;flex-direction:column;gap:6px;min-width:150px}
+    .ra-grp.grow{flex:1;min-width:200px}
+    .ra-grp > .lbl{margin:0}
+    .ra-range{display:flex;align-items:center;gap:8px}
+    .ra-range input[type=range]{flex:1;accent-color:var(--accent)}
+    .ra-range .val{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:38px;text-align:right}
+    .ra-controls{display:flex;gap:10px;flex-wrap:wrap}
+    .ra-read{border:1px solid var(--rule);border-radius:3px;padding:20px 22px;
+      max-height:40vh;overflow:auto;line-height:1.8;font-size:17px;white-space:pre-wrap}
+    .ra-read .w{border-radius:3px;transition:background .08s}
+    .ra-read .w.on{background:var(--accent-2);color:#06141b;box-shadow:0 0 0 2px var(--accent-2)}
+    .ra-status{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    </style>
+    <div class="ra">
+      <p class="help">Listen instead of read. Uses the voices already built into your browser — offline, free, nothing leaves the device.</p>
+
+      <div class="field" style="margin:0">
+        <label for="ra-input">Text</label>
+        <textarea class="input" id="ra-input" spellcheck="false" placeholder="Paste text to read aloud…" style="min-height:110px"></textarea>
+        <div class="btn-row"><button class="btn ghost sm" id="ra-sample">Load sample</button><button class="btn ghost sm" id="ra-clear">Clear</button></div>
+      </div>
+
+      <div class="ra-row">
+        <div class="ra-grp grow">
+          <label class="lbl" for="ra-voice">Voice</label>
+          <select class="input" id="ra-voice"></select>
+        </div>
+        <div class="ra-grp">
+          <span class="lbl">Speed</span>
+          <div class="ra-range"><input type="range" id="ra-rate" min="5" max="20" step="1"><span class="val" id="ra-rate-v"></span></div>
+        </div>
+        <div class="ra-grp">
+          <span class="lbl">Pitch</span>
+          <div class="ra-range"><input type="range" id="ra-pitch" min="0" max="20" step="1"><span class="val" id="ra-pitch-v"></span></div>
+        </div>
+      </div>
+
+      <div class="ra-controls">
+        <button class="btn" id="ra-play">▶ Play</button>
+        <button class="btn ghost" id="ra-pause" disabled>❚❚ Pause</button>
+        <button class="btn ghost" id="ra-stop" disabled>■ Stop</button>
+      </div>
+      <div class="ra-status" id="ra-status">Ready</div>
+      <div class="ra-read" id="ra-read" aria-live="off"></div>
+    </div>`;
+
+  const $$ = sel => root.querySelector(sel);
+  const input = $$('#ra-input'), voiceSel = $$('#ra-voice'), readEl = $$('#ra-read');
+  const playBtn = $$('#ra-play'), pauseBtn = $$('#ra-pause'), stopBtn = $$('#ra-stop'), status = $$('#ra-status');
+
+  let voices = [];
+  let utter = null;
+  let tokens = [];        // {start, end} word ranges
+  let spans = [];         // matching span elements
+  let curWord = -1;
+
+  function loadVoices() {
+    voices = synth.getVoices() || [];
+    // prefer the page language, English first, then the rest
+    voices.sort((a, b) => (b.lang.startsWith('en') - a.lang.startsWith('en')) || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name));
+    voiceSel.innerHTML = voices.length
+      ? voices.map(v => `<option value="${escape(v.name)}">${escape(v.name)} — ${escape(v.lang)}${v.default ? ' (default)' : ''}</option>`).join('')
+      : `<option value="">No voices available</option>`;
+    if (st.voice && voices.some(v => v.name === st.voice)) voiceSel.value = st.voice;
+    else if (voices.length) { st.voice = voiceSel.value; }
+  }
+  loadVoices();
+  if (synth.onvoiceschanged !== undefined) synth.addEventListener('voiceschanged', loadVoices);
+
+  // build the highlightable display from the text
+  function renderRead(text) {
+    tokens = []; spans = []; curWord = -1;
+    const re = /\S+/g; let m, out = '', last = 0;
+    while ((m = re.exec(text))) {
+      out += escape(text.slice(last, m.index));
+      out += `<span class="w" data-i="${tokens.length}">${escape(m[0])}</span>`;
+      tokens.push({ start: m.index, end: m.index + m[0].length });
+      last = m.index + m[0].length;
+    }
+    out += escape(text.slice(last));
+    readEl.innerHTML = out;
+    spans = Array.from(readEl.querySelectorAll('.w'));
+  }
+  function highlight(i) {
+    if (i === curWord) return;
+    if (spans[curWord]) spans[curWord].classList.remove('on');
+    if (spans[i]) { spans[i].classList.add('on'); spans[i].scrollIntoView({ block: 'nearest' }); }
+    curWord = i;
+  }
+  function clearHighlight() { if (spans[curWord]) spans[curWord].classList.remove('on'); curWord = -1; }
+
+  function setPlaying(on, paused) {
+    playBtn.textContent = paused ? '▶ Resume' : '▶ Play';
+    pauseBtn.disabled = !on || paused;
+    stopBtn.disabled = !on;
+    status.textContent = !on ? 'Ready' : paused ? 'Paused' : 'Speaking…';
+  }
+
+  function speak() {
+    const text = input.value.trim();
+    if (!text) { showToast('Nothing to read — paste some text first.'); return; }
+    synth.cancel();
+    renderRead(input.value);
+    utter = new SpeechSynthesisUtterance(input.value);
+    const v = voices.find(x => x.name === voiceSel.value);
+    if (v) { utter.voice = v; utter.lang = v.lang; }
+    utter.rate = st.rate; utter.pitch = st.pitch;
+    utter.addEventListener('boundary', e => {
+      if (e.name && e.name !== 'word') return;
+      const ci = e.charIndex || 0;
+      let lo = 0, hi = tokens.length - 1, found = -1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1;
+        if (ci < tokens[mid].start) hi = mid - 1;
+        else if (ci >= tokens[mid].end) lo = mid + 1;
+        else { found = mid; break; } }
+      if (found < 0) found = Math.max(0, lo - 1);
+      highlight(found);
+    });
+    utter.addEventListener('end', () => { clearHighlight(); setPlaying(false); });
+    utter.addEventListener('error', () => { clearHighlight(); setPlaying(false); });
+    setPlaying(true, false);
+    synth.speak(utter);
+  }
+
+  // init controls
+  input.value = st.text;
+  $$('#ra-rate').value = Math.round(st.rate * 10);
+  $$('#ra-pitch').value = Math.round(st.pitch * 10);
+  $$('#ra-rate-v').textContent = st.rate.toFixed(1) + '×';
+  $$('#ra-pitch-v').textContent = st.pitch.toFixed(1);
+
+  input.addEventListener('input', () => { st.text = input.value; save(); });
+  $$('#ra-sample').addEventListener('click', () => { st.text = SAMPLE; input.value = SAMPLE; save(); });
+  $$('#ra-clear').addEventListener('click', () => { synth.cancel(); st.text = ''; input.value = ''; readEl.innerHTML = ''; setPlaying(false); save(); input.focus(); });
+  voiceSel.addEventListener('change', () => { st.voice = voiceSel.value; save(); });
+  $$('#ra-rate').addEventListener('input', e => { st.rate = +e.target.value / 10; $$('#ra-rate-v').textContent = st.rate.toFixed(1) + '×'; save(); });
+  $$('#ra-pitch').addEventListener('input', e => { st.pitch = +e.target.value / 10; $$('#ra-pitch-v').textContent = st.pitch.toFixed(1); save(); });
+
+  playBtn.addEventListener('click', () => {
+    if (synth.paused && synth.speaking) { synth.resume(); setPlaying(true, false); return; }
+    speak();
+  });
+  pauseBtn.addEventListener('click', () => { if (synth.speaking && !synth.paused) { synth.pause(); setPlaying(true, true); } });
+  stopBtn.addEventListener('click', () => { synth.cancel(); clearHighlight(); setPlaying(false); });
+
+  setPlaying(false);
+
+  return {
+    unmount() {
+      try { synth.cancel(); } catch {}
+      if (synth.onvoiceschanged !== undefined) synth.removeEventListener('voiceschanged', loadVoices);
     }
   };
 }
