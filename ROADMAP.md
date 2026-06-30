@@ -302,9 +302,10 @@ as `SOON` cards while their original-authored content is built out.
   audience.
 
 ### 3.2 ♿ Accessibility & Focus shelf  🔄 *in progress — 2 / 4 shipped*
-Fulfills a11y promises and surfaces them as first-class tools. New shelf
-(`a11y`, soft lavender `--purple`). Built contained-tools-first; the two
-cross-cutting applets are live in the UI as `SOON` cards.
+Fulfills a11y promises and surfaces them as first-class tools. New shelf —
+**Focus** (`a11y`, warm light brown `--brown` `#9F8170`), sequenced above Study.
+Built contained-tools-first; the two cross-cutting applets are live in the UI as
+`SOON` cards.
 - ✅ **Reading Ruler** — paste a passage and read it on a calmer, **tinted
   surface** (7 Irlen-style background tints) with a movable **reading ruler /
   typoscope**: a clear band that follows the pointer (or ↑/↓ keys) and dims

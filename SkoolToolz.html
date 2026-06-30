@@ -41,6 +41,7 @@
   --orange:       #FF8C00;
   --amber:        #F5C542;   /* warm amber — Code shelf */
   --red:          #FF4D5E;   /* neon crimson — Test Prep shelf */
+  --brown:        #9F8170;   /* warm light brown — Focus shelf */
   /* Type */
   --serif: 'Fraunces', ui-serif, Georgia, serif;
   --sans:  'Inter Tight', ui-sans-serif, system-ui, sans-serif;
@@ -372,7 +373,7 @@ main{padding:28px 28px 80px}
 .tool[data-shelf="toolbox"], .panel[data-shelf="toolbox"] {--cat-color:var(--pink-light)}
 .tool[data-shelf="code"],    .panel[data-shelf="code"]    {--cat-color:var(--amber)}
 .tool[data-shelf="testprep"],.panel[data-shelf="testprep"]{--cat-color:var(--red)}
-.tool[data-shelf="a11y"],    .panel[data-shelf="a11y"]    {--cat-color:var(--purple)}
+.tool[data-shelf="a11y"],    .panel[data-shelf="a11y"]    {--cat-color:var(--brown)}
 
 /* Inside an open applet panel, the emphasis color (--accent) is derived
    from the applet's category color so each tool's UI matches its shelf.
@@ -2647,9 +2648,9 @@ async function copy(text, btn) {
    ========================================================= */
 const SHELVES = [
   { id: 'plan',    name: 'Plan',    color: 'var(--orange)' },
+  { id: 'a11y',    name: 'Focus',   color: 'var(--brown)' },
   { id: 'study',   name: 'Study',   color: 'var(--accent-2)' },
   { id: 'testprep',name: 'Test Prep', color: 'var(--red)' },
-  { id: 'a11y',    name: 'Accessibility & Focus', color: 'var(--purple)' },
   { id: 'numbers', name: 'Numbers', color: 'var(--accent)' },
   { id: 'words',   name: 'Words',   color: 'var(--accent-3)' },
   { id: 'lab',     name: 'Lab',     color: 'var(--accent-4)' },
