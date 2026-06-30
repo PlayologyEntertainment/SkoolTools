@@ -5800,8 +5800,8 @@ function registerTools() {
     desc:'Atkinson Hyperlegible, wider spacing — app-wide.', status:'soon', tag:'new',
     keywords:['dyslexia','dyslexic','atkinson','hyperlegible','font','readable','legible','spacing','line height','accessibility','a11y','reading','low vision'] });
   TOOLS.push({ id:'focusplus', shelf:'a11y', icon:'🧘', name:'Enhanced Focus Lock',
-    desc:'Focus sessions with breaks, soundscapes & stats.', status:'soon', tag:'new',
-    keywords:['focus','lock','pomodoro','break','soundscape','white noise','distraction','session','study','deep work','accessibility','adhd'] });
+    desc:'Focus sessions with breaks, soundscapes & stats.', tag:'new',
+    keywords:['focus','lock','pomodoro','break','soundscape','white noise','pink noise','brown noise','rain','ocean','distraction','session','study','deep work','accessibility','adhd','fullscreen'], mount: mountFocusPlus });
 
   /* ============== WORDS ============== */
   TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
@@ -5840,8 +5840,6 @@ function registerTools() {
     desc:'Free · Cornell · Outline · Q&A.', tag:'upgraded', keywords:['notes','cornell','outline','write','study'], mount: mountNotes });
   TOOLS.push({ id:'mathpractice', shelf:'study', icon:'➗', name:'Math Practice',
     desc:'Timed drills, per-op accuracy.', tag:'upgraded', keywords:['drill','practice','arithmetic','math','addition','subtraction','multiplication','division'], mount: mountMathPractice });
-  TOOLS.push({ id:'focus', shelf:'study', icon:'👓', name:'Focus Lock',
-    desc:'Fullscreen, hide tabs, countdown.', tag:'new', keywords:['focus','fullscreen','lock','distraction','study','deep'], mount: mountFocusLock });
   TOOLS.push({ id:'mindmap', shelf:'study', icon:'🧠', name:'Mind Map',
     desc:'Node-and-edge canvas · export PNG + JSON.', tag:'new',
     keywords:['mind map','concept map','mindmap','diagram','nodes','edges','brainstorm','graph','web','study','export','png'], mount: mountMindmap });
@@ -12427,559 +12425,790 @@ function mountPomodoro(root) {
 }
 
 /* ========== FOCUS LOCK ========== */
-function mountFocusLock(root) {
-  /* ---- state ---- */
-  const TASKS_KEY = 'focus:tasks';
-  const DEFAULT_DURATION = 25; // minutes
+/* ========== ENHANCED FOCUS LOCK (Accessibility & Focus) ==========
+   Builds on the v1 Study-shelf Focus Lock and adds the three things the
+   roadmap (3.2) asked for: configurable work/break cycles, offline
+   Web-Audio soundscapes, and plain informational session stats. No
+   accounts, no network, no streaks — everything lives in localStorage. */
+function mountFocusPlus(root) {
+  /* ---- storage keys ---- */
+  const CFG_KEY   = 'focusplus:cfg';
+  const TASKS_KEY = 'focusplus:tasks';
+  const STATS_KEY = 'focusplus:stats';
 
-  let tasks        = Storage.get(TASKS_KEY, []);
-  let activeTask   = null;    // task being worked on right now
-  let remaining    = 0;       // seconds
-  let running      = false;
-  let timerId      = null;
-  let fullscreen   = false;
-  let phase        = 'idle';  // idle | active | done
+  /* ---- cycle presets [work, short, long] minutes ---- */
+  const PRESETS = [
+    { w:25, s:5,  l:15 },
+    { w:50, s:10, l:20 },
+    { w:90, s:15, l:30 },
+  ];
 
-  /* ---- styles (scoped) ---- */
+  /* ---- soundscapes ---- */
+  const SOUNDS = [
+    ['off',   'Off'],
+    ['white', 'White noise'],
+    ['pink',  'Pink noise'],
+    ['brown', 'Brown noise'],
+    ['rain',  'Rain'],
+    ['ocean', 'Ocean'],
+  ];
+
+  /* ---- config (persisted) ---- */
+  const cfg = Object.assign(
+    { w:25, s:5, l:15, rounds:4, auto:true, snd:'off', vol:0.5 },
+    Storage.get(CFG_KEY, {})
+  );
+  const saveCfg = () => Storage.set(CFG_KEY, cfg);
+
+  /* ---- tasks (persisted) ---- */
+  let tasks = Storage.get(TASKS_KEY, []);
+  const saveTasks = () => Storage.set(TASKS_KEY, tasks);
+  let activeTaskId = (tasks.find(t => !t.done) || {}).id || null;
+
+  /* ---- stats (persisted) ---- */
+  const stats = Object.assign({ days:{} }, Storage.get(STATS_KEY, {}));
+  if (!stats.days) stats.days = {};
+  const saveStats = () => Storage.set(STATS_KEY, stats);
+
+  /* ---- live session state ---- */
+  let phase     = 'focus';   // focus | short | long
+  let setDone   = 0;         // focus blocks completed in the current set
+  let remaining = cfg.w * 60;
+  let running   = false;
+  let active    = false;     // a session is in progress (started, not reset)
+  let timerId   = null;
+  let fullscreen= false;
+
+  /* ===================== soundscape engine ===================== */
+  /* All ambience is synthesised live from a 2-second noise buffer, so it
+     works fully offline and ships no audio files. */
+  const Sound = (() => {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    let ac = null, master = null, nodes = [], cur = 'off';
+    const ctx = () => {
+      if (!ac && AC) {
+        ac = new AC();
+        master = ac.createGain();
+        master.gain.value = cfg.vol;
+        master.connect(ac.destination);
+      }
+      return ac;
+    };
+    const buf = (kind) => {
+      const len = ac.sampleRate * 2;
+      const b = ac.createBuffer(1, len, ac.sampleRate);
+      const d = b.getChannelData(0);
+      if (kind === 'brown') {
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+          const wn = Math.random() * 2 - 1;
+          last = (last + 0.02 * wn) / 1.02;
+          d[i] = last * 3.5;
+        }
+      } else if (kind === 'pink') {
+        let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+        for (let i = 0; i < len; i++) {
+          const wn = Math.random() * 2 - 1;
+          b0 = 0.99886*b0 + wn*0.0555179;
+          b1 = 0.99332*b1 + wn*0.0750759;
+          b2 = 0.96900*b2 + wn*0.1538520;
+          b3 = 0.86650*b3 + wn*0.3104856;
+          b4 = 0.55000*b4 + wn*0.5329522;
+          b5 = -0.7616*b5 - wn*0.0168980;
+          d[i] = (b0+b1+b2+b3+b4+b5+b6 + wn*0.5362) * 0.11;
+          b6 = wn * 0.115926;
+        }
+      } else {
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      }
+      return b;
+    };
+    const teardown = () => {
+      nodes.forEach(n => { try { n.stop && n.stop(); } catch {} try { n.disconnect && n.disconnect(); } catch {} });
+      nodes = [];
+    };
+    const on = (type) => {
+      if (!AC || type === cur) return;
+      const c = ctx();
+      if (!c) return;
+      teardown();
+      cur = type;
+      if (type === 'off') return;
+      if (c.state === 'suspended') { try { c.resume(); } catch {} }
+      const src = c.createBufferSource();
+      src.loop = true;
+      src.buffer = buf(type === 'pink' ? 'pink' : (type === 'brown' || type === 'ocean') ? 'brown' : 'white');
+      let head = src;
+      if (type === 'rain') {
+        const bp = c.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.5;
+        head.connect(bp); head = bp; nodes.push(bp);
+      } else if (type === 'ocean') {
+        const lp = c.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 450;
+        const swell = c.createGain(); swell.gain.value = 0.7;
+        const lfo = c.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.08;
+        const lfg = c.createGain(); lfg.gain.value = 0.5;
+        lfo.connect(lfg); lfg.connect(swell.gain);
+        head.connect(lp); lp.connect(swell); head = swell;
+        lfo.start();
+        nodes.push(lp, swell, lfo, lfg);
+      }
+      head.connect(master);
+      src.start();
+      nodes.push(src);
+    };
+    const off = () => { if (cur === 'off') return; teardown(); cur = 'off'; };
+    const setVol = (v) => { if (master) master.gain.value = v; };
+    const close = () => { teardown(); try { ac && ac.close(); } catch {} ac = null; master = null; cur = 'off'; };
+    return { on, off, setVol, close, get cur() { return cur; } };
+  })();
+
+  /* ===================== styles (scoped) ===================== */
   const STYLE = `
     <style>
-    .fl{display:flex;flex-direction:column;gap:0;max-width:600px;margin:0 auto}
+    .fp{display:flex;flex-direction:column;gap:0;max-width:600px;margin:0 auto}
 
-    /* — task setup bar — */
-    .fl-setup{display:flex;flex-direction:column;gap:16px;padding:0 0 24px;border-bottom:1px solid var(--rule);margin-bottom:24px}
-    .fl-setup-row{display:flex;gap:10px;align-items:flex-end}
-    .fl-task-inp{
-      flex:1;padding:11px 14px;
-      font-family:var(--sans);font-size:15px;
-      background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;
-      color:var(--ink);outline:none;
-      transition:border-color .12s;
+    /* — cycle config — */
+    .fp-cfg{padding:0 0 20px;border-bottom:1px solid var(--rule);margin-bottom:20px}
+    .fp-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    .fp-preset{
+      font-family:var(--mono);font-size:12px;letter-spacing:.04em;
+      padding:7px 13px;border:1px solid var(--rule);border-radius:2px;
+      background:var(--paper-2);color:var(--ink-2);cursor:pointer;
+      transition:border-color .12s,color .12s,background .12s;
     }
-    .fl-task-inp:focus{border-color:var(--accent)}
-    .fl-task-inp::placeholder{color:var(--muted)}
-    .fl-dur{
-      width:90px;padding:11px 10px;text-align:center;
-      font-family:var(--mono);font-size:15px;
+    .fp-preset:hover{border-color:var(--ink-2);color:var(--ink)}
+    .fp-preset.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+    .fp-custom{display:flex;gap:14px 18px;flex-wrap:wrap;align-items:center}
+    .fp-num{display:flex;flex-direction:column;gap:4px}
+    .fp-num label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .fp-num input{
+      width:76px;padding:8px 10px;text-align:center;
+      font-family:var(--mono);font-size:14px;
       background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;
-      color:var(--ink);outline:none;
-      transition:border-color .12s;
+      color:var(--ink);outline:none;transition:border-color .12s;
     }
-    .fl-dur:focus{border-color:var(--accent)}
-    .fl-dur-lbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);flex-shrink:0;align-self:center;margin-left:2px}
+    .fp-num input:focus{border-color:var(--accent)}
+    .fp-auto{display:inline-flex;gap:8px;align-items:center;cursor:pointer;font-size:13.5px;color:var(--ink-2);align-self:flex-end;padding-bottom:6px}
+    .fp-auto input{width:16px;height:16px;accent-color:var(--accent)}
 
-    /* — task list — */
-    .fl-list{display:flex;flex-direction:column;gap:6px;margin-bottom:24px;min-height:4px}
-    .fl-item{
-      display:flex;align-items:center;gap:10px;
-      padding:10px 12px;
+    /* — task setup + list — */
+    .fp-setup-row{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+    .fp-task-inp{
+      flex:1;padding:11px 14px;font-family:var(--sans);font-size:15px;
+      background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;
+      color:var(--ink);outline:none;transition:border-color .12s;
+    }
+    .fp-task-inp:focus{border-color:var(--accent)}
+    .fp-task-inp::placeholder{color:var(--muted)}
+    .fp-list{display:flex;flex-direction:column;gap:6px;margin-bottom:20px;min-height:4px}
+    .fp-item{
+      display:flex;align-items:center;gap:10px;padding:10px 12px;
       background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;
       cursor:pointer;transition:border-color .12s,background .12s;
     }
-    .fl-item:hover{border-color:var(--ink-2);background:var(--paper-3)}
-    .fl-item.fl-active-item{border-color:var(--accent);background:var(--accent-soft)}
-    .fl-item-check{
+    .fp-item:hover{border-color:var(--ink-2);background:var(--paper-3)}
+    .fp-item.fp-active-item{border-color:var(--accent);background:var(--accent-soft)}
+    .fp-item-check{
       width:16px;height:16px;flex-shrink:0;
       border:1.5px solid var(--ink);border-radius:2px;background:var(--paper);
-      display:flex;align-items:center;justify-content:center;
-      transition:background .15s,border-color .15s;
+      display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;
     }
-    .fl-item.done .fl-item-check{background:var(--accent-3);border-color:var(--accent-3)}
-    .fl-item.done .fl-item-check::after{
+    .fp-item.done .fp-item-check{background:var(--accent-3);border-color:var(--accent-3)}
+    .fp-item.done .fp-item-check::after{
       content:'';display:block;width:8px;height:4px;
       border-left:2px solid #fff;border-bottom:2px solid #fff;
       transform:rotate(-45deg) translate(0px,-1px);
     }
-    .fl-item-label{flex:1;font-size:14px;line-height:1.35;word-break:break-word}
-    .fl-item.done .fl-item-label{text-decoration:line-through;color:var(--muted)}
-    .fl-item-dur{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
-    .fl-item-del{
-      color:var(--muted);font-size:18px;line-height:1;cursor:pointer;
-      padding:0 2px;flex-shrink:0;transition:color .12s;
-    }
-    .fl-item-del:hover{color:var(--accent)}
-    .fl-empty{
-      font-family:var(--serif);font-style:italic;font-size:14px;
-      color:var(--muted);text-align:center;padding:18px 0;
-    }
+    .fp-item-label{flex:1;font-size:14px;line-height:1.35;word-break:break-word}
+    .fp-item.done .fp-item-label{text-decoration:line-through;color:var(--muted)}
+    .fp-item-del{color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;transition:color .12s}
+    .fp-item-del:hover{color:var(--accent)}
+    .fp-empty{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--muted);text-align:center;padding:14px 0}
 
     /* — lock zone — */
-    .fl-lock{
-      display:flex;flex-direction:column;align-items:center;
-      padding:28px 0 0;gap:10px;
+    .fp-lock{display:flex;flex-direction:column;align-items:center;padding:8px 0 0;gap:8px}
+    .fp-phase{
+      font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+      color:var(--muted);transition:color .25s;
     }
-    .fl-task-name{
-      font-family:var(--serif);font-weight:500;font-size:22px;
-      letter-spacing:-.01em;color:var(--ink);text-align:center;max-width:40ch;
-    }
-    .fl-countdown{
+    .fp-phase.fp-break{color:var(--accent-3)}
+    .fp-task-name{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em;color:var(--ink);text-align:center;max-width:40ch;min-height:1px}
+    .fp-countdown{
       font-family:var(--serif);font-weight:300;
       font-variation-settings:"opsz" 144,"SOFT" 60,"WONK" 1;
-      font-size:clamp(64px,14vw,112px);
-      line-height:1;letter-spacing:-.03em;
-      color:var(--ink);
-      font-variant-numeric:tabular-nums;
-      transition:color .3s;
+      font-size:clamp(64px,14vw,112px);line-height:1;letter-spacing:-.03em;
+      color:var(--ink);font-variant-numeric:tabular-nums;transition:color .3s;
     }
-    .fl-countdown em{font-style:italic;color:var(--accent)}
-    .fl-countdown.fl-low{color:var(--accent)}
-    .fl-countdown.fl-done-display{color:var(--accent-3)}
-    .fl-progress-bar{
-      width:100%;max-width:320px;height:4px;
-      background:var(--rule);border-radius:2px;overflow:hidden;margin:8px 0 4px;
-    }
-    .fl-progress-fill{
-      height:100%;background:var(--accent);border-radius:2px;
-      transition:width .9s linear;
-    }
-    .fl-ctrl{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
-    .fl-fs-btn{
+    .fp-countdown em{font-style:italic;color:var(--accent)}
+    .fp-countdown.fp-low{color:var(--accent)}
+    .fp-countdown.fp-break-display{color:var(--accent-3)}
+    .fp-bar{width:100%;max-width:320px;height:4px;background:var(--rule);border-radius:2px;overflow:hidden;margin:6px 0 2px}
+    .fp-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .9s linear}
+    .fp-fill.fp-break-fill{background:var(--accent-3)}
+    .fp-dots{display:flex;gap:7px;margin:2px 0 4px}
+    .fp-dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--ink-2);background:transparent;transition:background .2s,border-color .2s}
+    .fp-dot.on{background:var(--accent);border-color:var(--accent)}
+    .fp-ctrl{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+    .fp-fs-btn{
       display:flex;align-items:center;gap:6px;
       font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
       color:var(--muted);padding:8px 14px;border:1px solid var(--rule);border-radius:2px;
       cursor:pointer;transition:color .12s,border-color .12s;
     }
-    .fl-fs-btn:hover{color:var(--ink);border-color:var(--ink-2)}
-    .fl-done-msg{
-      font-family:var(--serif);font-style:italic;font-size:18px;
-      color:var(--accent-3);text-align:center;max-width:36ch;
-      animation:fl-fade-in .6s ease both;
+    .fp-fs-btn:hover{color:var(--ink);border-color:var(--ink-2)}
+
+    /* — soundscape — */
+    .fp-sound{
+      display:flex;gap:14px 18px;flex-wrap:wrap;align-items:center;
+      margin-top:24px;padding:16px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
     }
-    .fl-no-task{
-      font-family:var(--serif);font-style:italic;font-size:15px;
-      color:var(--muted);text-align:center;padding:8px 0 20px;
+    .fp-sound .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 4px 0 0}
+    .fp-snd-sel{
+      padding:8px 10px;font-family:var(--sans);font-size:14px;
+      background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;color:var(--ink);outline:none;
     }
+    .fp-snd-sel:focus{border-color:var(--accent)}
+    .fp-vol{display:flex;align-items:center;gap:8px}
+    .fp-vol input[type=range]{width:120px;accent-color:var(--accent)}
+    .fp-vol .val{font-family:var(--mono);font-size:12px;color:var(--ink-2);min-width:34px;text-align:right}
+
+    /* — stats — */
+    .fp-stats{margin-top:24px}
+    .fp-stats-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+    .fp-stats-head h4{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:400}
+    .fp-reset{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;transition:color .12s}
+    .fp-reset:hover{color:var(--accent)}
+    .fp-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+    .fp-stat{padding:12px 14px;background:var(--paper-2);border:1px solid var(--rule);border-radius:2px;text-align:center}
+    .fp-stat-num{font-family:var(--serif);font-weight:500;font-size:24px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+    .fp-stat-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px}
 
     /* — fullscreen overlay — */
-    .fl-overlay{
-      position:fixed;inset:0;z-index:500;
-      background:var(--paper);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      padding:32px;
-      opacity:0;pointer-events:none;
-      transition:opacity .28s ease;
+    .fp-overlay{
+      position:fixed;inset:0;z-index:500;background:var(--paper);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;
+      opacity:0;pointer-events:none;transition:opacity .28s ease;
     }
-    .fl-overlay.fl-vis{opacity:1;pointer-events:all}
-    .fl-overlay::before{
-      content:'';position:absolute;inset:16px;
-      border:1px solid var(--rule);pointer-events:none;
-    }
-    .fl-ov-label{
-      position:absolute;top:32px;left:50%;transform:translateX(-50%);
-      font-family:var(--mono);font-size:10px;letter-spacing:.22em;
-      text-transform:uppercase;color:var(--muted);white-space:nowrap;
-    }
-    .fl-ov-task{
-      font-family:var(--serif);font-weight:500;font-size:clamp(18px,3vw,28px);
-      letter-spacing:-.01em;color:var(--ink-2);text-align:center;max-width:40ch;
-      margin-bottom:4px;
-    }
-    .fl-ov-time{
+    .fp-overlay.fp-vis{opacity:1;pointer-events:all}
+    .fp-overlay::before{content:'';position:absolute;inset:16px;border:1px solid var(--rule);pointer-events:none}
+    .fp-ov-label{position:absolute;top:32px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+    .fp-ov-phase{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+    .fp-ov-phase.fp-break{color:var(--accent-3)}
+    .fp-ov-task{font-family:var(--serif);font-weight:500;font-size:clamp(18px,3vw,28px);letter-spacing:-.01em;color:var(--ink-2);text-align:center;max-width:40ch;margin-bottom:4px;min-height:1px}
+    .fp-ov-time{
       font-family:var(--serif);font-weight:300;
       font-variation-settings:"opsz" 144,"SOFT" 60,"WONK" 1;
-      font-size:clamp(100px,22vw,190px);line-height:.9;
-      letter-spacing:-.04em;color:var(--ink);
-      font-variant-numeric:tabular-nums;
-      margin:0 0 4px;
+      font-size:clamp(100px,22vw,190px);line-height:.9;letter-spacing:-.04em;
+      color:var(--ink);font-variant-numeric:tabular-nums;margin:0 0 4px;
     }
-    .fl-ov-time em{font-style:italic;color:var(--accent)}
-    .fl-ov-time.fl-low{color:var(--accent)}
-    .fl-ov-time.fl-done-display{color:var(--accent-3)}
-    .fl-ov-bar{
-      width:min(480px,70vw);height:3px;
-      background:var(--rule);border-radius:2px;overflow:hidden;margin:16px 0;
-    }
-    .fl-ov-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .9s linear}
-    .fl-ov-ctrl{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:14px}
-    .fl-ov-esc{
-      position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
-      font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-      color:var(--muted);
-    }
-    .fl-ov-esc kbd{
-      font-family:var(--mono);font-size:10px;
-      border:1px solid var(--rule);border-radius:2px;
-      padding:2px 6px;color:var(--ink-2);
-    }
-    .fl-ov-done{
-      font-family:var(--serif);font-style:italic;font-size:clamp(18px,3vw,26px);
-      color:var(--accent-3);text-align:center;max-width:32ch;
-    }
+    .fp-ov-time em{font-style:italic;color:var(--accent)}
+    .fp-ov-time.fp-low{color:var(--accent)}
+    .fp-ov-time.fp-break-display{color:var(--accent-3)}
+    .fp-ov-bar{width:min(480px,70vw);height:3px;background:var(--rule);border-radius:2px;overflow:hidden;margin:14px 0 10px}
+    .fp-ov-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .9s linear}
+    .fp-ov-fill.fp-break-fill{background:var(--accent-3)}
+    .fp-ov-dots{display:flex;gap:9px;margin-bottom:6px}
+    .fp-ov-dots .fp-dot{width:11px;height:11px}
+    .fp-ov-ctrl{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+    .fp-ov-esc{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+    .fp-ov-esc kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--rule);border-radius:2px;padding:2px 6px;color:var(--ink-2)}
 
-    @keyframes fl-fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-    @media(max-width:520px){
-      .fl-setup-row{flex-wrap:wrap}
-      .fl-dur{width:72px}
-    }
+    @media(max-width:520px){ .fp-num input{width:64px} }
     </style>
   `;
 
-  /* ---- helpers ---- */
+  /* ===================== helpers ===================== */
   const fmt = (s) => {
-    const m = Math.floor(s / 60), ss = s % 60;
+    const m = Math.floor(s/60), ss = s%60;
     return `${String(m).padStart(2,'0')}<em>:</em>${String(ss).padStart(2,'0')}`;
   };
   const fmtPlain = (s) => {
-    const m = Math.floor(s / 60), ss = s % 60;
+    const m = Math.floor(s/60), ss = s%60;
     return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
   };
-  const saveTasks = () => Storage.set(TASKS_KEY, tasks);
-  const freshId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const freshId = () => Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const escHtml = (str) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const activeTask = () => tasks.find(t => t.id === activeTaskId) || null;
 
-  /* ---- render everything ---- */
+  const phaseSec   = () => phase === 'focus' ? cfg.w*60 : phase === 'short' ? cfg.s*60 : cfg.l*60;
+  const phaseLabel = () => {
+    if (phase === 'short') return 'Short break';
+    if (phase === 'long')  return 'Long break';
+    return `Focus · Round ${Math.min(setDone+1, cfg.rounds)} of ${cfg.rounds}`;
+  };
+  const isBreak = () => phase !== 'focus';
+
+  /* ===================== stats ===================== */
+  const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const todayKey = () => dayKey(new Date());
+  const pruneDays = () => {
+    const cutoff = Date.now() - 70*24*3600*1000;
+    Object.keys(stats.days).forEach(k => {
+      const [y,m,d] = k.split('-').map(Number);
+      if (new Date(y, m-1, d).getTime() < cutoff) delete stats.days[k];
+    });
+  };
+  const recordFocus = (sec, completed) => {
+    const k = todayKey();
+    const d = stats.days[k] || (stats.days[k] = { sec:0, ssec:0, sessions:0, tasks:0 });
+    d.sec += sec;
+    if (completed) { d.ssec += sec; d.sessions += 1; }
+    pruneDays(); saveStats(); renderStats();
+  };
+  const recordTask = () => {
+    const k = todayKey();
+    const d = stats.days[k] || (stats.days[k] = { sec:0, ssec:0, sessions:0, tasks:0 });
+    d.tasks += 1; saveStats(); renderStats();
+  };
+  const weekAgg = () => {
+    const out = { sec:0, ssec:0, sessions:0, tasks:0 };
+    const now = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now); d.setDate(now.getDate() - i);
+      const e = stats.days[dayKey(d)];
+      if (e) { out.sec += e.sec||0; out.ssec += e.ssec||0; out.sessions += e.sessions||0; out.tasks += e.tasks||0; }
+    }
+    return out;
+  };
+  const fmtDur = (sec) => {
+    const m = Math.round(sec/60);
+    if (m < 60) return m + 'm';
+    return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+  };
+
+  /* record any partial focus time when a focus block is cut short */
+  const recordPartial = () => {
+    if (phase === 'focus' && active) {
+      const elapsed = phaseSec() - remaining;
+      if (elapsed >= 30) recordFocus(elapsed, false);
+    }
+  };
+
+  /* ===================== render ===================== */
   const render = () => {
-    root.innerHTML = STYLE + `
-      <div class="fl">
+    const presetBtns = PRESETS.map(p =>
+      `<button class="fp-preset" data-w="${p.w}" data-s="${p.s}" data-l="${p.l}">${p.w} / ${p.s}</button>`
+    ).join('') + `<button class="fp-preset" data-custom="1">Custom</button>`;
 
-        <!-- Task input -->
-        <div class="fl-setup">
-          <div class="fl-setup-row">
-            <input class="fl-task-inp" id="fl-task-inp" placeholder="What are you working on?" maxlength="120" autocomplete="off">
-            <input class="fl-dur" id="fl-dur" type="number" min="1" max="180" value="${DEFAULT_DURATION}" title="Minutes">
-            <span class="fl-dur-lbl">min</span>
-            <button class="btn accent btn-sm" id="fl-add">Add</button>
+    const sndOpts = SOUNDS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+
+    root.innerHTML = STYLE + `
+      <div class="fp">
+        <p class="help">Lock into a focus block, take a real break, repeat. Pick a cycle, add what you're working on, and (optionally) a soundscape. Nothing leaves your device.</p>
+
+        <!-- Cycle config -->
+        <div class="fp-cfg">
+          <div class="fp-presets" id="fp-presets">${presetBtns}</div>
+          <div class="fp-custom">
+            <div class="fp-num"><label>Focus</label><input type="number" id="fp-w" min="1" max="180" value="${cfg.w}"></div>
+            <div class="fp-num"><label>Short break</label><input type="number" id="fp-s" min="1" max="60" value="${cfg.s}"></div>
+            <div class="fp-num"><label>Long break</label><input type="number" id="fp-l" min="1" max="60" value="${cfg.l}"></div>
+            <div class="fp-num"><label>Long break after</label><input type="number" id="fp-r" min="1" max="12" value="${cfg.rounds}"></div>
+            <label class="fp-auto"><input type="checkbox" id="fp-auto" ${cfg.auto?'checked':''}> Auto-continue</label>
           </div>
         </div>
 
-        <!-- Task list -->
-        <div class="fl-list" id="fl-list"></div>
+        <!-- Task -->
+        <div class="fp-setup-row">
+          <input class="fp-task-inp" id="fp-task-inp" placeholder="What are you working on? (optional)" maxlength="120" autocomplete="off">
+          <button class="btn accent btn-sm" id="fp-add">Add</button>
+        </div>
+        <div class="fp-list" id="fp-list"></div>
 
         <!-- Lock zone -->
-        <div class="fl-lock" id="fl-lock">
-          <div class="fl-no-task" id="fl-no-task">Add a task above, then hit <b>Lock In</b>.</div>
-          <div id="fl-active-section" style="display:none;width:100%;display:none;flex-direction:column;align-items:center;gap:8px">
-            <div class="fl-task-name" id="fl-active-name"></div>
-            <div class="fl-countdown" id="fl-countdown">25:00</div>
-            <div class="fl-progress-bar"><div class="fl-progress-fill" id="fl-progress" style="width:100%"></div></div>
-            <div id="fl-done-msg" style="display:none" class="fl-done-msg">Done. Take five — actually take them.</div>
-          </div>
-          <div class="fl-ctrl" id="fl-ctrl">
-            <button class="btn accent" id="fl-start" style="display:none">Lock In</button>
-            <button class="btn ghost" id="fl-pause" style="display:none">Pause</button>
-            <button class="btn ghost" id="fl-stop" style="display:none">Abandon</button>
-            <button class="btn accent" id="fl-next" style="display:none">Next Task</button>
-            <button class="btn ghost" id="fl-fs" style="display:none" title="Fullscreen focus mode">⛶ Fullscreen</button>
+        <div class="fp-lock">
+          <div class="fp-phase" id="fp-phase"></div>
+          <div class="fp-task-name" id="fp-task-name"></div>
+          <div class="fp-countdown" id="fp-cd">${fmt(remaining)}</div>
+          <div class="fp-bar"><div class="fp-fill" id="fp-fill" style="width:100%"></div></div>
+          <div class="fp-dots" id="fp-dots"></div>
+          <div class="fp-ctrl" id="fp-ctrl">
+            <button class="btn accent" id="fp-start">Lock In</button>
+            <button class="btn ghost" id="fp-pause" style="display:none">Pause</button>
+            <button class="btn ghost" id="fp-skip" style="display:none">Skip</button>
+            <button class="btn ghost" id="fp-reset" style="display:none">Reset</button>
+            <button class="fp-fs-btn" id="fp-fs" title="Fullscreen focus mode">⛶ Fullscreen</button>
           </div>
         </div>
 
-        <p class="help" style="margin-top:28px">"If a task can't be written in one sentence, break it down first."</p>
+        <!-- Soundscape -->
+        <div class="fp-sound">
+          <span class="lbl">Soundscape</span>
+          <select class="fp-snd-sel" id="fp-snd">${sndOpts}</select>
+          <div class="fp-vol"><input type="range" id="fp-vol" min="0" max="100" value="${Math.round(cfg.vol*100)}"><span class="val" id="fp-vol-v">${Math.round(cfg.vol*100)}%</span></div>
+        </div>
+
+        <!-- Stats -->
+        <div class="fp-stats">
+          <div class="fp-stats-head">
+            <h4>Session stats</h4>
+            <button class="fp-reset" id="fp-stats-reset">Reset</button>
+          </div>
+          <div class="fp-stat-grid" id="fp-stat-grid"></div>
+        </div>
+
+        <p class="help" style="margin-top:24px">"Breaks aren't the reward for focus — they're part of it. Actually step away."</p>
       </div>
 
       <!-- Fullscreen overlay -->
-      <div class="fl-overlay" id="fl-overlay" aria-modal="true" role="dialog" aria-label="Focus Lock fullscreen">
-        <span class="fl-ov-label">Focus Lock · SkoolToolz</span>
-        <div class="fl-ov-task" id="fl-ov-task"></div>
-        <div class="fl-ov-time" id="fl-ov-time">25:00</div>
-        <div class="fl-ov-bar"><div class="fl-ov-fill" id="fl-ov-fill" style="width:100%"></div></div>
-        <div class="fl-ov-done" id="fl-ov-done" style="display:none"></div>
-        <div class="fl-ov-ctrl" id="fl-ov-ctrl">
-          <button class="btn accent" id="fl-ov-start">Lock In</button>
-          <button class="btn ghost" id="fl-ov-pause" style="display:none">Pause</button>
-          <button class="btn ghost" id="fl-ov-exit">Exit fullscreen</button>
+      <div class="fp-overlay" id="fp-overlay" aria-modal="true" role="dialog" aria-label="Enhanced Focus Lock fullscreen">
+        <span class="fp-ov-label">Focus Lock · SkoolToolz</span>
+        <div class="fp-ov-phase" id="fp-ov-phase"></div>
+        <div class="fp-ov-task" id="fp-ov-task"></div>
+        <div class="fp-ov-time" id="fp-ov-time">${fmt(remaining)}</div>
+        <div class="fp-ov-bar"><div class="fp-ov-fill" id="fp-ov-fill" style="width:100%"></div></div>
+        <div class="fp-ov-dots fp-dots" id="fp-ov-dots"></div>
+        <div class="fp-ov-ctrl" id="fp-ov-ctrl">
+          <button class="btn accent" id="fp-ov-start">Lock In</button>
+          <button class="btn ghost" id="fp-ov-pause" style="display:none">Pause</button>
+          <button class="btn ghost" id="fp-ov-skip" style="display:none">Skip</button>
+          <button class="btn ghost" id="fp-ov-exit">Exit fullscreen</button>
         </div>
-        <div class="fl-ov-esc">press <kbd>Esc</kbd> to exit fullscreen</div>
+        <div class="fp-ov-esc">press <kbd>Esc</kbd> to exit fullscreen</div>
       </div>
     `;
 
+    root.querySelector('#fp-snd').value = cfg.snd;
+    syncPresets();
     renderList();
-    updateLockZone();
+    renderDots();
+    renderStats();
+    updateZone();
     wireEvents();
   };
 
-  /* ---- render task list ---- */
+  /* ---- preset highlight ---- */
+  const syncPresets = () => {
+    const match = PRESETS.findIndex(p => p.w===cfg.w && p.s===cfg.s && p.l===cfg.l);
+    root.querySelectorAll('.fp-preset').forEach((b, i) => {
+      const isCustom = b.hasAttribute('data-custom');
+      b.classList.toggle('on', isCustom ? match === -1 : i === match);
+    });
+  };
+
+  /* ---- task list ---- */
   const renderList = () => {
-    const list = root.querySelector('#fl-list');
-    if (!tasks.length) {
-      list.innerHTML = `<div class="fl-empty">No tasks yet — add one above.</div>`;
-      return;
-    }
+    const list = root.querySelector('#fp-list');
+    if (!tasks.length) { list.innerHTML = `<div class="fp-empty">No tasks yet — add one above, or just hit Lock In.</div>`; return; }
     list.innerHTML = '';
     tasks.forEach((task, i) => {
       const item = document.createElement('div');
-      item.className = `fl-item${task.done ? ' done' : ''}${activeTask && activeTask.id === task.id ? ' fl-active-item' : ''}`;
-      item.dataset.idx = i;
+      item.className = `fp-item${task.done?' done':''}${task.id===activeTaskId?' fp-active-item':''}`;
       item.innerHTML = `
-        <span class="fl-item-check"></span>
-        <span class="fl-item-label">${escHtml(task.label)}</span>
-        <span class="fl-item-dur">${task.minutes}m</span>
-        <span class="fl-item-del" title="Remove">×</span>
+        <span class="fp-item-check"></span>
+        <span class="fp-item-label">${escHtml(task.label)}</span>
+        <span class="fp-item-del" title="Remove">×</span>
       `;
-      item.querySelector('.fl-item-check').addEventListener('click', (e) => {
+      item.querySelector('.fp-item-check').addEventListener('click', (e) => {
         e.stopPropagation();
         tasks[i].done = !tasks[i].done;
-        saveTasks();
-        renderList();
+        if (tasks[i].done) recordTask();
+        saveTasks(); renderList(); updateZone();
       });
-      item.querySelector('.fl-item-del').addEventListener('click', (e) => {
+      item.querySelector('.fp-item-del').addEventListener('click', (e) => {
         e.stopPropagation();
-        if (activeTask && activeTask.id === tasks[i].id) stopSession(false);
-        tasks.splice(i, 1);
-        saveTasks();
-        renderList();
-        updateLockZone();
+        if (tasks[i].id === activeTaskId) activeTaskId = null;
+        tasks.splice(i, 1); saveTasks(); renderList(); updateZone();
       });
       item.addEventListener('click', () => {
-        if (running) return; // don't switch mid-session
-        setActiveTask(tasks[i]);
+        activeTaskId = (activeTaskId === task.id) ? null : task.id;
+        renderList(); updateZone();
       });
       list.appendChild(item);
     });
   };
 
-  /* ---- update the lock zone display ---- */
-  const totalSec = () => activeTask ? activeTask.minutes * 60 : DEFAULT_DURATION * 60;
-
-  const updateLockZone = () => {
-    const noTask   = root.querySelector('#fl-no-task');
-    const section  = root.querySelector('#fl-active-section');
-    const startBtn = root.querySelector('#fl-start');
-    const pauseBtn = root.querySelector('#fl-pause');
-    const stopBtn  = root.querySelector('#fl-stop');
-    const nextBtn  = root.querySelector('#fl-next');
-    const fsBtn    = root.querySelector('#fl-fs');
-    const doneMsg  = root.querySelector('#fl-done-msg');
-
-    const hasTask = !!activeTask;
-
-    // Show/hide sections
-    noTask.style.display  = hasTask ? 'none' : '';
-    section.style.display = hasTask ? 'flex' : 'none';
-
-    if (!hasTask) {
-      startBtn.style.display = 'none';
-      pauseBtn.style.display = 'none';
-      stopBtn.style.display  = 'none';
-      nextBtn.style.display  = 'none';
-      fsBtn.style.display    = 'none';
-      return;
-    }
-
-    root.querySelector('#fl-active-name').textContent = activeTask.label;
-    drawCountdown();
-
-    // Button visibility by phase
-    startBtn.style.display = (phase === 'idle') ? '' : 'none';
-    pauseBtn.style.display = (phase === 'active') ? '' : 'none';
-    pauseBtn.textContent   = running ? 'Pause' : 'Resume';
-    stopBtn.style.display  = (phase === 'active') ? '' : 'none';
-    nextBtn.style.display  = (phase === 'done') ? '' : 'none';
-    fsBtn.style.display    = (phase !== 'idle') ? '' : 'none';
-    doneMsg.style.display  = (phase === 'done') ? '' : 'none';
+  /* ---- round dots ---- */
+  const renderDots = () => {
+    const html = Array.from({length: cfg.rounds}, (_, i) =>
+      `<span class="fp-dot${i < setDone ? ' on' : ''}"></span>`).join('');
+    const a = root.querySelector('#fp-dots'), b = root.querySelector('#fp-ov-dots');
+    if (a) a.innerHTML = html;
+    if (b) b.innerHTML = html;
   };
 
-  const drawCountdown = () => {
-    if (!activeTask) return;
-    const cd = root.querySelector('#fl-countdown');
-    if (!cd) return;
-    cd.innerHTML = fmt(remaining);
-    cd.classList.toggle('fl-low', remaining <= 60 && phase === 'active');
-    cd.classList.toggle('fl-done-display', phase === 'done');
+  /* ---- stats panel ---- */
+  const renderStats = () => {
+    const grid = root.querySelector('#fp-stat-grid');
+    if (!grid) return;
+    const t = stats.days[todayKey()] || { sec:0, ssec:0, sessions:0, tasks:0 };
+    const w = weekAgg();
+    const avg = w.sessions ? fmtDur(w.ssec / w.sessions) : '—';
+    const cells = [
+      [fmtDur(t.sec), 'Focus today'],
+      [fmtDur(w.sec), 'Focus this week'],
+      [String(w.sessions), 'Blocks this week'],
+      [String(w.tasks), 'Tasks this week'],
+      [avg, 'Avg block'],
+    ];
+    grid.innerHTML = cells.map(([n,l]) =>
+      `<div class="fp-stat"><div class="fp-stat-num">${n}</div><div class="fp-stat-lbl">${l}</div></div>`).join('');
+  };
 
-    const pct = totalSec() > 0 ? (remaining / totalSec()) * 100 : 0;
-    const fill = root.querySelector('#fl-progress');
-    if (fill) fill.style.width = pct + '%';
+  /* ---- countdown + bar + title ---- */
+  const draw = () => {
+    const cd = root.querySelector('#fp-cd');
+    if (cd) {
+      cd.innerHTML = fmt(remaining);
+      cd.classList.toggle('fp-low', remaining <= 60 && phase === 'focus' && running);
+      cd.classList.toggle('fp-break-display', isBreak());
+    }
+    const pct = phaseSec() > 0 ? (remaining / phaseSec()) * 100 : 0;
+    const fill = root.querySelector('#fp-fill');
+    if (fill) { fill.style.width = pct + '%'; fill.classList.toggle('fp-break-fill', isBreak()); }
 
-    // sync overlay too
-    const ovTime = root.querySelector('#fl-ov-time');
-    const ovFill = root.querySelector('#fl-ov-fill');
+    const ovTime = root.querySelector('#fp-ov-time');
     if (ovTime) {
       ovTime.innerHTML = fmt(remaining);
-      ovTime.classList.toggle('fl-low', remaining <= 60 && phase === 'active');
-      ovTime.classList.toggle('fl-done-display', phase === 'done');
+      ovTime.classList.toggle('fp-low', remaining <= 60 && phase === 'focus' && running);
+      ovTime.classList.toggle('fp-break-display', isBreak());
     }
-    if (ovFill) ovFill.style.width = pct + '%';
+    const ovFill = root.querySelector('#fp-ov-fill');
+    if (ovFill) { ovFill.style.width = pct + '%'; ovFill.classList.toggle('fp-break-fill', isBreak()); }
 
-    // document title for background tab awareness
-    if (phase === 'active') {
-      document.title = `${fmtPlain(remaining)} · ${activeTask.label} — SkoolToolz`;
+    if (running) {
+      const tk = activeTask();
+      const tag = phase === 'focus' ? (tk ? tk.label : 'Focus') : phaseLabel();
+      document.title = `${fmtPlain(remaining)} · ${tag} — SkoolToolz`;
     } else {
       document.title = 'SkoolToolz — by Playology';
     }
   };
 
-  /* ---- set active task ---- */
-  const setActiveTask = (task) => {
-    if (running) return;
-    activeTask = task;
-    remaining  = task.minutes * 60;
-    phase      = 'idle';
-    renderList();
-    updateLockZone();
-    syncOverlay();
+  /* ---- the whole lock zone + overlay state ---- */
+  const updateZone = () => {
+    const tk = activeTask();
+    // phase label
+    const ph = root.querySelector('#fp-phase'), ovPh = root.querySelector('#fp-ov-phase');
+    if (ph)   { ph.textContent = phaseLabel();   ph.classList.toggle('fp-break', isBreak()); }
+    if (ovPh) { ovPh.textContent = phaseLabel(); ovPh.classList.toggle('fp-break', isBreak()); }
+    // task name (only meaningful in focus)
+    const nm = root.querySelector('#fp-task-name'), ovNm = root.querySelector('#fp-ov-task');
+    const nameTxt = (phase === 'focus' && tk) ? tk.label : '';
+    if (nm)   nm.textContent = nameTxt;
+    if (ovNm) ovNm.textContent = nameTxt;
+
+    // buttons — panel
+    const show = (id, on) => { const el = root.querySelector(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('#fp-start', !active);
+    show('#fp-pause', active);
+    show('#fp-skip',  active);
+    show('#fp-reset', active);
+    const pBtn = root.querySelector('#fp-pause'); if (pBtn) pBtn.textContent = running ? 'Pause' : 'Resume';
+    // buttons — overlay
+    show('#fp-ov-start', !active);
+    show('#fp-ov-pause', active);
+    show('#fp-ov-skip',  active);
+    const ovP = root.querySelector('#fp-ov-pause'); if (ovP) ovP.textContent = running ? 'Pause' : 'Resume';
+
+    renderDots();
+    draw();
   };
 
-  /* ---- session control ---- */
-  const startSession = () => {
-    if (!activeTask || running) return;
-    if (phase === 'idle') { remaining = totalSec(); }
+  /* ===================== session control ===================== */
+  const updateSound = () => {
+    if (running && phase === 'focus' && cfg.snd !== 'off') Sound.on(cfg.snd);
+    else Sound.off();
+  };
+
+  const startTimer = () => {
+    if (running) return;
+    active = true;
     running = true;
-    phase   = 'active';
-    updateLockZone();
-    syncOverlay();
+    if (remaining <= 0) remaining = phaseSec();
+    updateSound();
+    updateZone();
     timerId = setInterval(tick, 1000);
   };
 
-  const pauseSession = () => {
-    if (!running) {
-      // resume
-      running = true;
-      timerId = setInterval(tick, 1000);
-    } else {
-      running = false;
-      clearInterval(timerId);
-    }
-    updateLockZone();
-    syncOverlay();
+  const pauseTimer = () => {
+    if (running) { running = false; clearInterval(timerId); }
+    else { running = true; timerId = setInterval(tick, 1000); }
+    updateSound();
+    updateZone();
   };
 
-  const stopSession = (markDone = false) => {
-    running = false;
+  const advance = (record) => {
     clearInterval(timerId);
-    if (markDone && activeTask) {
-      const idx = tasks.findIndex(t => t.id === activeTask.id);
-      if (idx >= 0) { tasks[idx].done = true; saveTasks(); }
+    const wasRunning = running;
+    if (record && phase === 'focus') recordFocus(phaseSec(), true);
+    if (phase === 'focus') {
+      setDone += 1;
+      phase = (setDone >= cfg.rounds) ? 'long' : 'short';
+    } else {
+      if (phase === 'long') setDone = 0;
+      phase = 'focus';
     }
-    phase = 'idle';
-    if (activeTask) remaining = activeTask.minutes * 60;
+    remaining = phaseSec();
+    running = false;
+    updateSound();
+    if (wasRunning && cfg.auto) startTimer();
+    else updateZone();
+  };
+
+  const skip = () => {
+    recordPartial();
+    clearInterval(timerId);
+    const wasRunning = running;
+    if (phase === 'focus') {
+      setDone += 1;
+      phase = (setDone >= cfg.rounds) ? 'long' : 'short';
+    } else {
+      if (phase === 'long') setDone = 0;
+      phase = 'focus';
+    }
+    remaining = phaseSec();
+    running = false;
+    updateSound();
+    if (wasRunning && cfg.auto) startTimer();
+    else updateZone();
+  };
+
+  const reset = () => {
+    recordPartial();
+    clearInterval(timerId);
+    running = false; active = false;
+    phase = 'focus'; setDone = 0;
+    remaining = cfg.w * 60;
+    updateSound();
     exitFullscreen();
-    renderList();
-    updateLockZone();
-    syncOverlay();
+    updateZone();
     document.title = 'SkoolToolz — by Playology';
   };
 
   const tick = () => {
     remaining = Math.max(0, remaining - 1);
-    drawCountdown();
+    draw();
     if (remaining === 0) {
-      clearInterval(timerId);
-      running = false;
-      phase   = 'done';
-      // Mark done automatically
-      const idx = tasks.findIndex(t => t.id === activeTask.id);
-      if (idx >= 0) { tasks[idx].done = true; saveTasks(); }
-      renderList();
-      updateLockZone();
-      syncOverlay();
-      showToast(`<b>${activeTask.label}</b> · Time's up. Take a real break.`);
+      const wasFocus = phase === 'focus';
       try { beep(); } catch {}
-      document.title = 'SkoolToolz — by Playology';
+      advance(true);
+      const tk = activeTask();
+      if (wasFocus) {
+        showToast(`<b>${tk ? escHtml(tk.label) : 'Focus block'}</b> · done. ${cfg.auto ? 'Break starting.' : 'Take a break.'}`);
+      } else {
+        showToast(`<b>Break over.</b> ${cfg.auto ? 'Back to it.' : 'Lock in when ready.'}`);
+      }
     }
   };
 
-  /* ---- find next undone task ---- */
-  const goNext = () => {
-    const undone = tasks.filter(t => !t.done);
-    if (!undone.length) {
-      activeTask = null;
-      phase = 'idle';
-      exitFullscreen();
-      renderList();
-      updateLockZone();
-      showToast('All tasks done. Go touch grass.');
-      return;
-    }
-    setActiveTask(undone[0]);
-  };
-
-  /* ---- fullscreen overlay ---- */
-  const syncOverlay = () => {
-    const ov        = root.querySelector('#fl-overlay');
-    const ovTask    = root.querySelector('#fl-ov-task');
-    const ovStart   = root.querySelector('#fl-ov-start');
-    const ovPause   = root.querySelector('#fl-ov-pause');
-    const ovDone    = root.querySelector('#fl-ov-done');
-    if (!ov) return;
-    if (activeTask) ovTask.textContent = activeTask.label;
-    ovStart.style.display = (phase === 'idle') ? '' : 'none';
-    ovPause.style.display = (phase === 'active') ? '' : 'none';
-    ovPause.textContent   = running ? 'Pause' : 'Resume';
-    ovDone.style.display  = (phase === 'done') ? '' : 'none';
-    ovDone.textContent    = 'Done. Take five — actually take them.';
-    drawCountdown();
-  };
-
+  /* ===================== fullscreen overlay ===================== */
   const enterFullscreen = () => {
-    if (!activeTask) return;
     fullscreen = true;
-    root.querySelector('#fl-overlay').classList.add('fl-vis');
+    root.querySelector('#fp-overlay').classList.add('fp-vis');
     document.body.classList.add('no-scroll');
-    syncOverlay();
-    // Try native fullscreen, gracefully degrade
+    updateZone();
     try { document.documentElement.requestFullscreen?.(); } catch {}
   };
-
   const exitFullscreen = () => {
     fullscreen = false;
-    const ov = root.querySelector('#fl-overlay');
-    if (ov) ov.classList.remove('fl-vis');
-    // Only remove no-scroll if panel isn't also needing it
-    // (panel itself adds no-scroll; don't fight it — panel's close handles it)
+    const ov = root.querySelector('#fp-overlay');
+    if (ov) ov.classList.remove('fp-vis');
+    // Leave `no-scroll` alone — the open panel owns it; closePanel clears it.
     try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch {}
   };
-
-  /* ---- escape key inside overlay ---- */
+  // Capture phase + stop-propagation so Esc exits *fullscreen* without the
+  // app's global Esc-closes-panel handler tearing the whole tool down.
   const onOverlayKey = (e) => {
-    if (!fullscreen) return;
-    if (e.key === 'Escape') exitFullscreen();
+    if (fullscreen && e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exitFullscreen();
+    }
   };
-  document.addEventListener('keydown', onOverlayKey);
+  document.addEventListener('keydown', onOverlayKey, true);
+  // Keep the CSS overlay in step with native fullscreen (e.g. the browser's
+  // own Esc, which the page never sees as a keydown).
+  const onFsChange = () => { if (fullscreen && !document.fullscreenElement) exitFullscreen(); };
+  document.addEventListener('fullscreenchange', onFsChange);
 
-  /* ---- wire events ---- */
+  /* ===================== events ===================== */
   const wireEvents = () => {
-    // Add task
+    // presets
+    root.querySelectorAll('.fp-preset').forEach(b => {
+      b.addEventListener('click', () => {
+        if (b.hasAttribute('data-custom')) { root.querySelector('#fp-w').focus(); return; }
+        cfg.w = +b.dataset.w; cfg.s = +b.dataset.s; cfg.l = +b.dataset.l;
+        root.querySelector('#fp-w').value = cfg.w;
+        root.querySelector('#fp-s').value = cfg.s;
+        root.querySelector('#fp-l').value = cfg.l;
+        saveCfg(); syncPresets();
+        if (!active) { remaining = cfg.w*60; updateZone(); }
+      });
+    });
+    const numHandler = (id, key, min, max, isFocus) => {
+      root.querySelector(id).addEventListener('change', (e) => {
+        const v = Math.max(min, Math.min(max, parseInt(e.target.value) || min));
+        e.target.value = v; cfg[key] = v; saveCfg(); syncPresets(); renderDots();
+        if (!active) { remaining = cfg.w*60; updateZone(); }
+        else updateZone();
+      });
+    };
+    numHandler('#fp-w', 'w', 1, 180);
+    numHandler('#fp-s', 's', 1, 60);
+    numHandler('#fp-l', 'l', 1, 60);
+    numHandler('#fp-r', 'rounds', 1, 12);
+    root.querySelector('#fp-auto').addEventListener('change', (e) => { cfg.auto = e.target.checked; saveCfg(); });
+
+    // tasks
     const addTask = () => {
-      const inp = root.querySelector('#fl-task-inp');
-      const dur = root.querySelector('#fl-dur');
+      const inp = root.querySelector('#fp-task-inp');
       const label = inp.value.trim();
       if (!label) { inp.focus(); return; }
-      const minutes = Math.max(1, Math.min(180, parseInt(dur.value) || DEFAULT_DURATION));
-      const task = { id: freshId(), label, minutes, done: false };
+      const task = { id: freshId(), label, done: false };
       tasks.push(task);
-      saveTasks();
-      inp.value = '';
-      dur.value = DEFAULT_DURATION;
-      inp.focus();
-      renderList();
-      // Auto-select if no active task
-      if (!activeTask) setActiveTask(task);
-      else updateLockZone();
+      if (!activeTaskId) activeTaskId = task.id;
+      saveTasks(); inp.value = ''; inp.focus();
+      renderList(); updateZone();
     };
+    root.querySelector('#fp-add').addEventListener('click', addTask);
+    root.querySelector('#fp-task-inp').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } });
 
-    root.querySelector('#fl-add').addEventListener('click', addTask);
-    root.querySelector('#fl-task-inp').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); addTask(); }
+    // lock-zone controls
+    root.querySelector('#fp-start').addEventListener('click', startTimer);
+    root.querySelector('#fp-pause').addEventListener('click', pauseTimer);
+    root.querySelector('#fp-skip').addEventListener('click', skip);
+    root.querySelector('#fp-reset').addEventListener('click', reset);
+    root.querySelector('#fp-fs').addEventListener('click', enterFullscreen);
+
+    // overlay controls
+    root.querySelector('#fp-ov-start').addEventListener('click', startTimer);
+    root.querySelector('#fp-ov-pause').addEventListener('click', pauseTimer);
+    root.querySelector('#fp-ov-skip').addEventListener('click', skip);
+    root.querySelector('#fp-ov-exit').addEventListener('click', exitFullscreen);
+
+    // soundscape
+    root.querySelector('#fp-snd').addEventListener('change', (e) => {
+      cfg.snd = e.target.value; saveCfg(); updateSound();
+    });
+    const vol = root.querySelector('#fp-vol'), volV = root.querySelector('#fp-vol-v');
+    vol.addEventListener('input', (e) => {
+      cfg.vol = (+e.target.value) / 100;
+      volV.textContent = e.target.value + '%';
+      Sound.setVol(cfg.vol); saveCfg();
     });
 
-    // Lock-zone controls
-    root.querySelector('#fl-start').addEventListener('click', startSession);
-    root.querySelector('#fl-pause').addEventListener('click', pauseSession);
-    root.querySelector('#fl-stop').addEventListener('click', () => stopSession(false));
-    root.querySelector('#fl-next').addEventListener('click', goNext);
-    root.querySelector('#fl-fs').addEventListener('click', enterFullscreen);
-
-    // Overlay controls
-    root.querySelector('#fl-ov-start').addEventListener('click', () => { startSession(); syncOverlay(); });
-    root.querySelector('#fl-ov-pause').addEventListener('click', () => { pauseSession(); syncOverlay(); });
-    root.querySelector('#fl-ov-exit').addEventListener('click', exitFullscreen);
+    // stats reset
+    root.querySelector('#fp-stats-reset').addEventListener('click', () => {
+      if (!confirm('Clear all saved focus stats? This cannot be undone.')) return;
+      stats.days = {}; saveStats(); renderStats();
+      showToast('Focus stats cleared.');
+    });
   };
 
-  /* ---- utility ---- */
-  function escHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  /* ---- init ---- */
-  // Pick first undone task as default selection
-  const firstUndone = tasks.find(t => !t.done) || null;
-  if (firstUndone) { activeTask = firstUndone; remaining = firstUndone.minutes * 60; }
-
+  /* ===================== init ===================== */
   render();
 
   return {
     unmount() {
+      recordPartial();
       clearInterval(timerId);
-      document.removeEventListener('keydown', onOverlayKey);
+      document.removeEventListener('keydown', onOverlayKey, true);
+      document.removeEventListener('fullscreenchange', onFsChange);
       exitFullscreen();
+      Sound.close();
       document.title = 'SkoolToolz — by Playology';
     }
   };

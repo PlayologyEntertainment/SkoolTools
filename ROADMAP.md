@@ -301,7 +301,7 @@ as `SOON` cards while their original-authored content is built out.
 - *Why:* strongest organic-search growth lever fully inside the HS+college
   audience.
 
-### 3.2 ♿ Accessibility & Focus shelf  🔄 *in progress — 2 / 4 shipped*
+### 3.2 ♿ Accessibility & Focus shelf  🔄 *in progress — 3 / 4 shipped*
 Fulfills a11y promises and surfaces them as first-class tools. New shelf —
 **Focus** (`a11y`, warm light brown `--brown` `#9F8170`), sequenced above Study.
 Built contained-tools-first; the two cross-cutting applets are live in the UI as
@@ -320,9 +320,17 @@ Built contained-tools-first; the two cross-cutting applets are live in the UI as
 - ⬜ **Dyslexia-friendly mode** *(SOON)* — Atkinson Hyperlegible (embedded as
   base64 for true offline), wider spacing, 1.8 line height — as a **global
   app-wide toggle** plus a reading surface.
-- ⬜ **Enhanced Focus Lock** *(SOON)* — builds on the existing Study-shelf Focus
-  Lock; on release it **moves onto this shelf** and gains break cycles,
-  soundscapes, and session stats.
+- ✅ **Enhanced Focus Lock** — builds on the original Study-shelf Focus Lock,
+  which has now **moved onto this shelf** (and been removed from Study). Adds
+  **configurable work/break cycles** (25/5 · 50/10 · 90/15 presets + custom work,
+  short-break, long-break, and a long break after *N* rounds, with auto-continue),
+  filled **round dots** and a phase-aware countdown/overlay; offline
+  **soundscapes** synthesised live with the Web Audio API (white / pink / brown
+  noise, plus filtered **rain** and a slow-swell **ocean**) with a volume control,
+  playing only during focus; and plain **session stats** (focus time today + this
+  week, blocks and tasks this week, average block length) — informational only,
+  no streaks or badges, resettable, localStorage. Keeps the v1 fullscreen lock
+  (Esc now exits fullscreen without closing the tool).
 
 ### 3.3 (Optional) 💻 CS shelf  ⬜ *not started*
 If we want to consolidate scattered CS tools: Code Playground + Truth Table +
@@ -347,7 +355,7 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 · A11y & Focus 2 / 4 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 · A11y & Focus 3 / 4 |
 
 **Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
@@ -356,9 +364,11 @@ live with its three self-contained tools — **Score Goal**, **Exam Countdown**,
 **Free-Response Pacer** — shipped easy-wins-first. The two content-heavy applets
 (SAT/ACT math drill, AP flashcard packs) are surfaced as `SOON` cards pending
 original-authored content. **Accessibility & Focus (3.2) has begun:** the shelf
-is live with **Reading Ruler** and **Read Aloud** (text-to-speech) shipped
-contained-tools-first; **Dyslexia-friendly mode** and **Enhanced Focus Lock** are
-surfaced as `SOON` cards. The optional CS shelf (3.3) has not been started.
+is live with **Reading Ruler**, **Read Aloud** (text-to-speech), and the
+**Enhanced Focus Lock** — which builds on the original Focus Lock (now removed
+from Study) and adds configurable break cycles, offline Web-Audio soundscapes,
+and informational session stats. **Dyslexia-friendly mode** remains the one
+`SOON` card on this shelf. The optional CS shelf (3.3) has not been started.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
@@ -379,5 +389,7 @@ not Phase 1–3 work — listed here only so the doc reflects everything that's 
 - **Schedule Builder** *(Plan)* — weekly class & period grid.
 - **Code Playground** *(Toolbox)* — JS · Python (Pyodide) · HTML. *(The Phase 3.3
   CS shelf would consolidate this with Truth Table, Matrix, and Base Converter.)*
-- **Focus Lock** *(Study)* — fullscreen, hide tabs, countdown. *(Phase 3.2's
-  "Enhanced Focus Lock" builds on this existing tool.)*
+- **Focus Lock** *(originally Study)* — fullscreen, hide tabs, countdown. *(Phase
+  3.2's **Enhanced Focus Lock** superseded this: the tool was rebuilt with break
+  cycles, soundscapes, and stats and moved to the Focus shelf, and the original
+  Study-shelf card was removed.)*
