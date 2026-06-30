@@ -271,10 +271,11 @@ policies (a permitted, integrity-safe use).
 
 ## Phase 3 — New shelves (categories)  ⬜ *not started*
 
-### 3.1 🎯 Test Prep shelf  🔄 *in progress — 3 / 5 shipped*
+### 3.1 🎯 Test Prep shelf  🔄 *in progress — 4 / 5 shipped*
 Curated, deterministic, content-driven — **not** AI. New shelf (`testprep`, neon
-crimson). Built easy-wins-first; the two content-heavy applets are live in the UI
-as `SOON` cards while their original-authored content is built out.
+crimson). Built easy-wins-first; the last content-heavy applet (AP flashcard
+packs) is live in the UI as a `SOON` card while its original-authored content is
+built out.
 
 - ✅ **Score Goal** *(was "What score do I need")* — reverse-engineers the SAT,
   ACT, or AP score you still need. SAT solves the missing 200–800 section from a
@@ -291,9 +292,19 @@ as `SOON` cards while their original-authored content is built out.
   pacing timer with editable per-question budgets and subject presets (AP Calc,
   Bio, APUSH DBQ+LEQ, English). Big countdown, overall-time readout, progress bar,
   phase overview, Web-Audio beep at each transition, pause / next / reset.
-- ⬜ SAT / ACT **timed math drill** *(SOON)* — original-authored question bank,
-  both SAT and ACT formats, section timing, scoring, wrong-answer review. Real
-  test questions are copyrighted, so all content is original.
+- ✅ SAT / ACT **timed math drill** — original **parameterized question
+  generators** (fresh numbers every run, never a fixed bank) across four
+  domains: Heart of Algebra, Problem Solving & Data, Advanced Math, and
+  Geometry & Trig. Both **SAT** (4-choice multiple choice **+ grid-in /
+  student-produced response**) and **ACT** (5-choice) formats, with **quick
+  drills** (5–20 questions, optional test-pace timer) and **full timed
+  sections** (SAT 22 Q / 35 min · ACT 60 Q / 60 min, Web-Audio time's-up beep).
+  Scores show both **raw count** and a clearly-labeled **estimated scaled
+  score** (SAT 200–800 / ACT 1–36), a per-topic breakdown, and a full
+  **wrong-answer review** with shown-work solutions rendered through the shared
+  KaTeX path. Real test questions are copyrighted, so every question is built to
+  match the style and difficulty — nothing is copied. Config persists to
+  localStorage; nothing leaves the device.
 - ⬜ AP-aligned **flashcard packs** *(SOON)* — original-authored subject decks +
   pack browser, reusing the Flashcards SRS / share-by-code engine.
 - ✅ **Cheat-Sheet Builder** — relocated here from Toolbox (see 2.7); an
@@ -355,15 +366,17 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 3 / 5 · A11y & Focus 3 / 4 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep 4 / 5 · A11y & Focus 3 / 4 |
 
 **Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
 deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
 Builder, 2.7**) are shipped. **Phase 3 has begun:** the Test Prep shelf (3.1) is
 live with its three self-contained tools — **Score Goal**, **Exam Countdown**, and
-**Free-Response Pacer** — shipped easy-wins-first. The two content-heavy applets
-(SAT/ACT math drill, AP flashcard packs) are surfaced as `SOON` cards pending
-original-authored content. **Accessibility & Focus (3.2) has begun:** the shelf
+**Free-Response Pacer** — shipped easy-wins-first, joined now by the **SAT / ACT
+Math Drill**, which uses original parameterized question generators (SAT + ACT
+formats, quick and full-timed sections, raw + estimated scaled scoring, and a
+worked-solution review). Only **AP flashcard packs** remains a `SOON` card,
+pending original-authored content. **Accessibility & Focus (3.2) has begun:** the shelf
 is live with **Reading Ruler**, **Read Aloud** (text-to-speech), and the
 **Enhanced Focus Lock** — which builds on the original Focus Lock (now removed
 from Study) and adds configurable break cycles, offline Web-Audio soundscapes,
