@@ -162,8 +162,10 @@ condescending — talk to a smart sixteen-year-old.
 - Honor `prefers-reduced-motion`, `prefers-color-scheme`, `forced-colors`.
 - Text scales to 200% without clipping; touch targets ≥ 44×44px (calculator
   keys larger).
-- A **Dyslexia-friendly mode** (Atkinson Hyperlegible, wider spacing, 1.8 line
-  height) is on the roadmap as a global toggle.
+- A **Dyslexia-friendly mode** (Atkinson Hyperlegible, embedded as base64 for
+  offline use; wider spacing, 1.8 line height) ships as a global, app-wide
+  toggle on the Accessibility & Focus shelf — `.dys` on `<html>` swaps
+  `--sans` / `--serif` and opens spacing via `--dys-lh` / `--dys-ls` / `--dys-ws`.
 
 ---
 
