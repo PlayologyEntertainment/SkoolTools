@@ -2627,6 +2627,9 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
       <button class="icon-btn" id="btn-shortcuts" title="Keyboard shortcuts (?)">
         <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>
       </button>
+      <button class="icon-btn" id="btn-feedback" title="Send Feedback">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
       <button class="icon-btn" id="btn-help" title="Help">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
       </button>
@@ -7176,6 +7179,27 @@ function onKey(e) {
 
 function showShortcuts() {
   showToast('<b>/</b>search · <b>Esc</b>close · <b>?</b>shortcuts · click ☆ to pin');
+}
+
+function sendFeedback() {
+  const section = (location.hash || '#home').replace('#', '').split('=')[0] || 'home';
+  const subject = 'SkoolToolz Feedback';
+  const body = [
+    'Hi Playology team,',
+    '',
+    '[Please share your feedback, bug report, or feature request here]',
+    '',
+    '',
+    '---',
+    'App: SkoolToolz v2.0',
+    `Page: ${section}`,
+    `Date: ${new Date().toISOString().slice(0, 10)}`,
+    `Browser: ${navigator.userAgent}`
+  ].join('\n');
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1&to=playologyfun@gmail.com'
+    + '&su=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 
@@ -22260,6 +22284,7 @@ function boot() {
   $('#btn-shortcuts').addEventListener('click', showShortcuts);
   $('#link-shortcuts').addEventListener('click', (e) => { e.preventDefault(); showShortcuts(); });
   $('#btn-settings').addEventListener('click', () => showToast('Dedicated to Logan and Aysha.'));
+  $('#btn-feedback').addEventListener('click', sendFeedback);
   $('#btn-help').addEventListener('click', openHelp);
   $('#help-close').addEventListener('click', closeHelp);
   $('#help-backdrop').addEventListener('click', closeHelp);
