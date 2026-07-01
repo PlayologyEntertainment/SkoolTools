@@ -1,14 +1,18 @@
-# SkoolToolz — v2.0 Roadmap
+# SkoolToolz — v2.0 Roadmap  ✅ COMPLETE
 
 > *Many small, smart, sharp tools. No account. No tracker. No upsell.*
 
-This document plans the **v2.0** expansion of SkoolToolz. v1.0 is shipped: ~39
-tools across six shelves (Numbers, Lab, Words, Study, Plan, Toolbox), built as a
-single offline-capable HTML file with local-only storage.
+This document planned the **v2.0** expansion of SkoolToolz, and as of
+**2026-07-01 it has fully shipped.** v1.0 launched with ~39 tools across six
+shelves (Numbers, Lab, Words, Study, Plan, Toolbox), built as a single
+offline-capable HTML file with local-only storage. v2.0 grew that to **55
+tools across nine shelves** — adding Test Prep, Focus (Accessibility), and
+Code — while keeping the single-file, local-only architecture.
 
-v2.0 does **not** change the mission. It deepens the tools students already use,
-adds a focused set of new tools, and opens two new shelves — all while holding
-the original rails.
+v2.0 did **not** change the mission. It deepened the tools students already
+used, added a focused set of new tools, and opened three new shelves — all
+while holding the original rails. See **Phase 4** for what's under
+consideration next.
 
 ---
 
@@ -186,7 +190,7 @@ student actually exports or reuses.
   table renders as a Markdown / aligned-text table), **localStorage autosave**,
   and **share-by-code** (`#labreport=…` code + link, no backend).
 
-### 2.3 Matrix Calculator  *(Numbers)*  ✅ *shipped*
+### 2.3 Matrix Calculator  *(shipped on Numbers; consolidated onto Code shelf in 3.3)*  ✅ *shipped*
 - ✅ **Add / subtract / multiply**, scalar multiply, transpose, and integer
   matrix powers.
 - ✅ **Determinant**, **inverse**, **RREF with the row-operation steps shown**,
@@ -196,7 +200,7 @@ student actually exports or reuses.
 - ✅ Workspace autosaves to localStorage and **shares by code** (`#matrix=…`),
   no backend. Linear algebra + AP CS.
 
-### 2.4 Truth Table / Logic  *(Numbers, or future CS group)*  ✅ *shipped*
+### 2.4 Truth Table / Logic  *(shipped on Numbers; consolidated onto Code shelf in 3.3)*  ✅ *shipped*
 - ✅ **Expression parser** with no `eval` — a hand-written tokenizer +
   precedence-climbing parser builds an AST. Accepts every common notation
   interchangeably: words (`AND OR NOT XOR NAND NOR XNOR IMPLIES IFF`), logic
@@ -269,7 +273,7 @@ policies (a permitted, integrity-safe use).
 
 ---
 
-## Phase 3 — New shelves (categories)  🔄 *in progress*
+## Phase 3 — New shelves (categories)  ✅ *complete*
 
 ### 3.1 🎯 Test Prep shelf  ✅ *complete — 5 / 5 shipped*
 Curated, deterministic, content-driven — **not** AI. New shelf (`testprep`, neon
@@ -360,10 +364,35 @@ Built contained-tools-first; all four tools — including the cross-cutting
   no streaks or badges, resettable, localStorage. Keeps the v1 fullscreen lock
   (Esc now exits fullscreen without closing the tool).
 
-### 3.3 (Optional) 💻 CS shelf  ⬜ *not started*
-If we want to consolidate scattered CS tools: Code Playground + Truth Table +
-Matrix + Base Converter + a Regex tester, pulled onto one shelf. Lower priority;
-revisit after Phase 2.
+### 3.3 💻 Code shelf  ✅ *complete — 5 / 5 shipped*
+Consolidated the scattered CS tools onto their own shelf (`code`, amber),
+seated between Lab and Toolbox.
+- ✅ **Code Playground** — moved here from Toolbox (JS · Python via Pyodide ·
+  HTML), unchanged.
+- ✅ **Truth Table / Logic** — moved here from Numbers (see 2.4), unchanged.
+- ✅ **Matrix Calculator** — moved here from Numbers (see 2.3), unchanged.
+- ✅ **Base Converter** — moved here from Numbers; binary/octal/decimal/hex plus
+  an arbitrary base (2–36), live two-way sync across fields.
+- ✅ **Regex Tester** *(new tool)* — pattern + flag picker (`g i m s u y` with
+  inline explanations), live match highlighting and count, capture-group
+  breakdown, and a replacement-string preview (`$1`, `$&`, `$<name>`)  —
+  no `eval`, pure `RegExp`.
+- *Result:* consolidating these four tools plus the new Regex Tester gives
+  the Code shelf real weight (discrete math, linear algebra, intro CS/dev
+  work) without duplicating anything already covered elsewhere.
+
+---
+
+## Phase 4 — Future ideas  📝 *not started, unscoped*
+
+v2.0 (Phases 1–3) is fully shipped. This section is a placeholder landing spot
+for whatever comes next — nothing below is committed or sequenced yet, and
+none of it has been scoped against the guardrails above. Candidates should be
+added here as they're proposed, then promoted into a real, numbered phase
+(with the same shipped-checklist treatment as Phases 1–3) once there's an
+actual plan.
+
+*(No candidates recorded yet.)*
 
 ---
 
@@ -383,26 +412,35 @@ revisit after Phase 2.
 |------|-------|-------|--------|
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
-| 3 | New shelves | Test Prep, Accessibility & Focus, (optional CS) | 🔄 Test Prep ✅ 5 / 5 · A11y & Focus ✅ 4 / 4 |
+| 3 | New shelves | Test Prep, Accessibility & Focus, Code | ✅ **3 / 3 shipped** — Test Prep 5/5 · A11y & Focus 4/4 · Code 5/5 |
+| 4 | Future ideas | *(unscoped)* | 📝 not started |
 
-**Status as of 2026-06-30:** Phases 1 and 2 are complete — all eight Phase 1
-deepen-items and all seven Phase 2 new tools (through the **Exam Cheat-Sheet
-Builder, 2.7**) are shipped. **Phase 3 is well underway:** the Test Prep shelf
-(3.1) is now **complete (5 / 5)** — its three self-contained tools (**Score
-Goal**, **Exam Countdown**, **Free-Response Pacer**) plus the **SAT / ACT Math
-Drill** (original parameterized generators, SAT + ACT formats, quick and
-full-timed sections, raw + estimated scaled scoring, and a worked-solution
-review), joined now by the **AP Flashcard Packs**: 13 original-authored AP
-subject decks (~449 cards) in a grouped pack browser with in-tool SM-2-lite
-study, copy-into-Flashcards, and Flashcards-compatible share codes, with the
-deck library lazy-loaded from `ap-packs.js`. **Accessibility & Focus (3.2) is now complete (4 / 4):** the shelf
-is live with **Reading Ruler**, **Read Aloud** (text-to-speech), the
-**Enhanced Focus Lock** — which builds on the original Focus Lock (now removed
-from Study) and adds configurable break cycles, offline Web-Audio soundscapes,
-and informational session stats — and the **Dyslexia-friendly mode**, a global
-app-wide toggle backed by an embedded (base64) Atkinson Hyperlegible that swaps
-the whole app's type and opens up spacing, with live persisted controls and a
-preview. The optional CS shelf (3.3) has not been started.
+**Status as of 2026-07-01: v2.0 is complete.** All eight Phase 1 deepen-items
+and all seven Phase 2 new tools (through the **Exam Cheat-Sheet Builder, 2.7**)
+are shipped, and **Phase 3's three new shelves are all complete:**
+- **Test Prep (3.1, 5/5)** — **Score Goal**, **Exam Countdown**,
+  **Free-Response Pacer**, the **SAT / ACT Math Drill** (original parameterized
+  generators, SAT + ACT formats, quick and full-timed sections, raw +
+  estimated scaled scoring, worked-solution review), and the **AP Flashcard
+  Packs** (13 original-authored AP subject decks, ~449 cards, grouped pack
+  browser with in-tool SM-2-lite study, copy-into-Flashcards, and
+  Flashcards-compatible share codes, deck library lazy-loaded from
+  `ap-packs.js`).
+- **Accessibility & Focus (3.2, 4/4)** — **Reading Ruler**, **Read Aloud**
+  (text-to-speech), the **Enhanced Focus Lock** (builds on the original Focus
+  Lock, now removed from Study, adding configurable break cycles, offline
+  Web-Audio soundscapes, and informational session stats), and the
+  **Dyslexia-friendly mode** (a global app-wide toggle backed by an embedded
+  base64 Atkinson Hyperlegible font, with live persisted controls and a
+  preview).
+- **Code (3.3, 5/5)** — **Code Playground**, **Truth Table**, **Matrix
+  Calculator**, and **Base Converter** consolidated from their old shelves
+  onto the new amber Code shelf, joined by a new **Regex Tester**.
+
+The app now runs **55 tools across nine shelves** (Numbers, Lab, Words, Study,
+Plan, Toolbox, Test Prep, Focus, Code). Nothing in the app is a `SOON`-ribbon
+placeholder — every registered tool is fully built and live. **Phase 4 is an
+open, unscoped placeholder** for whatever comes after v2.0.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
@@ -421,8 +459,9 @@ not Phase 1–3 work — listed here only so the doc reflects everything that's 
 - **Grammar & Spellcheck** *(Words)* — offline spelling/grammar/style checks.
 - **Assignments & Planner** *(Plan)* — due dates, classes, checkboxes.
 - **Schedule Builder** *(Plan)* — weekly class & period grid.
-- **Code Playground** *(Toolbox)* — JS · Python (Pyodide) · HTML. *(The Phase 3.3
-  CS shelf would consolidate this with Truth Table, Matrix, and Base Converter.)*
+- **Code Playground** *(now Code shelf)* — JS · Python (Pyodide) · HTML;
+  originally on Toolbox, moved when Phase 3.3 consolidated it with Truth Table,
+  Matrix Calculator, and Base Converter onto the new Code shelf.
 - **Focus Lock** *(originally Study)* — fullscreen, hide tabs, countdown. *(Phase
   3.2's **Enhanced Focus Lock** superseded this: the tool was rebuilt with break
   cycles, soundscapes, and stats and moved to the Focus shelf, and the original
