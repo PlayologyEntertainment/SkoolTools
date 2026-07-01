@@ -430,6 +430,12 @@ main{padding:28px 28px 80px}
 .tool .pin-btn:hover{background:#00000033;color:var(--accent-2)}
 .tool.pinned .pin-btn{color:var(--accent-2)}
 .tool.pinned .pin-btn svg{fill:var(--accent-2)}
+.tool .recent-badge{
+  position:absolute;top:9px;right:33px;
+  width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+  color:var(--accent-4);pointer-events:none;
+}
+.tool .recent-badge svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8}
 .tool .ribbon{
   position:absolute;top:9px;right:38px;
   font-family:var(--mono);font-size:9px;letter-spacing:.12em;
@@ -7001,7 +7007,7 @@ function renderShelves() {
   }
 }
 
-function toolCard(t) {
+function toolCard(t, opts = {}) {
   const isPinned = pinned().includes(t.id);
   const isSoon = t.status === 'soon';
   const card = el('button', {
@@ -7013,6 +7019,13 @@ function toolCard(t) {
   card.appendChild(el('div', { class:'nm', text: t.name }));
   card.appendChild(el('div', { class:'ds', text: t.desc }));
   // Ribbons intentionally removed
+  if (opts.showRecent) {
+    const recentBadge = el('span', {
+      class:'recent-badge', attrs:{ 'aria-hidden':'true', title:'Recently used' }
+    });
+    recentBadge.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg>';
+    card.appendChild(recentBadge);
+  }
   const pinBtn = el('span', {
     class:'pin-btn', attrs:{ role:'button', 'aria-label': isPinned ? 'Unpin' : 'Pin', title: isPinned ? 'Unpin' : 'Pin' }
   });
@@ -7046,6 +7059,7 @@ function pushRecent(id) {
 }
 function renderRail() {
   const pinList = pinned().map(id => TOOLS.find(t => t.id === id)).filter(Boolean);
+  const recentIds = new Set(recents());
   const recentList = recents().map(id => TOOLS.find(t => t.id === id)).filter(Boolean);
   const seen = new Set(pinList.map(t => t.id));
   const combined = [...pinList, ...recentList.filter(t => !seen.has(t.id))];
@@ -7054,7 +7068,7 @@ function renderRail() {
   if (combined.length === 0) { rail.hidden = true; return; }
   rail.hidden = false;
   grid.innerHTML = '';
-  for (const t of combined.slice(0, 10)) grid.appendChild(toolCard(t));
+  for (const t of combined.slice(0, 10)) grid.appendChild(toolCard(t, { showRecent: recentIds.has(t.id) }));
 }
 
 /* =========================================================
