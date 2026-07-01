@@ -78,9 +78,16 @@ don't touch that guardrail:
 
 Recommendation: use both, reviewed weekly, and treat "1,000 tries" as
 "1,000 hits to SkoolToolz.html across the sprint" rather than a precise
-unique-visitor count. If you want tighter numbers later, that's a
-build-time decision (e.g. a cookieless, no-personal-data counter) worth a
-separate conversation — don't bolt it on mid-sprint.
+unique-visitor count.
+
+**Update:** `SkoolToolz.html` now also loads
+[GoatCounter](https://playologyentertainment.goatcounter.com/) — a
+cookieless, open-source, no-personal-data pageview counter (no accounts
+created for visitors, nothing beyond a hit count and referrer/UA, so it
+doesn't contradict the "no tracking" promise). It skips localhost/private-IP
+loads by default, so local dev doesn't pollute the dashboard. Use its
+dashboard as the primary "1,000 tries" source; server logs and UTM tags
+remain useful for per-channel breakdown.
 
 ---
 
