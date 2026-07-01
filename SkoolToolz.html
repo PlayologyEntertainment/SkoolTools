@@ -6453,6 +6453,9 @@ function registerTools() {
   TOOLS.push({ id:'music', shelf:'toolbox', icon:'🎵', name:'Music Theory',
     desc:'Scales, intervals, chords, keys, metronome — on a staff.', tag:'new',
     keywords:['music','theory','scale','scales','mode','major','minor','pentatonic','blues','dorian','interval','intervals','chord','chords','triad','seventh','key','key signature','circle of fifths','staff','notation','treble','bass','clef','metronome','tempo','bpm','sharp','flat','accidental','note','pitch','degree','tap tempo'], mount: mountMusic });
+  TOOLS.push({ id:'extracurricular', shelf:'toolbox', icon:'🏆', name:'Extracurricular Journal',
+    desc:'Athletics, jobs, clubs, arts & service — ranked and export-ready for college apps.',
+    keywords:['extracurricular','activities','activity','common app','coalition app','college application','college apps','athletics','sports','job','work','internship','club','clubs','arts','music','theater','dance','volunteer','volunteering','community service','leadership','journal','resume','activities list','ranking','rank','csv','pdf','print','export'], mount: mountExtracurricular });
 }
 
 /* =========================================================
@@ -6527,6 +6530,7 @@ const HELP_DESC = {
   dice: 'Roll dice or generate random integers, with an option to avoid repeats.',
   list: 'Pick, shuffle, sort, or dedupe a list of items.',
   music: 'Explore scales, intervals, chords, and keys on a real staff, with a built-in metronome.',
+  extracurricular: 'Log athletics, jobs, internships, clubs, arts, and service; rank your top 10 and export a Common App-ready list.',
 };
 
 function renderHelp() {
@@ -7131,7 +7135,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet' || id === 'extracurricular');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -18951,6 +18955,630 @@ function mountLabReport(root) {
 
   /* ── boot ── */
   renderTable();
+
+  return {
+    unmount() { document.removeEventListener('click', onDocClick); save(); }
+  };
+}
+
+/* ========== EXTRACURRICULAR JOURNAL ========== */
+function mountExtracurricular(root) {
+  const SKEY = 'extracurricular:v1';
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  const e = escape;
+
+  const CATEGORIES = [
+    ['athletics', 'Athletics (Club, JV/Varsity)', '🏅'],
+    ['job', 'Job (Paid Work)', '💼'],
+    ['internship', 'Internship', '🧑‍💻'],
+    ['clubs', 'Clubs & Organizations', '🤝'],
+    ['arts', 'Arts (Visual, Music, Theater, Dance)', '🎨'],
+    ['community', 'Community Service', '🤲'],
+    ['volunteering', 'Volunteering', '❤️'],
+    ['academic', 'Academic / Honor Society', '🎓'],
+    ['research', 'Research', '🔬'],
+    ['leadership', 'Student Government / Leadership', '🗳️'],
+    ['religious', 'Religious', '🕊️'],
+    ['family', 'Family Responsibilities', '🏠'],
+    ['hobby', 'Hobbies / Personal Interest', '⭐'],
+    ['other', 'Other', '🔹'],
+  ];
+  const catMeta = (v) => CATEGORIES.find(c => c[0] === v) || CATEGORIES[CATEGORIES.length - 1];
+  const catLabel = (v) => catMeta(v)[1];
+  const catIcon = (v) => catMeta(v)[2];
+
+  const GRADE_KEYS = [['g9', '9th'], ['g10', '10th'], ['g11', '11th'], ['g12', '12th'], ['pg', 'Post-grad']];
+  const TIMING_OPTS = [['year', 'During school year'], ['break', 'During school break'], ['all', 'All year']];
+  const timingLabel = (v) => { const t = TIMING_OPTS.find(x => x[0] === v); return t ? t[1] : '—'; };
+  const LIMITS = { org: 100, role: 50, description: 150 };
+  const MAX_COMMONAPP = 10;
+
+  const defaultEntry = () => ({
+    id: uid(), category: 'other', org: '', role: '', description: '', notes: '',
+    startDate: '', endDate: '', ongoing: false,
+    grades: { g9: false, g10: false, g11: false, g12: false, pg: false },
+    timing: 'year', hours: '', weeks: '', continueCollege: false,
+  });
+  const defaults = () => ({ v: 1, student: '', view: 'category', entries: [] });
+
+  function cleanEntry(x) {
+    const d = defaultEntry();
+    if (!x || typeof x !== 'object') return d;
+    const g = (x.grades && typeof x.grades === 'object') ? x.grades : {};
+    return {
+      id: String(x.id || uid()),
+      category: CATEGORIES.some(c => c[0] === x.category) ? x.category : 'other',
+      org: String(x.org || ''), role: String(x.role || ''),
+      description: String(x.description || ''), notes: String(x.notes || ''),
+      startDate: String(x.startDate || ''), endDate: String(x.endDate || ''), ongoing: !!x.ongoing,
+      grades: { g9: !!g.g9, g10: !!g.g10, g11: !!g.g11, g12: !!g.g12, pg: !!g.pg },
+      timing: TIMING_OPTS.some(t => t[0] === x.timing) ? x.timing : 'year',
+      hours: String(x.hours || ''), weeks: String(x.weeks || ''), continueCollege: !!x.continueCollege,
+    };
+  }
+
+  let state = Storage.get(SKEY, null);
+  if (!state || typeof state !== 'object' || !Array.isArray(state.entries)) state = defaults();
+  state.entries = state.entries.map(cleanEntry);
+  if (state.view !== 'category' && state.view !== 'timeline') state.view = 'category';
+  state.student = String(state.student || '');
+  const save = () => Storage.set(SKEY, state);
+
+  /* ── formatting helpers ── */
+  function fmtMonYear(d) {
+    if (!d) return '';
+    const parts = String(d).split('-');
+    if (parts.length < 2) return d;
+    const dt = new Date(+parts[0], +parts[1] - 1, 1);
+    if (isNaN(dt)) return d;
+    return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+  function dateRangeText(en) {
+    const s = fmtMonYear(en.startDate);
+    const end = en.ongoing ? 'Present' : fmtMonYear(en.endDate);
+    if (s && end) return s + ' – ' + end;
+    return s || end || '';
+  }
+  function gradesText(g) {
+    const on = GRADE_KEYS.filter(([k]) => g[k]).map(([, l]) => l);
+    return on.length ? on.join(', ') : '';
+  }
+  function overLimit(en) {
+    return { org: en.org.length > LIMITS.org, role: en.role.length > LIMITS.role, description: en.description.length > LIMITS.description };
+  }
+  function anyOverLimit(en) { const o = overLimit(en); return o.org || o.role || o.description; }
+  function topEntries() { return state.entries.slice(0, MAX_COMMONAPP); }
+
+  /* ── shell ── */
+  root.innerHTML = `
+    <style>
+      .xc-shell{display:flex;flex-direction:column;min-height:560px}
+      .xc-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--rule);margin-bottom:14px}
+      .xc-head h2{font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-.015em;margin:0}
+      .xc-head .field{margin:0;min-width:220px;flex:1}
+      .xc-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+      .xc-view-toggle{display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+      .xc-view-toggle button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px;background:none;border:none;color:var(--muted);cursor:pointer}
+      .xc-view-toggle button.active{background:var(--accent-soft);color:var(--accent)}
+      .xc-spacer{flex:1}
+      .xc-menu-wrap{position:relative}
+      .xc-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:6;background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;min-width:230px;overflow:hidden}
+      .xc-menu[hidden]{display:none}
+      .xc-menu .xc-menu-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:8px 12px 2px}
+      .xc-menu button{font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-align:left;padding:8px 12px;background:none;border:none;color:var(--ink-2);cursor:pointer;transition:background .1s,color .1s}
+      .xc-menu button:hover{background:var(--paper-3);color:var(--ink)}
+      .xc-menu hr{border:none;border-top:1px solid var(--rule);margin:4px 0}
+      .xc-stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+      .xc-group{margin-bottom:22px}
+      .xc-group-h{font-family:var(--serif);font-weight:500;font-size:16px;color:var(--ink);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+      .xc-group-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);background:var(--paper-2);border:1px solid var(--rule);border-radius:99px;padding:2px 8px}
+      .xc-card{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:14px 16px;margin-bottom:10px}
+      .xc-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+      .xc-cat-chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-2);background:var(--paper-3);border-radius:99px;padding:3px 10px}
+      .xc-card-actions{margin-left:auto;display:flex;gap:6px;align-items:center}
+      .xc-del{font-family:var(--mono);font-size:15px;line-height:1;color:var(--muted);background:none;border:1px solid var(--rule);border-radius:2px;cursor:pointer;width:24px;height:24px}
+      .xc-del:hover{color:var(--pink);border-color:var(--pink)}
+      .xc-card-org{font-family:var(--serif);font-weight:500;font-size:16.5px;letter-spacing:-.01em;margin:0 0 4px;color:var(--ink)}
+      .xc-card-meta{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin:0 0 6px}
+      .xc-card-desc,.xc-card-notes{font-family:var(--sans);font-size:13.5px;line-height:1.5;color:var(--ink-2);margin:0 0 4px;white-space:pre-wrap}
+      .xc-card-notes{color:var(--muted);font-style:italic}
+      .xc-modal-back{position:fixed;inset:0;z-index:60;background:#0008;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px}
+      .xc-modal{background:var(--paper-2);border:1px solid var(--ink-2);border-radius:4px;box-shadow:var(--shadow-card);padding:20px;width:min(560px,100%);max-height:90vh;overflow:auto}
+      .xc-modal.xc-modal-wide{width:min(680px,100%)}
+      .xc-modal h3{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.015em;margin:0 0 6px}
+      .xc-modal p{font-family:var(--sans);font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 12px}
+      .xc-modal-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+      .xc-count{font-family:var(--mono);font-size:10.5px;color:var(--muted);display:block;text-align:right;margin-top:2px}
+      .xc-count.over{color:var(--pink)}
+      .xc-chk{display:flex;align-items:center;gap:6px;font-family:var(--sans);font-size:13px;color:var(--ink-2);text-transform:none;letter-spacing:0;cursor:pointer}
+      .xc-chk input{width:auto}
+      .xc-grades,.xc-timing{display:flex;flex-wrap:wrap;gap:12px;margin-top:4px}
+      .xc-ranklist{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+      .xc-rankrow{display:flex;align-items:center;gap:10px;background:var(--paper-3);border:1px solid var(--rule);border-radius:2px;padding:8px 10px}
+      .xc-rankrow.xc-rank-cutoff{opacity:.55}
+      .xc-rank-num{font-family:var(--mono);font-size:12px;color:var(--accent-4);min-width:20px}
+      .xc-rank-name{flex:1;font-size:13.5px;color:var(--ink)}
+      .xc-rank-cat{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+      .xc-rank-btns{display:flex;gap:4px}
+      .xc-rank-btns button{font-family:var(--mono);font-size:11px;background:none;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);cursor:pointer;width:22px;height:22px}
+      .xc-rank-btns button:disabled{opacity:.3;cursor:default}
+      .xc-rank-line{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--pink);text-align:center;padding:6px 0;border-top:1px dashed var(--pink);margin-top:2px}
+      .xc-print{display:none}
+      @media print{
+        .panel-backdrop,.panel-head,.panel-foot,.toast{display:none!important}
+        .panel{position:static!important;transform:none!important;box-shadow:none!important;border:none!important;max-height:none!important;width:100%!important;background:#fff!important}
+        .panel-body{overflow:visible!important;background:#fff!important;padding:0!important}
+        .xc-shell > *:not(.xc-print){display:none!important}
+        .xc-print{display:block!important;color:#000;font-family:Georgia,'Times New Roman',serif;padding:.25in 0}
+        .xc-print h1{font-size:22px;margin:0 0 4px}
+        .xc-print .xc-psub{font-size:12px;color:#444;margin:0 0 16px}
+        .xc-print h2{font-size:14px;margin:18px 0 4px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid #ccc;padding-bottom:3px}
+        .xc-print .xc-pitem{margin:0 0 12px;page-break-inside:avoid}
+        .xc-print .xc-pitem h3{font-size:14px;margin:0 0 3px}
+        .xc-print .xc-pmeta{font-size:11.5px;color:#333;margin:0 0 4px}
+        .xc-print p{font-size:12.5px;line-height:1.5;margin:0 0 4px}
+        .xc-print .xc-pwarn{color:#a00}
+        @page{margin:.75in}
+      }
+    </style>
+    <div class="xc-shell">
+      <div class="xc-head">
+        <h2>Extracurricular Journal</h2>
+        <div class="field">
+          <label for="xc-student">Student name / school (shown on exports)</label>
+          <input class="input" id="xc-student" maxlength="120" placeholder="Jordan Lee, Lincoln High School" value="${e(state.student)}">
+        </div>
+      </div>
+      <div class="xc-toolbar">
+        <button class="btn accent sm" id="xc-add">+ Add Activity</button>
+        <button class="btn ghost sm" id="xc-rank">Rank for Export</button>
+        <div class="xc-view-toggle" role="tablist">
+          <button data-view="category" class="${state.view === 'category' ? 'active' : ''}">By Category</button>
+          <button data-view="timeline" class="${state.view === 'timeline' ? 'active' : ''}">Timeline</button>
+        </div>
+        <div class="xc-spacer"></div>
+        <div class="xc-menu-wrap">
+          <button class="btn ghost sm" id="xc-export-btn" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+          <div class="xc-menu" id="xc-export-menu" role="menu" hidden>
+            <div class="xc-menu-lbl">Print</div>
+            <button data-act="print-full" role="menuitem">Full journal — Print / PDF</button>
+            <button data-act="print-commonapp" role="menuitem">Common App list (Top 10) — Print / PDF</button>
+            <hr>
+            <div class="xc-menu-lbl">Text</div>
+            <button data-act="md" role="menuitem">Full journal — Markdown .md</button>
+            <button data-act="txt" role="menuitem">Full journal — Plain text .txt</button>
+            <button data-act="commonapp-txt" role="menuitem">Common App list (Top 10) .txt</button>
+            <hr>
+            <div class="xc-menu-lbl">Data</div>
+            <button data-act="csv" role="menuitem">Spreadsheet .csv</button>
+            <button data-act="json" role="menuitem">Backup .json</button>
+            <button data-act="import" role="menuitem">Import backup…</button>
+          </div>
+        </div>
+      </div>
+      <div class="xc-stats" id="xc-stats"></div>
+      <div id="xc-list"></div>
+      <input type="file" id="xc-import-file" accept=".json,application/json" style="display:none">
+      <div class="xc-print" aria-hidden="true"></div>
+    </div>
+  `;
+
+  /* ── card + list rendering ── */
+  function entryCardHTML(en) {
+    const meta = [dateRangeText(en), gradesText(en.grades), timingLabel(en.timing),
+      en.hours ? `${e(en.hours)} hrs/wk` : '', en.weeks ? `${e(en.weeks)} wks/yr` : '']
+      .filter(Boolean).join(' · ');
+    return `
+      <div class="xc-card" data-id="${en.id}">
+        <div class="xc-card-top">
+          <span class="xc-cat-chip">${catIcon(en.category)} ${e(catLabel(en.category))}</span>
+          ${anyOverLimit(en) ? '<span class="chip warn" title="Exceeds a Common App character limit">⚠ over limit</span>' : ''}
+          <div class="xc-card-actions">
+            <button class="btn ghost sm" data-edit="${en.id}">Edit</button>
+            <button class="xc-del" data-del="${en.id}" aria-label="Delete">×</button>
+          </div>
+        </div>
+        <h4 class="xc-card-org">${e(en.org) || 'Untitled activity'}${en.role ? ' — ' + e(en.role) : ''}</h4>
+        ${meta ? `<p class="xc-card-meta">${meta}</p>` : ''}
+        ${en.description.trim() ? `<p class="xc-card-desc">${e(en.description.trim())}</p>` : ''}
+        ${en.notes.trim() ? `<p class="xc-card-notes">${e(en.notes.trim())}</p>` : ''}
+      </div>`;
+  }
+  function renderStats() {
+    const n = state.entries.length;
+    const overN = state.entries.filter(anyOverLimit).length;
+    let html = `<span class="chip">${n} ${n === 1 ? 'activity' : 'activities'} logged</span>`;
+    if (n > MAX_COMMONAPP) html += `<span class="chip">Top ${MAX_COMMONAPP} ranked for Common App export</span>`;
+    if (overN) html += `<span class="chip warn">${overN} over a Common App limit — see “Rank for Export”</span>`;
+    $('#xc-stats', root).innerHTML = html;
+  }
+  function renderList() {
+    const listEl = $('#xc-list', root);
+    if (!state.entries.length) {
+      listEl.innerHTML = '<p class="help">No activities yet. Click “+ Add Activity” to start your journal — athletics, jobs, internships, clubs, arts, community service, volunteering, and anything else that belongs on a college application.</p>';
+    } else if (state.view === 'timeline') {
+      const withDate = [], without = [];
+      state.entries.forEach((en, i) => (en.startDate ? withDate : without).push({ en, i }));
+      withDate.sort((a, b) => a.en.startDate.localeCompare(b.en.startDate) || a.i - b.i);
+      listEl.innerHTML = withDate.concat(without).map(x => entryCardHTML(x.en)).join('');
+    } else {
+      listEl.innerHTML = CATEGORIES.map(([v, label, icon]) => {
+        const items = state.entries.filter(en => en.category === v);
+        if (!items.length) return '';
+        return `<div class="xc-group"><h3 class="xc-group-h">${icon} ${e(label)} <span class="xc-group-count">${items.length}</span></h3>${items.map(entryCardHTML).join('')}</div>`;
+      }).join('');
+    }
+    renderStats();
+  }
+
+  /* ── modal scaffolding ── */
+  function closeModal() { root.querySelector('.xc-modal-back')?.remove(); }
+  function modal(build) {
+    closeModal();
+    const back = el('div', { class: 'xc-modal-back' });
+    const box = el('div', { class: 'xc-modal' });
+    back.appendChild(box);
+    back.addEventListener('pointerdown', (ev) => { if (ev.target === back) closeModal(); });
+    build(box, closeModal);
+    root.appendChild(back);
+    return box;
+  }
+
+  /* ── add/edit entry dialog ── */
+  function entryFormHTML(en, isEdit) {
+    return `
+      <h3>${isEdit ? 'Edit activity' : 'Add activity'}</h3>
+      <div class="field">
+        <label for="xc-f-cat">Category</label>
+        <select class="input" id="xc-f-cat">${CATEGORIES.map(([v, l]) => `<option value="${v}"${v === en.category ? ' selected' : ''}>${e(l)}</option>`).join('')}</select>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="xc-f-org">Organization / activity name</label><input class="input" id="xc-f-org" maxlength="300" placeholder="Lincoln High School Varsity Soccer" value="${e(en.org)}"><span class="xc-count" id="xc-count-org"></span></div>
+        <div class="field"><label for="xc-f-role">Position / role / leadership</label><input class="input" id="xc-f-role" maxlength="300" placeholder="Team Captain" value="${e(en.role)}"><span class="xc-count" id="xc-count-role"></span></div>
+      </div>
+      <div class="field">
+        <label for="xc-f-desc">Description</label>
+        <textarea class="input" id="xc-f-desc" rows="3" maxlength="800" placeholder="What did you actually do? Common App gives you about 150 characters here.">${e(en.description)}</textarea>
+        <span class="xc-count" id="xc-count-desc"></span>
+      </div>
+      <div class="field">
+        <label for="xc-f-notes">Journal notes &amp; accomplishments</label>
+        <textarea class="input" id="xc-f-notes" rows="3" placeholder="Awards, stats, growth, reflections — for your own record, no limit.">${e(en.notes)}</textarea>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label for="xc-f-start">Start date</label><input class="input" type="date" id="xc-f-start" value="${e(en.startDate)}"></div>
+        <div class="field"><label for="xc-f-end">End date</label><input class="input" type="date" id="xc-f-end" value="${e(en.endDate)}"${en.ongoing ? ' disabled' : ''}></div>
+        <div class="field"><label>&nbsp;</label><label class="xc-chk"><input type="checkbox" id="xc-f-ongoing"${en.ongoing ? ' checked' : ''}> Ongoing</label></div>
+      </div>
+      <div class="field">
+        <label>Grade level(s) involved</label>
+        <div class="xc-grades">${GRADE_KEYS.map(([k, l]) => `<label class="xc-chk"><input type="checkbox" data-grade="${k}"${en.grades[k] ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+      </div>
+      <div class="field">
+        <label>Timing of participation</label>
+        <div class="xc-timing">${TIMING_OPTS.map(([v, l]) => `<label class="xc-chk"><input type="radio" name="xc-f-timing" value="${v}"${en.timing === v ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="xc-f-hours">Hours / week</label><input class="input" type="number" min="0" max="80" id="xc-f-hours" value="${e(en.hours)}"></div>
+        <div class="field"><label for="xc-f-weeks">Weeks / year</label><input class="input" type="number" min="0" max="52" id="xc-f-weeks" value="${e(en.weeks)}"></div>
+      </div>
+      <label class="xc-chk"><input type="checkbox" id="xc-f-continue"${en.continueCollege ? ' checked' : ''}> Plans to continue this activity in college</label>
+      <div class="xc-modal-row">
+        <button class="btn accent sm" id="xc-f-save">Save activity</button>
+        <button class="btn ghost sm" id="xc-f-cancel">Cancel</button>
+        ${isEdit ? '<button class="btn ghost sm" id="xc-f-delete" style="margin-left:auto;color:var(--pink)">Delete</button>' : ''}
+      </div>
+    `;
+  }
+  function openEntryDialog(existing) {
+    const en = existing ? { ...existing, grades: { ...existing.grades } } : defaultEntry();
+    modal((box, close) => {
+      box.innerHTML = entryFormHTML(en, !!existing);
+      const orgInp = box.querySelector('#xc-f-org'), roleInp = box.querySelector('#xc-f-role'), descInp = box.querySelector('#xc-f-desc');
+      const setCount = (sel, val, limit) => {
+        const c = box.querySelector(sel);
+        c.textContent = `${val.length} / ${limit} (Common App limit)`;
+        c.classList.toggle('over', val.length > limit);
+      };
+      const refreshCounts = () => {
+        setCount('#xc-count-org', orgInp.value, LIMITS.org);
+        setCount('#xc-count-role', roleInp.value, LIMITS.role);
+        setCount('#xc-count-desc', descInp.value, LIMITS.description);
+      };
+      [orgInp, roleInp, descInp].forEach(i => i.addEventListener('input', refreshCounts));
+      refreshCounts();
+      const ongoingChk = box.querySelector('#xc-f-ongoing');
+      const endInp = box.querySelector('#xc-f-end');
+      ongoingChk.addEventListener('change', () => {
+        endInp.disabled = ongoingChk.checked;
+        if (ongoingChk.checked) endInp.value = '';
+      });
+      box.querySelector('#xc-f-cancel').addEventListener('click', close);
+      const delBtn = box.querySelector('#xc-f-delete');
+      if (delBtn) delBtn.addEventListener('click', () => {
+        if (!confirm(`Delete “${en.org || 'this activity'}”? This can’t be undone.`)) return;
+        state.entries = state.entries.filter(x => x.id !== en.id);
+        save(); renderList(); close();
+        showToast('Deleted.');
+      });
+      box.querySelector('#xc-f-save').addEventListener('click', () => {
+        const updated = {
+          ...en,
+          category: box.querySelector('#xc-f-cat').value,
+          org: orgInp.value.trim(), role: roleInp.value.trim(),
+          description: descInp.value.trim(), notes: box.querySelector('#xc-f-notes').value.trim(),
+          startDate: box.querySelector('#xc-f-start').value, endDate: endInp.value,
+          ongoing: ongoingChk.checked,
+          grades: Object.fromEntries(GRADE_KEYS.map(([k]) => [k, box.querySelector(`[data-grade="${k}"]`).checked])),
+          timing: box.querySelector('input[name="xc-f-timing"]:checked')?.value || 'year',
+          hours: box.querySelector('#xc-f-hours').value, weeks: box.querySelector('#xc-f-weeks').value,
+          continueCollege: box.querySelector('#xc-f-continue').checked,
+        };
+        if (!updated.org && !updated.role) { showToast('Give it at least an organization or role name.'); return; }
+        const idx = state.entries.findIndex(x => x.id === updated.id);
+        if (idx >= 0) state.entries[idx] = updated; else state.entries.push(updated);
+        save(); renderList(); close();
+        showToast(existing ? 'Activity updated.' : 'Activity added.');
+      });
+    });
+  }
+
+  /* ── rank-for-export dialog ── */
+  function moveEntry(id, dir) {
+    const i = state.entries.findIndex(x => x.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= state.entries.length) return;
+    [state.entries[i], state.entries[j]] = [state.entries[j], state.entries[i]];
+    save();
+  }
+  function openRankDialog() {
+    modal((box, close) => {
+      box.classList.add('xc-modal-wide');
+      box.innerHTML = `
+        <h3>Rank activities for college applications</h3>
+        <p>Order matters — the Common App only takes your top 10. Use the arrows to reorder; activities below the line won't be included in a Common App export (but stay in your full journal).</p>
+        <div class="xc-ranklist" id="xc-ranklist"></div>
+        <div class="xc-modal-row"><button class="btn ghost sm" id="xc-rank-close">Done</button></div>
+      `;
+      const listEl = box.querySelector('#xc-ranklist');
+      function renderRank() {
+        if (!state.entries.length) { listEl.innerHTML = '<p class="help">No activities yet.</p>'; return; }
+        listEl.innerHTML = state.entries.map((en, i) => `
+          ${i === MAX_COMMONAPP ? '<div class="xc-rank-line">Common App cutoff — top 10 above</div>' : ''}
+          <div class="xc-rankrow${i >= MAX_COMMONAPP ? ' xc-rank-cutoff' : ''}" data-id="${en.id}">
+            <span class="xc-rank-num">${i + 1}</span>
+            <span class="xc-rank-name">${e(en.org) || 'Untitled activity'}${en.role ? ' — ' + e(en.role) : ''}</span>
+            <span class="xc-rank-cat">${e(catLabel(en.category))}</span>
+            <div class="xc-rank-btns">
+              <button data-up="${en.id}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">▲</button>
+              <button data-down="${en.id}" ${i === state.entries.length - 1 ? 'disabled' : ''} aria-label="Move down">▼</button>
+            </div>
+          </div>`).join('');
+      }
+      listEl.addEventListener('click', (ev) => {
+        const up = ev.target.closest('[data-up]');
+        const down = ev.target.closest('[data-down]');
+        if (up) { moveEntry(up.dataset.up, -1); renderRank(); renderList(); }
+        else if (down) { moveEntry(down.dataset.down, 1); renderRank(); renderList(); }
+      });
+      renderRank();
+      box.querySelector('#xc-rank-close').addEventListener('click', close);
+    });
+  }
+
+  /* ── exporters ── */
+  function downloadBlob(name, content, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }
+  const slug = () => (state.student.trim() || 'extracurricular-journal').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase().slice(0, 60) || 'extracurricular-journal';
+  const genDate = () => new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  function entryLinesMd(en) {
+    const lines = [`### ${en.org || 'Untitled activity'}${en.role ? ' — ' + en.role : ''}`];
+    const meta = [];
+    const dr = dateRangeText(en); if (dr) meta.push(dr);
+    const gt = gradesText(en.grades); if (gt) meta.push(`Grades ${gt}`);
+    meta.push(timingLabel(en.timing));
+    if (en.hours) meta.push(`${en.hours} hrs/wk`);
+    if (en.weeks) meta.push(`${en.weeks} wks/yr`);
+    lines.push(meta.join(' · '));
+    if (en.continueCollege) lines.push('_Plans to continue in college_');
+    if (en.description.trim()) lines.push('', en.description.trim());
+    if (en.notes.trim()) lines.push('', `Notes: ${en.notes.trim()}`);
+    return lines.join('\n');
+  }
+  function buildMarkdown() {
+    let md = `# Extracurricular Journal\n\n`;
+    if (state.student.trim()) md += `**Student:** ${state.student.trim()}  \n`;
+    md += `**Generated:** ${genDate()}\n\n`;
+    CATEGORIES.forEach(([v, label]) => {
+      const items = state.entries.filter(en => en.category === v);
+      if (!items.length) return;
+      md += `## ${label}\n\n` + items.map(entryLinesMd).join('\n\n') + '\n\n';
+    });
+    return md.trim() + '\n';
+  }
+  function entryLinesText(en) {
+    const lines = [(en.org || 'Untitled activity') + (en.role ? ' — ' + en.role : '')];
+    const meta = [];
+    const dr = dateRangeText(en); if (dr) meta.push(dr);
+    const gt = gradesText(en.grades); if (gt) meta.push('Grades ' + gt);
+    meta.push(timingLabel(en.timing));
+    if (en.hours) meta.push(en.hours + ' hrs/wk');
+    if (en.weeks) meta.push(en.weeks + ' wks/yr');
+    lines.push('  ' + meta.join(' · '));
+    if (en.continueCollege) lines.push('  Plans to continue in college');
+    if (en.description.trim()) lines.push('', '  ' + en.description.trim());
+    if (en.notes.trim()) lines.push('', '  Notes: ' + en.notes.trim());
+    return lines.join('\n');
+  }
+  function buildText() {
+    let out = 'EXTRACURRICULAR JOURNAL\n' + '='.repeat(24) + '\n\n';
+    if (state.student.trim()) out += 'Student: ' + state.student.trim() + '\n';
+    out += 'Generated: ' + genDate() + '\n\n';
+    CATEGORIES.forEach(([v, label]) => {
+      const items = state.entries.filter(en => en.category === v);
+      if (!items.length) return;
+      out += label.toUpperCase() + '\n\n' + items.map(entryLinesText).join('\n\n') + '\n\n';
+    });
+    return out.trim() + '\n';
+  }
+  function csvEscape(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+  function buildCSV() {
+    const headers = ['Rank', 'Category', 'Organization', 'Position/Role', 'Description', 'Notes', 'Start Date', 'End Date', 'Ongoing', 'Grade Levels', 'Timing', 'Hours/Week', 'Weeks/Year', 'Continue In College'];
+    const rows = state.entries.map((en, i) => [
+      i + 1, catLabel(en.category), en.org, en.role, en.description, en.notes,
+      en.startDate, en.ongoing ? '' : en.endDate, en.ongoing ? 'Yes' : 'No',
+      gradesText(en.grades), timingLabel(en.timing), en.hours, en.weeks, en.continueCollege ? 'Yes' : 'No',
+    ]);
+    return [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\r\n') + '\r\n';
+  }
+  function buildCommonAppText() {
+    const top = topEntries();
+    let out = 'COMMON APP ACTIVITIES LIST\n' + '='.repeat(26) + '\n\n';
+    if (state.student.trim()) out += 'Student: ' + state.student.trim() + '\n';
+    out += `Ranked by order of importance — showing ${top.length} of ${state.entries.length} logged activities.\n\n`;
+    top.forEach((en, i) => {
+      const ov = overLimit(en);
+      out += `${i + 1}. ${catLabel(en.category).toUpperCase()}\n`;
+      out += `   Position/Leadership: ${en.role || '—'}${ov.role ? ' (over 50-char limit)' : ''}\n`;
+      out += `   Organization Name: ${en.org || '—'}${ov.org ? ' (over 100-char limit)' : ''}\n`;
+      out += `   Description: ${en.description || '—'} (${en.description.length}/${LIMITS.description} characters)${ov.description ? ' — OVER LIMIT' : ''}\n`;
+      const meta = ['Grades ' + (gradesText(en.grades) || '—'), timingLabel(en.timing)];
+      if (en.hours) meta.push(en.hours + ' hrs/wk');
+      if (en.weeks) meta.push(en.weeks + ' wks/yr');
+      out += `   Participation: ${meta.join(' · ')}\n`;
+      out += `   Plans to continue in college: ${en.continueCollege ? 'Yes' : 'No'}\n\n`;
+    });
+    const extra = state.entries.length - MAX_COMMONAPP;
+    if (extra > 0) out += `Note: ${extra} additional activit${extra === 1 ? 'y is' : 'ies are'} logged in the full journal but not shown here — use “Rank for Export” to change which 10 appear.\n`;
+    return out.trim() + '\n';
+  }
+  function buildPrintFullHTML() {
+    let h = `<h1>Extracurricular Journal</h1>`;
+    const sub = [];
+    if (state.student.trim()) sub.push(e(state.student.trim()));
+    sub.push(genDate());
+    h += `<p class="xc-psub">${sub.join(' &nbsp;·&nbsp; ')}</p>`;
+    CATEGORIES.forEach(([v, label]) => {
+      const items = state.entries.filter(en => en.category === v);
+      if (!items.length) return;
+      h += `<h2>${e(label)}</h2>`;
+      items.forEach(en => {
+        const meta = [];
+        const dr = dateRangeText(en); if (dr) meta.push(e(dr));
+        const gt = gradesText(en.grades); if (gt) meta.push('Grades ' + e(gt));
+        meta.push(e(timingLabel(en.timing)));
+        if (en.hours) meta.push(e(en.hours) + ' hrs/wk');
+        if (en.weeks) meta.push(e(en.weeks) + ' wks/yr');
+        if (en.continueCollege) meta.push('plans to continue in college');
+        h += `<div class="xc-pitem"><h3>${e(en.org) || 'Untitled activity'}${en.role ? ' — ' + e(en.role) : ''}</h3>`;
+        if (meta.length) h += `<p class="xc-pmeta">${meta.join(' &nbsp;·&nbsp; ')}</p>`;
+        if (en.description.trim()) h += `<p>${e(en.description.trim())}</p>`;
+        if (en.notes.trim()) h += `<p><em>${e(en.notes.trim())}</em></p>`;
+        h += `</div>`;
+      });
+    });
+    return h;
+  }
+  function buildPrintCommonAppHTML() {
+    const top = topEntries();
+    let h = `<h1>Common App Activities List</h1>`;
+    const sub = [];
+    if (state.student.trim()) sub.push(e(state.student.trim()));
+    sub.push(`Top ${top.length} of ${state.entries.length} logged activities, ranked by importance`);
+    h += `<p class="xc-psub">${sub.join(' &nbsp;·&nbsp; ')}</p>`;
+    top.forEach((en, i) => {
+      const ov = overLimit(en);
+      h += `<div class="xc-pitem"><h3>${i + 1}. ${e(catLabel(en.category))}</h3>`;
+      h += `<p class="xc-pmeta"><strong>Position/Leadership:</strong> ${e(en.role) || '—'}${ov.role ? ' <span class="xc-pwarn">(over 50-char limit)</span>' : ''}</p>`;
+      h += `<p class="xc-pmeta"><strong>Organization Name:</strong> ${e(en.org) || '—'}${ov.org ? ' <span class="xc-pwarn">(over 100-char limit)</span>' : ''}</p>`;
+      h += `<p><strong>Description:</strong> ${e(en.description) || '—'}${ov.description ? ' <span class="xc-pwarn">(over 150-char limit)</span>' : ''}</p>`;
+      const meta = ['Grades ' + (gradesText(en.grades) || '—'), e(timingLabel(en.timing))];
+      if (en.hours) meta.push(e(en.hours) + ' hrs/wk');
+      if (en.weeks) meta.push(e(en.weeks) + ' wks/yr');
+      meta.push('Continue in college: ' + (en.continueCollege ? 'Yes' : 'No'));
+      h += `<p class="xc-pmeta">${meta.join(' &nbsp;·&nbsp; ')}</p></div>`;
+    });
+    const extra = state.entries.length - MAX_COMMONAPP;
+    if (extra > 0) h += `<p class="xc-pwarn">${extra} additional activit${extra === 1 ? 'y is' : 'ies are'} logged in the full journal but not shown in this list.</p>`;
+    return h;
+  }
+
+  /* ── toolbar & list bindings ── */
+  $$('.xc-view-toggle button', root).forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.view = btn.dataset.view; save();
+      $$('.xc-view-toggle button', root).forEach(b => b.classList.toggle('active', b === btn));
+      renderList();
+    });
+  });
+  $('#xc-student', root).addEventListener('input', (ev) => { state.student = ev.target.value; save(); });
+  $('#xc-add', root).addEventListener('click', () => openEntryDialog(null));
+  $('#xc-rank', root).addEventListener('click', () => openRankDialog());
+  $('#xc-list', root).addEventListener('click', (ev) => {
+    const editBtn = ev.target.closest('[data-edit]');
+    if (editBtn) { const en = state.entries.find(x => x.id === editBtn.dataset.edit); if (en) openEntryDialog(en); return; }
+    const delBtn = ev.target.closest('[data-del]');
+    if (delBtn) {
+      const en = state.entries.find(x => x.id === delBtn.dataset.del);
+      if (!en) return;
+      if (!confirm(`Delete “${en.org || 'this activity'}”? This can’t be undone.`)) return;
+      state.entries = state.entries.filter(x => x.id !== en.id);
+      save(); renderList();
+      showToast('Deleted.');
+    }
+  });
+
+  const exportMenu = $('#xc-export-menu', root);
+  const exportBtn = $('#xc-export-btn', root);
+  const closeExportMenu = () => { exportMenu.hidden = true; exportBtn.setAttribute('aria-expanded', 'false'); };
+  exportBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const open = exportMenu.hidden;
+    exportMenu.hidden = !open;
+    exportBtn.setAttribute('aria-expanded', String(open));
+  });
+  const onDocClick = (ev) => { if (!exportMenu.hidden && !ev.target.closest('.xc-menu-wrap')) closeExportMenu(); };
+  document.addEventListener('click', onDocClick);
+  exportMenu.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-act]');
+    if (!b) return;
+    const act = b.dataset.act;
+    closeExportMenu();
+    if (act === 'print-full') { $('.xc-print', root).innerHTML = buildPrintFullHTML(); window.print(); }
+    else if (act === 'print-commonapp') { $('.xc-print', root).innerHTML = buildPrintCommonAppHTML(); window.print(); }
+    else if (act === 'md') { downloadBlob(slug() + '.md', buildMarkdown(), 'text/markdown'); showToast('Exported .md'); }
+    else if (act === 'txt') { downloadBlob(slug() + '.txt', buildText(), 'text/plain'); showToast('Exported .txt'); }
+    else if (act === 'commonapp-txt') { downloadBlob(slug() + '-common-app.txt', buildCommonAppText(), 'text/plain'); showToast('Exported Common App list'); }
+    else if (act === 'csv') { downloadBlob(slug() + '.csv', buildCSV(), 'text/csv'); showToast('Exported .csv'); }
+    else if (act === 'json') { downloadBlob(slug() + '.json', JSON.stringify(state, null, 2), 'application/json'); showToast('Exported backup'); }
+    else if (act === 'import') { $('#xc-import-file', root).click(); }
+  });
+  $('#xc-import-file', root).addEventListener('change', (ev) => {
+    const f = ev.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const data = JSON.parse(rd.result);
+        if (!data || !Array.isArray(data.entries)) { showToast('Not an Extracurricular Journal backup.'); return; }
+        if (state.entries.length && !confirm('Replace your current journal with this backup? This can’t be undone.')) return;
+        state = { v: 1, student: String(data.student || ''), view: state.view, entries: data.entries.map(cleanEntry) };
+        save();
+        $('#xc-student', root).value = state.student;
+        renderList();
+        showToast('Backup imported.');
+      } catch { showToast('Could not read that file.'); }
+    };
+    rd.readAsText(f);
+    ev.target.value = '';
+  });
+
+  /* ── boot ── */
+  renderList();
 
   return {
     unmount() { document.removeEventListener('click', onDocClick); save(); }
