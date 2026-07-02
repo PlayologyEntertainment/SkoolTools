@@ -2784,6 +2784,46 @@ const Storage = {
   remove(key) { try { localStorage.removeItem(this.prefix + key); } catch {} }
 };
 
+/* ----------- Shared Class List (app-wide) -----------
+ * One master list of {id,name,room,teacher,color} school classes, created
+ * and edited ONLY from Schedule Builder's "Class List" view. Assignments &
+ * Planner and GPA Calculator read it (read-only) so a class is entered once
+ * and reused everywhere. Independent from any individual schedule's own
+ * per-tab class pool in Schedule Builder. */
+const CLASS_LIST_PALETTE = [
+  '#FF5A3D', '#FFD23F', '#4EAE53', '#6A95FF', '#B58BFF',
+  '#FF7AA8', '#5BC9D6', '#F08544', '#7FB342', '#E94B92'
+];
+const ClassList = {
+  key: 'classlist:v1',
+  get() {
+    let list = Storage.get(this.key, null);
+    if (list) return list;
+    list = this._bootstrap();
+    this.set(list);
+    return list;
+  },
+  set(list) { Storage.set(this.key, list); },
+  // First-ever read: adopt Assignments & Planner's existing classes (so
+  // assignments keep pointing at valid class ids), otherwise seed a few
+  // example classes so the list isn't empty on first run.
+  _bootstrap() {
+    const plannerClasses = Storage.get('planner:classes', null);
+    if (plannerClasses && plannerClasses.length) {
+      return plannerClasses.map(c => ({
+        id: c.id, name: c.name, room: '', teacher: '', color: c.color
+      }));
+    }
+    return [
+      { id:'m1', name:'English',    room:'201', teacher:'Ms. Reyes',   color:CLASS_LIST_PALETTE[3] },
+      { id:'m2', name:'AP Calc',    room:'318', teacher:'Mr. Okafor',  color:CLASS_LIST_PALETTE[0] },
+      { id:'m3', name:'Bio',        room:'112', teacher:'Dr. Lin',     color:CLASS_LIST_PALETTE[2] },
+      { id:'m4', name:'US History', room:'205', teacher:'Mr. Delgado', color:CLASS_LIST_PALETTE[4] },
+      { id:'m5', name:'Spanish',    room:'114', teacher:'Sra. Marín',  color:CLASS_LIST_PALETTE[5] },
+    ];
+  }
+};
+
 /* ----------- Dyslexia-Friendly Mode (app-wide) ----------- *
  * A single global toggle that, when on, swaps the whole app to Atkinson
  * Hyperlegible (embedded above) and opens up line height + letter/word
@@ -14422,6 +14462,7 @@ function mountGpa(root) {
   ]);
 
   root.innerHTML = `
+    <datalist id="gpa-classlist">${ClassList.get().map(c => `<option value="${escape(c.name)}">`).join('')}</datalist>
     <table class="data">
       <thead><tr><th>Class</th><th>Grade</th><th class="num">Credits</th><th>Weight</th><th class="actions"></th></tr></thead>
       <tbody id="rows"></tbody>
@@ -14444,7 +14485,7 @@ function mountGpa(root) {
     rows.forEach((r, idx) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="input" data-k="class" value="${escape(r.class)}" style="padding:6px 8px;font-size:14px"></td>
+        <td><input class="input" data-k="class" value="${escape(r.class)}" list="gpa-classlist" style="padding:6px 8px;font-size:14px"></td>
         <td><select class="input" data-k="grade" style="padding:6px 8px;font-size:14px">${grades.map(g => `<option ${g===r.grade?'selected':''}>${g}</option>`).join('')}</select></td>
         <td class="num"><input class="input mono" data-k="credits" type="number" min="0" step="0.5" value="${r.credits}" style="padding:6px 8px;font-size:14px;text-align:right;width:80px"></td>
         <td><select class="input" data-k="weight" style="padding:6px 8px;font-size:14px">${weights.map(w => `<option ${w===r.weight?'selected':''}>${w}</option>`).join('')}</select></td>
@@ -19936,21 +19977,17 @@ function mountList(root) {
 /* ========== ASSIGNMENTS & PLANNER ========== */
 function mountPlanner(root) {
   /* ---- Data model ----
-     classes: [{ id, name, color }]
+     classes: [{ id, name, room, teacher, color }] — from the shared Class List
      assignments: [{ id, classId, title, due, done }]
   */
-  const PALETTE = [
-    '#FF5A3D','#6A95FF','#4EAE53','#FFD23F',
-    '#B58BFF','#FF7AA8','#5BC9D6','#F08544'
-  ];
-
-  let classes     = Storage.get('planner:classes', []);
+  // Classes come from the shared Class List (managed in Schedule Builder);
+  // Planner only reads it and links assignments to a classId.
+  let classes     = ClassList.get();
   let assignments = Storage.get('planner:assignments', []);
 
   // ---- Helpers ----
   const uid = () => Math.random().toString(36).slice(2, 9);
   const save = () => {
-    Storage.set('planner:classes', classes);
     Storage.set('planner:assignments', assignments);
   };
 
@@ -20177,17 +20214,24 @@ function mountPlanner(root) {
         color:var(--muted-2);margin-top:8px;
       }
 
-      /* Manage classes modal */
+      /* Manage classes modal (read-only — classes are edited in Schedule Builder) */
       .pln-class-list{margin:10px 0;display:flex;flex-direction:column;gap:6px}
       .pln-cls-row{
         display:flex;align-items:center;gap:8px;
         padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);
       }
-      .pln-cls-swatch{width:16px;height:16px;border-radius:50%;flex-shrink:0;cursor:pointer;border:2px solid transparent;outline:2px solid transparent;transition:outline .1s}
-      .pln-cls-swatch:hover{outline-color:var(--ink-2)}
-      .pln-cls-name-inp{flex:1;background:transparent;border:none;outline:none;font-size:14px;color:var(--ink);padding:0}
-      .pln-cls-del{opacity:.5;color:var(--muted);font-size:16px;padding:2px 4px;transition:opacity .1s,color .1s}
-      .pln-cls-del:hover{opacity:1;color:var(--accent)}
+      .pln-cls-swatch{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+      .pln-cls-info{flex:1;min-width:0}
+      .pln-cls-name{font-size:14px;color:var(--ink)}
+      .pln-cls-sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.04em;margin-top:1px}
+      .pln-cls-empty{
+        font-family:var(--serif);font-size:13px;color:var(--muted);
+        line-height:1.35;padding:6px 2px;
+      }
+      .pln-manage-hint{
+        font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;line-height:1.4;
+        color:var(--muted-2);margin:12px 0 8px;
+      }
 
       /* Summary strip */
       .pln-summary{
@@ -20214,14 +20258,6 @@ function mountPlanner(root) {
       }
       .pln-overlay.open{display:block}
       .pln-overlay h4{margin:0 0 12px;font-family:var(--serif);font-size:16px;font-weight:500}
-      .pln-palette-row{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}
-      .pln-palette-swatch{
-        width:20px;height:20px;border-radius:50%;cursor:pointer;
-        border:2px solid transparent;transition:transform .1s,outline .1s;
-        outline:2px solid transparent;outline-offset:2px;
-      }
-      .pln-palette-swatch:hover{transform:scale(1.15)}
-      .pln-palette-swatch.selected{outline-color:var(--ink)}
     </style>
 
     <div class="pln-wrap" style="position:relative">
@@ -20271,22 +20307,15 @@ function mountPlanner(root) {
       <!-- Assignment list -->
       <div id="pln-list"></div>
 
-      <!-- Classes overlay panel -->
+      <!-- Classes overlay panel (read-only — managed in Schedule Builder) -->
       <div class="pln-overlay" id="pln-overlay">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <h4 style="margin:0">Classes</h4>
           <button class="btn ghost sm" id="pln-overlay-close" style="padding:4px 8px">✕</button>
         </div>
         <div class="pln-class-list" id="pln-class-list"></div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <input class="input" id="pln-new-cls" placeholder="New class name…" style="flex:1;min-width:130px">
-          <button class="btn ghost sm" id="pln-add-cls">Add</button>
-        </div>
-        <!-- Palette for picked class -->
-        <div id="pln-palette-area" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--rule)">
-          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Color</div>
-          <div class="pln-palette-row" id="pln-palette"></div>
-        </div>
+        <p class="pln-manage-hint">Classes are shared with Schedule Builder and GPA Calculator.</p>
+        <button class="btn ghost sm" id="pln-manage-link">Manage in Schedule Builder →</button>
       </div>
     </div>
   `;
@@ -20295,7 +20324,6 @@ function mountPlanner(root) {
 
   /* ---- State ---- */
   let activeFilter   = '';   // classId or '' = all
-  let editingClsId   = null; // which class we're editing color for
 
   /* ---- DOM refs ---- */
   const listEl      = $('#pln-list', root);
@@ -20306,67 +20334,22 @@ function mountPlanner(root) {
   const filtersEl   = $('#pln-filters', root);
   const overlay     = $('#pln-overlay', root);
   const clsListEl   = $('#pln-class-list', root);
-  const paletteArea = $('#pln-palette-area', root);
-  const paletteEl   = $('#pln-palette', root);
-  const newClsInp   = $('#pln-new-cls', root);
 
-  /* ---- Render palette ---- */
-  const renderPalette = () => {
-    paletteEl.innerHTML = '';
-    PALETTE.forEach(color => {
-      const s = document.createElement('button');
-      s.className = 'pln-palette-swatch';
-      s.style.background = color;
-      if (editingClsId) {
-        const c = cls(editingClsId);
-        if (c && c.color === color) s.classList.add('selected');
-      }
-      s.style.setProperty('--c', color);
-      s.addEventListener('click', () => {
-        if (!editingClsId) return;
-        const c = cls(editingClsId);
-        if (c) { c.color = color; save(); injectClassColors(); renderClsList(); renderFilters(); renderList(); }
-      });
-      paletteEl.appendChild(s);
-    });
-  };
-
-  /* ---- Render class management list ---- */
+  /* ---- Render class list (read-only — add/edit/delete happens in Schedule Builder) ---- */
   const renderClsList = () => {
-    clsListEl.innerHTML = '';
-    for (const c of classes) {
-      const row = document.createElement('div');
-      row.className = 'pln-cls-row';
-      row.innerHTML = `
-        <div class="pln-cls-swatch" style="background:${c.color}" title="Pick color" data-id="${c.id}"></div>
-        <input class="pln-cls-name-inp" value="${c.name.replace(/"/g,'&quot;')}" data-id="${c.id}" maxlength="40">
-        <button class="pln-cls-del" data-id="${c.id}" aria-label="Delete class">×</button>
-      `;
-      clsListEl.appendChild(row);
+    if (!classes.length) {
+      clsListEl.innerHTML = `<div class="pln-cls-empty">No classes yet — add them in Schedule Builder.</div>`;
+      return;
     }
-    $$('.pln-cls-swatch', clsListEl).forEach(sw => {
-      sw.addEventListener('click', () => {
-        editingClsId = sw.dataset.id;
-        paletteArea.style.display = 'block';
-        renderPalette();
-      });
-    });
-    $$('.pln-cls-name-inp', clsListEl).forEach(inp => {
-      inp.addEventListener('input', () => {
-        const c = cls(inp.dataset.id);
-        if (c) { c.name = inp.value; save(); renderFilters(); renderClassSel(); renderList(); }
-      });
-    });
-    $$('.pln-cls-del', clsListEl).forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        if (!confirm(`Delete this class? Assignments for it will lose their class tag.`)) return;
-        classes = classes.filter(c => c.id !== id);
-        assignments.forEach(a => { if (a.classId === id) a.classId = ''; });
-        if (activeFilter === id) activeFilter = '';
-        save(); injectClassColors(); renderClsList(); renderFilters(); renderClassSel(); renderList();
-      });
-    });
+    clsListEl.innerHTML = classes.map(c => `
+      <div class="pln-cls-row">
+        <div class="pln-cls-swatch" style="background:${c.color}"></div>
+        <div class="pln-cls-info">
+          <div class="pln-cls-name">${escape(c.name)}</div>
+          ${(c.room || c.teacher) ? `<div class="pln-cls-sub">${[c.room, c.teacher].filter(Boolean).map(escape).join(' · ')}</div>` : ''}
+        </div>
+      </div>
+    `).join('');
   };
 
   /* ---- Render filter chips ---- */
@@ -20525,33 +20508,17 @@ function mountPlanner(root) {
   $('#pln-cancel-btn', root).addEventListener('click', closeAddForm);
   titleInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveAssignment(); });
 
-  /* ---- Classes overlay ---- */
+  /* ---- Classes overlay (read-only) ---- */
   $('#pln-manage', root).addEventListener('click', () => {
-    editingClsId = null;
-    paletteArea.style.display = 'none';
     renderClsList();
     overlay.classList.toggle('open');
   });
   $('#pln-overlay-close', root).addEventListener('click', () => {
     overlay.classList.remove('open');
-    editingClsId = null;
-    paletteArea.style.display = 'none';
   });
-  $('#pln-add-cls', root).addEventListener('click', () => {
-    const name = newClsInp.value.trim();
-    if (!name) { newClsInp.focus(); return; }
-    const colorIdx = classes.length % PALETTE.length;
-    classes.push({ id: uid(), name, color: PALETTE[colorIdx] });
-    newClsInp.value = '';
-    save();
-    injectClassColors();
-    renderClsList();
-    renderFilters();
-    renderClassSel();
-    renderList();
-  });
-  newClsInp.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') $('#pln-add-cls', root).click();
+  $('#pln-manage-link', root).addEventListener('click', () => {
+    overlay.classList.remove('open');
+    openTool('schedule');
   });
 
   /* ---- Export ---- */
@@ -20675,6 +20642,9 @@ function mountSchedule(root) {
   const curSched = () => state.schedules[state.active];
 
   let editingId = null; // id of the class currently being edited in the sidebar
+  // Sidebar shows either this schedule's own classes, or the shared master
+  // Class List (a separate pool used by Assignments & Planner and GPA too).
+  let sideView = 'sched'; // 'sched' | 'master'
 
   // Format a 24h "HH:MM" string as a compact 12h label (no am/pm)
   const fmtTime = (t) => {
@@ -20864,6 +20834,21 @@ function mountSchedule(root) {
         color:var(--muted-2);margin:12px 0 0;
       }
 
+      /* Sidebar view toggle: this schedule's classes vs the shared Class List */
+      .sched-sideview{display:flex;gap:4px;margin-bottom:12px}
+      .sched-sideview .svtab{
+        flex:1;padding:6px 4px;font-family:var(--mono);font-size:9.5px;
+        letter-spacing:.08em;text-transform:uppercase;text-align:center;
+        color:var(--muted);background:var(--paper-3);border:1px solid var(--rule);
+        border-radius:2px;cursor:pointer;
+      }
+      .sched-sideview .svtab:hover{color:var(--ink-2)}
+      .sched-sideview .svtab.active{color:var(--ink);background:var(--paper);border-color:var(--ink-2);font-weight:600}
+
+      /* Import-from-Class-List control (in "This Schedule" view) */
+      .sched-import{margin-top:10px}
+      .sched-import select{width:100%;padding:6px 8px;font-size:12.5px}
+
       /* Bottom-right action bar */
       .sched-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
       .sched-foot .spacer{flex:1}
@@ -20966,12 +20951,46 @@ function mountSchedule(root) {
     tabs.innerHTML = html;
   };
 
+  // The sidebar operates on either this schedule's own classes, or the
+  // shared master Class List — same UI, different backing array + persist.
+  const sideCtx = () => {
+    if (sideView === 'master') {
+      const list = ClassList.get();
+      return {
+        list,
+        heading: 'Class List',
+        subhint: 'Shared with Assignments & Planner and GPA Calculator — edited only here.',
+        emptyMsg: 'No classes in the Class List yet. Add one below.',
+        persist: () => ClassList.set(list),
+        afterSave: () => {}, // master edits never touch a schedule's grid
+      };
+    }
+    const sch = curSched();
+    return {
+      list: sch.classes,
+      heading: 'Classes',
+      subhint: null,
+      emptyMsg: 'No classes yet. Add one below, then click a cell to place it.',
+      persist: save,
+      afterSave: renderGrid,
+    };
+  };
+
   const renderSide = () => {
     const side = $('#side', root);
-    const sch = curSched();
-    const editing = editingId ? findClass(editingId) : null;
-    let html = `<h4>Classes</h4>`;
-    sch.classes.forEach(c => {
+    const ctx = sideCtx();
+    const editing = editingId ? ctx.list.find(c => c.id === editingId) : null;
+    const masterList = ClassList.get();
+
+    let html = `
+      <div class="sched-sideview">
+        <button class="svtab${sideView === 'sched' ? ' active' : ''}" data-view="sched">This Schedule</button>
+        <button class="svtab${sideView === 'master' ? ' active' : ''}" data-view="master">Class List</button>
+      </div>
+      <h4>${ctx.heading}</h4>
+    `;
+    if (ctx.subhint) html += `<p class="sched-hint" style="margin:0 0 10px">${ctx.subhint}</p>`;
+    ctx.list.forEach(c => {
       html += `<div class="cls${c.id === editingId ? ' editing' : ''}" data-edit="${c.id}" title="Click to edit">
         <div class="sw" style="background:${c.color}"></div>
         <div class="clsinfo">
@@ -20984,8 +21003,19 @@ function mountSchedule(root) {
         <span class="x" data-delete="${c.id}" title="Delete class">×</span>
       </div>`;
     });
-    if (!sch.classes.length) {
-      html += `<div class="sched-empty">No classes yet. Add one below, then click a cell to place it.</div>`;
+    if (!ctx.list.length) {
+      html += `<div class="sched-empty">${ctx.emptyMsg}</div>`;
+    }
+    // Quick-import from the master Class List, only while viewing a schedule.
+    if (sideView === 'sched' && masterList.length) {
+      html += `
+        <div class="sched-import">
+          <select class="input" id="import-master">
+            <option value="">+ Import from Class List…</option>
+            ${masterList.map(m => `<option value="${m.id}">${escape(m.name)}${m.room ? ' · ' + escape(m.room) : ''}</option>`).join('')}
+          </select>
+        </div>
+      `;
     }
     html += `
       <div class="sched-add">
@@ -20997,7 +21027,7 @@ function mountSchedule(root) {
         <button class="btn sm" id="new-add" style="margin-top:4px">${editing ? 'Save changes' : '+ Add'}</button>
         ${editing ? `<button class="btn ghost sm" id="new-cancel">Cancel</button>` : ''}
       </div>
-      <p class="sched-hint">Class times are set on each period — click a period on the left of the grid.</p>
+      ${sideView === 'sched' ? `<p class="sched-hint">Class times are set on each period — click a period on the left of the grid.</p>` : ''}
     `;
     side.innerHTML = html;
 
@@ -21010,7 +21040,7 @@ function mountSchedule(root) {
 
     // Swatch picker for the class color
     const swEl = $('#new-sw', side);
-    let chosenColor = editing ? editing.color : PALETTE[sch.classes.length % PALETTE.length];
+    let chosenColor = editing ? editing.color : PALETTE[ctx.list.length % PALETTE.length];
     PALETTE.forEach(p => {
       const s = document.createElement('span');
       s.className = 'sw' + (p === chosenColor ? ' active' : '');
@@ -21029,14 +21059,14 @@ function mountSchedule(root) {
       const teacher = $('#new-teacher', side).value.trim();
       if (!name) { showToast('Enter a class name.'); return; }
       if (editingId) {
-        const c = findClass(editingId);
+        const c = ctx.list.find(x => x.id === editingId);
         if (c) { c.name = name; c.room = room; c.teacher = teacher; c.color = chosenColor; }
         editingId = null;
-        save(); renderSide(); renderGrid();
+        ctx.persist(); renderSide(); ctx.afterSave();
       } else {
-        const id = 'c' + Date.now().toString(36);
-        sch.classes.push({ id, name, room, teacher, color: chosenColor });
-        save(); renderSide(); renderGrid();
+        const id = (sideView === 'master' ? 'm' : 'c') + Date.now().toString(36);
+        ctx.list.push({ id, name, room, teacher, color: chosenColor });
+        ctx.persist(); renderSide(); ctx.afterSave();
       }
     });
 
@@ -21044,6 +21074,23 @@ function mountSchedule(root) {
       $('#new-cancel', side).addEventListener('click', () => {
         editingId = null;
         renderSide();
+      });
+    }
+
+    // Import a master-list class into this schedule's own class pool (a
+    // fresh, independent copy — editing/deleting it later never touches
+    // the master list, and vice versa).
+    const importSel = $('#import-master', side);
+    if (importSel) {
+      importSel.addEventListener('change', () => {
+        const mid = importSel.value;
+        if (!mid) return;
+        const m = masterList.find(x => x.id === mid);
+        if (m) {
+          const id = 'c' + Date.now().toString(36);
+          curSched().classes.push({ id, name: m.name, room: m.room || '', teacher: m.teacher || '', color: m.color });
+          save(); renderSide(); renderGrid();
+        }
       });
     }
   };
@@ -21162,11 +21209,20 @@ function mountSchedule(root) {
       openPeriodEditor(pcell, parseInt(pcell.dataset.period));
       return;
     }
-    // Delete class from sidebar (classes are per-schedule now)
+    // Delete a class from the sidebar — from this schedule's own pool, or
+    // from the shared master Class List, depending on which view is open.
     const del = e.target.closest('[data-delete]');
     if (del) {
       e.stopPropagation();
       const cid = del.dataset.delete;
+      if (sideView === 'master') {
+        if (!confirm(`Remove this class from the Class List? It stays untouched in any schedule that already uses it.`)) return;
+        const list = ClassList.get().filter(c => c.id !== cid);
+        ClassList.set(list);
+        if (editingId === cid) editingId = null;
+        renderSide();
+        return;
+      }
       if (!confirm(`Delete this class? Cells using it will be cleared.`)) return;
       const sch = curSched();
       sch.classes = sch.classes.filter(c => c.id !== cid);
@@ -21180,6 +21236,15 @@ function mountSchedule(root) {
       save();
       renderSide();
       renderGrid();
+      return;
+    }
+    // Switch sidebar view: this schedule's classes vs the shared Class List
+    const viewBtn = e.target.closest('[data-view]');
+    if (viewBtn) {
+      e.stopPropagation();
+      sideView = viewBtn.dataset.view;
+      editingId = null;
+      renderSide();
       return;
     }
     // Delete an alternate schedule (tab ×)
@@ -21289,7 +21354,7 @@ function mountSchedule(root) {
 
   // Reset
   $('#reset', root).addEventListener('click', () => {
-    if (!confirm('Reset everything? This clears every class, every cell, and every alternate schedule.')) return;
+    if (!confirm('Reset this schedule set? This clears every class, every cell, and every alternate schedule. The shared Class List is not affected.')) return;
     Storage.remove('schedule:v3');
     editingId = null;
     state = {
