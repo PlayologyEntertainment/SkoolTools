@@ -22,11 +22,13 @@ accept as a real, installable application.
 **The four decisions driving this plan (confirmed):**
 
 1. **Approach:** Capacitor wrapper (reuse 100% of current code).
-2. **Platforms:** Both stores. We will pay Apple's **$99/yr** Developer
-   Program fee; Google Play is a **$25 one-time** fee.
+2. **Platforms:** Both stores. iOS ships as a **universal iPhone + iPad**
+   build. We will pay Apple's **$99/yr** Developer Program fee (**Organization**
+   account, D-U-N-S in progress); Google Play is a **$25 one-time** fee.
 3. **Accounts:** None exist yet — this plan includes setup from scratch.
 4. **Offline:** Bundle everything (KaTeX, Pyodide, fonts) so every tool works
-   with no internet connection.
+   with no internet connection. **Analytics (GoatCounter) is dropped on
+   mobile**, so the apps collect nothing.
 
 **Bottom line:** This is a low-risk port. The bulk of the effort is (a)
 pulling the runtime CDN dependencies *into* the app for offline use, (b)
@@ -113,18 +115,22 @@ Pull each runtime CDN dependency into the app bundle and repoint the loaders:
    `katex.min.css`, `katex.min.js`, and the `fonts/` directory locally; change
    each `cdnjs.cloudflare.com/.../KaTeX` loader to the local path.
 3. **Pyodide 0.25.1** (Code shelf, `jsdelivr`): this is the heavy one
-   (tens of MB incl. the CPython WASM runtime and stdlib). Vendor the Pyodide
-   distribution locally and set `indexURL` to the local folder. *This is the
-   single biggest driver of app size* — see the size note below.
+   (tens of MB incl. the CPython WASM runtime and stdlib). **Decision: bundle
+   in-app** so the Code tool works fully offline from day one. Vendor the
+   Pyodide distribution locally and set `indexURL` to the local folder.
+   *This is the single biggest driver of app size* — see the size note below.
 4. **Lazy modules** (`ap-packs.js`, `calculus-engine.js`): already relative —
    confirm they resolve from the local origin (they will).
 
-**App size note:** Bundling Pyodide will push the app well past the size where
-Play/App Store show a "large download" warning and, on Android, past the
-150 MB base-APK limit — meaning we'll want **Play Asset Delivery / on-demand
-resources** or an install-time asset pack for the Python runtime, *or* a
-decision to lazy-download Pyodide on first use of the Code tool only. Flagged
-as an open decision in §12.
+**App size note:** Bundling Pyodide will push the app past the size where
+Play/App Store show a "large download" warning, and — since we're bundling
+rather than downloading on demand — likely past Android's **150 MB base
+delivery limit**. Because we've committed to shipping it *in-app* (not a
+first-use download), we deliver the Python runtime through an Android
+**install-time asset pack** (Play Asset Delivery) and iOS **on-demand
+resources tagged for install**, so the WASM lands with the install but stays
+under per-artifact limits. Net effect for the user: no runtime network needed;
+Python works offline immediately after install.
 
 ### 4.3 Handle the one online feature gracefully
 
@@ -145,7 +151,10 @@ Add a minimal set of Capacitor plugins:
   navigation instead of closing the app).
 - **Filesystem** (optional): make CSV/JSON import/export feel native; the
   existing `<input type=file>` works but native pickers are nicer.
-- Keep **GoatCounter** but only fire when online; disclose in privacy policy.
+- **Analytics — removed on mobile.** GoatCounter is stripped from the mobile
+  build so the apps collect *nothing*. This makes both stores' privacy labels
+  a clean "no data collected" and keeps the "no tracker" promise literal on
+  device. (The web build keeps GoatCounter unchanged.)
 
 ### 4.5 Icons, splash & branding assets
 
@@ -174,10 +183,13 @@ Because no accounts or tooling exist yet, the plan includes standing these up.
 - **Node.js + Capacitor CLI** (both platforms).
 - **Android:** Android Studio + JDK + Android SDK; a keystore for signing
   (created once, backed up securely — losing it blocks future updates).
-- **iOS:** **A Mac is mandatory** to build and submit. Options:
-  - Own/borrow a Mac with **Xcode**, **or**
-  - Use a **cloud Mac / macOS CI** (e.g. GitHub Actions macOS runners,
-    Codemagic, EAS-style services) if no physical Mac is available.
+- **iOS:** build and submit from the **Mac you already have**, with
+  **Xcode** installed. (A Mac is mandatory for iOS; no cloud-Mac/CI spend is
+  needed.)
+- **Universal build (iPhone + iPad):** target both device families in one
+  app so it installs natively on iPhone and iPad. This adds iPad simulators
+  to the test matrix and **iPad screenshots** to the App Store listing (see
+  §6, §9).
 - **Fastlane** (optional but recommended) to automate builds and store
   uploads on both platforms.
 
@@ -192,9 +204,11 @@ Because no accounts or tooling exist yet, the plan includes standing these up.
 ## 6. Testing
 
 - **Emulator/simulator:** Android emulator + iOS simulator for fast loops.
-- **Real devices:** at least one physical Android phone and one iPhone —
-  clipboard, file import, share sheet, safe-area/notch, and offline behavior
-  should be verified on hardware.
+- **Real devices:** at least one physical Android phone, one iPhone, and one
+  iPad — clipboard, file import, share sheet, safe-area/notch, iPad layout,
+  and offline behavior should be verified on hardware.
+- **iPad layouts:** confirm the responsive UI holds up at tablet widths
+  (larger canvas, split-view/multitasking) since we ship a universal build.
 - **Offline test pass:** airplane-mode run confirming every shelf works
   (special attention to KaTeX rendering, the Code/Pyodide tool, and the
   ISBN-lookup fallback).
@@ -216,8 +230,8 @@ Because no accounts or tooling exist yet, the plan includes standing these up.
 3. **Create the app** in the console (name, default language, "App", "Free").
 4. **Complete the required declarations:**
    - **Privacy policy URL** (host on playologyentertainment.com — see §9).
-   - **Data safety form** (SkoolToolz collects essentially nothing;
-     disclose GoatCounter analytics honestly — cookieless, no PII).
+   - **Data safety form** — the mobile build collects **nothing** (GoatCounter
+     is stripped, §4.4), so this is a clean "no data collected."
    - **Content rating** questionnaire (should rate "Everyone").
    - **Target audience & content** — note if the app targets students/kids;
      if under-13 audiences are declared, additional Families policies apply.
@@ -235,23 +249,26 @@ Because no accounts or tooling exist yet, the plan includes standing these up.
 ## 8. Publishing to the Apple App Store (step-by-step, from zero)
 
 1. **Create an Apple ID**, then **enroll in the Apple Developer Program** at
-   `developer.apple.com/programs` — **$99/yr**. Enrollment requires identity
-   verification and can take 24–48h (sometimes longer). Enrolling as an
-   organization additionally needs a **D-U-N-S number**; enrolling as an
-   individual is faster but publishes under your personal name.
+   `developer.apple.com/programs` — **$99/yr**, as an **Organization** (the
+   chosen account type; the app publishes under the company name, not a
+   personal one). Organization enrollment **requires a D-U-N-S number** — you
+   are obtaining one; request it early at Apple's D-U-N-S lookup, since it can
+   take a few business days to issue and is a hard prerequisite. Enrollment
+   also requires legal-entity verification and someone with authority to bind
+   the organization. Budget extra lead time vs. an individual account and
+   start this on day one.
 2. **App Store Connect:** create the app record (`appstoreconnect.apple.com`),
    set the **bundle ID** (must match Capacitor's `appId`), category
    (Education), and pricing = **Free**.
 3. **Signing:** create the App Store distribution certificate and provisioning
    profile (Xcode can manage this automatically, or use Fastlane match).
 4. **Build & upload** the `.ipa` from Xcode/Fastlane on a Mac to **TestFlight**.
-5. **App Privacy ("nutrition label"):** complete the questionnaire — declare
-   the minimal GoatCounter analytics honestly; most categories are "not
-   collected."
+5. **App Privacy ("nutrition label"):** with analytics removed on mobile
+   (§4.4), this is a clean **"Data Not Collected"** declaration.
 6. **Store listing assets** (see §9): name, subtitle, promotional text,
    description, keywords, support URL, privacy policy URL, app icon
-   (1024×1024), and screenshots for required device sizes (iPhone; iPad if we
-   ship an iPad build).
+   (1024×1024), and screenshots for required device sizes — **both iPhone and
+   iPad**, since we ship a universal build.
 7. **Submit for review.** Apple review is stricter than Google's — the most
    common risks for a wrapped web app are (a) "minimum functionality"
    (mitigated: SkoolToolz is 55 rich tools, not a website shell) and (b)
@@ -273,6 +290,7 @@ Produce once, reuse across stores:
   mark (§4.5).
 - **Screenshots:** several per platform/device size, showing representative
   tools across shelves (Numbers, Words, Study, Test Prep, Code, etc.).
+  Because iOS ships universal, capture **both iPhone and iPad** sets.
 - **Feature graphic** (Play, 1024×500).
 - **Privacy policy URL:** publish a short policy (no accounts, local-only
   storage, cookieless analytics, one optional online lookup) on
@@ -294,11 +312,12 @@ Being free simplifies a lot, but has specifics worth calling out:
   optional cost only if there's no physical Mac.
 - **Kids/education audience:** if we declare a student/child audience, both
   stores impose stricter data rules (Google Families policy, Apple Kids
-  Category). The app's zero-collection design already aligns well — just
-  declare accurately and keep GoatCounter honest (or consider dropping
-  analytics on mobile to sidestep the question entirely).
-- **Keep the "no tracker" promise:** the app's brand is privacy-first; the
-  mobile version should preserve that literally in the store privacy labels.
+  Category). Dropping analytics on mobile (§4.4) means the app collects
+  nothing at all, which sidesteps these data concerns entirely — just declare
+  the audience accurately.
+- **Keep the "no tracker" promise:** the mobile build makes this literal —
+  zero data collection, reflected as "no data collected" in both stores'
+  privacy labels.
 
 ---
 
@@ -308,8 +327,8 @@ Being free simplifies a lot, but has specifics worth calling out:
 |---|---|---|
 | **0. Setup** | Register Google Play ($25) + Apple ($99/yr); provision Mac/CI; install toolchain | 2–5 days (mostly waiting on verification) |
 | **1. Capacitor bring-up** | Project scaffold, load app in WebView on both platforms, back-button/status-bar/splash | 2–4 days |
-| **2. Offline bundling** | Vendor fonts + KaTeX + Pyodide; repoint loaders; ISBN offline fallback; decide Pyodide delivery | 3–6 days |
-| **3. Native polish + assets** | Share/haptics/filesystem plugins; square icon + icon/splash generation; manifest | 2–4 days |
+| **2. Offline bundling** | Vendor fonts + KaTeX + Pyodide (in-app via asset pack/ODR); repoint loaders; ISBN offline fallback | 3–6 days |
+| **3. Native polish + assets** | Strip GoatCounter on mobile; share/haptics/filesystem plugins; square icon + icon/splash generation (iPhone+iPad); manifest | 2–4 days |
 | **4. Testing** | Emulator + real-device + offline pass; internal testing / TestFlight | 3–5 days |
 | **5. Store paperwork + submit** | Listings, screenshots, privacy policy, data-safety/App-Privacy forms, submit both | 3–5 days |
 
@@ -319,19 +338,25 @@ parallel with development).
 
 ---
 
-## 12. Open decisions (need your input before building)
+## 12. Decisions
 
-1. **Bundle ID:** confirm `com.playologyentertainment.skooltoolz` (permanent).
-2. **Pyodide delivery:** bundle it in-app (large download, fully offline day
-   one) **vs.** lazy-download on first use of the Code tool (smaller app, that
-   one tool needs network the first time). This is the main size/UX tradeoff.
-3. **iOS build environment:** physical Mac available, or should we budget for
-   a cloud-Mac/macOS-CI service?
-4. **Analytics on mobile:** keep GoatCounter (honest, cookieless) or drop it
-   entirely to make the privacy labels a clean "nothing collected"?
-5. **iPad / tablet:** ship a tablet-optimized build, or phone-only first?
-6. **Developer account type (Apple):** individual (faster, your name shown) or
-   organization (needs D-U-N-S, shows company name)?
+**Resolved:**
+
+- **Pyodide delivery:** ✅ **bundle in-app** — Code tool works offline from
+  install (delivered via install-time asset pack / ODR, §4.2).
+- **iOS build environment:** ✅ **existing Mac + Xcode** — no cloud-Mac spend.
+- **Analytics on mobile:** ✅ **dropped** — mobile collects nothing; clean
+  "no data collected" labels (§4.4).
+- **iPad / tablet:** ✅ **universal build** — iPhone **and** iPad from day one
+  (adds iPad testing + iPad screenshots).
+- **Apple account type:** ✅ **Organization** — publishes under the company
+  name; **D-U-N-S in progress** (request early, it gates enrollment, §8).
+
+**Still open:**
+
+1. **Bundle ID:** proposed `com.playologyentertainment.skooltoolz` — confirm
+   before first build (it's **permanent** once published). Say the word and
+   I'll lock it in.
 
 ---
 
@@ -342,7 +367,9 @@ parallel with development).
   native integration, and the tool breadth in the review notes.
 - **Offline breakage at review** → the §4.2 bundling pass + an explicit
   airplane-mode test gate before submission.
-- **App size (Pyodide)** → resolve via decision #2 above.
+- **App size (Pyodide)** → bundled via install-time asset pack (Android) /
+  tagged on-demand resources (iOS) so it stays under per-artifact limits while
+  still installing offline-ready (§4.2).
 - **Signing-key loss (Android)** → back up the keystore securely; losing it
   prevents future updates.
 - **New-account delays** → start Apple enrollment and Google verification on
