@@ -20582,42 +20582,81 @@ function mountSchedule(root) {
 
   // Default classes for first-run flavor
   const DEFAULT_CLASSES = [
-    { id:'c1', name:'English', room:'201', color:PALETTE[3] },
-    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0] },
-    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2] },
-    { id:'c4', name:'US History',room:'205',color:PALETTE[4] },
-    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5] },
-    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1] },
-    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6] },
+    { id:'c1', name:'English', room:'201', color:PALETTE[3], start:'08:00', end:'08:50' },
+    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0], start:'09:00', end:'09:50' },
+    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2], start:'10:00', end:'10:50' },
+    { id:'c4', name:'US History',room:'205',color:PALETTE[4], start:'11:00', end:'11:50' },
+    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5], start:'13:00', end:'13:50' },
+    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1], start:'12:00', end:'12:40' },
+    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6], start:'14:00', end:'14:50' },
   ];
 
-  let state = Storage.get('schedule:v1', null);
-  if (!state) {
-    state = {
+  // Seeded example grid for first run
+  const seedGrid = () => {
+    const seed = [
+      ['c1','c2','c1','c2','c1'],
+      ['c2','c1','c2','c1','c2'],
+      ['c3','c4','c3','c4','c3'],
+      ['c4','c5','c4','c5','c4'],
+      ['c6','c6','c6','c6','c6'],
+      ['c5','c3','c5','c3','c5'],
+      ['c7','c7','c7','c7','c7'],
+      [null,null,null,null,null],
+    ];
+    return DEFAULT_PERIODS.map((_, pi) => DEFAULT_DAYS.map((_, di) => seed[pi]?.[di] ?? null));
+  };
+  const blankGrid = (periods, days) => periods.map(() => days.map(() => null));
+
+  // A schedule = one tab: its own periods, days and grid. Classes are shared
+  // across all schedules (add a class once, use it on any tab).
+  const defaultState = () => ({
+    classes: DEFAULT_CLASSES.map(c => ({ ...c })),
+    schedules: [{
+      id: 's1', name: 'Main',
       periods: DEFAULT_PERIODS.slice(),
       days: DEFAULT_DAYS.slice(),
-      classes: DEFAULT_CLASSES,
-      // grid[periodIdx][dayIdx] = classId | null
-      grid: DEFAULT_PERIODS.map((_, pi) => DEFAULT_DAYS.map((_, di) => {
-        // Seed a believable example schedule
-        const seed = [
-          ['c1','c2','c1','c2','c1'],
-          ['c2','c1','c2','c1','c2'],
-          ['c3','c4','c3','c4','c3'],
-          ['c4','c5','c4','c5','c4'],
-          ['c6','c6','c6','c6','c6'],
-          ['c5','c3','c5','c3','c5'],
-          ['c7','c7','c7','c7','c7'],
-          [null,null,null,null,null],
-        ];
-        return seed[pi]?.[di] ?? null;
-      })),
-    };
-  }
-  const save = () => Storage.set('schedule:v1', state);
+      grid: seedGrid(),
+    }],
+    active: 0,
+  });
 
-  let editingCell = null; // { period, day }
-  let editingClass = null;
+  // Load, migrating the old single-grid format (schedule:v1) if present.
+  let state = Storage.get('schedule:v2', null);
+  if (!state) {
+    const v1 = Storage.get('schedule:v1', null);
+    if (v1 && v1.classes) {
+      state = {
+        classes: v1.classes.map(c => ({ start:'', end:'', ...c })),
+        schedules: [{
+          id: 's1', name: 'Main',
+          periods: v1.periods || DEFAULT_PERIODS.slice(),
+          days: v1.days || DEFAULT_DAYS.slice(),
+          grid: v1.grid || blankGrid(DEFAULT_PERIODS, DEFAULT_DAYS),
+        }],
+        active: 0,
+      };
+    } else {
+      state = defaultState();
+    }
+  }
+  const save = () => Storage.set('schedule:v2', state);
+
+  const curSched = () => state.schedules[state.active];
+
+  let editingId = null; // id of the class currently being edited in the sidebar
+
+  // Format a 24h "HH:MM" string as a compact 12h label (no am/pm)
+  const fmtTime = (t) => {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    if (isNaN(h)) return '';
+    const hr = ((h + 11) % 12) + 1;
+    return hr + ':' + String(m).padStart(2, '0');
+  };
+  const fmtRange = (c) => {
+    if (c.start && c.end) return fmtTime(c.start) + '–' + fmtTime(c.end);
+    return fmtTime(c.start) || '';
+  };
 
   // ---- Layout ----
   root.innerHTML = `
@@ -20720,12 +20759,60 @@ function mountSchedule(root) {
       .sched-picker .pick .nm{font-family:var(--serif);font-size:14px;color:var(--ink);flex:1}
       .sched-picker .pick.clear{color:var(--muted);font-family:var(--mono);font-size:11px;border-top:1px solid var(--rule);margin-top:4px;padding-top:8px;letter-spacing:.1em;text-transform:uppercase}
 
+      /* Alternate-schedule tabs (top-left of the grid) */
+      .sched-tabs{display:flex;gap:4px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px}
+      .sched-tab{
+        display:flex;align-items:center;gap:6px;padding:6px 12px;
+        font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+        color:var(--muted);background:var(--paper-2);
+        border:1px solid var(--rule);border-radius:4px 4px 0 0;
+        cursor:pointer;user-select:none;
+      }
+      .sched-tab:hover{color:var(--ink-2)}
+      .sched-tab.active{color:var(--ink);font-weight:600;box-shadow:inset 0 2px 0 0 var(--accent)}
+      .sched-tab .tx{
+        font-size:13px;line-height:1;color:var(--muted-2);
+        opacity:0;transition:opacity .12s;
+      }
+      .sched-tab:hover .tx{opacity:.7}
+      .sched-tab .tx:hover{color:var(--accent);opacity:1}
+      .sched-tab-input{
+        font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+        width:110px;padding:2px 4px;
+      }
+      .sched-tab-add{
+        padding:6px 11px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+        color:var(--muted);background:none;border:1px dashed var(--rule);border-radius:4px 4px 0 0;cursor:pointer;
+      }
+      .sched-tab-add:hover{color:var(--ink-2);border-color:var(--ink-2)}
+
+      /* Time line inside a filled cell */
+      .sched-cell .tm{font-family:var(--mono);font-size:9.5px;letter-spacing:.02em;opacity:.85;line-height:1.15;margin-top:1px}
+
+      /* Start/End inputs in the Add-class form */
+      .sched-times{display:flex;gap:6px}
+      .sched-times .tlbl{
+        flex:1;display:flex;flex-direction:column;gap:2px;
+        font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+      }
+      .sched-times .tlbl input{width:100%;padding:5px 6px;font-size:12px}
+
+      /* Sidebar class rows: room + time subline, and edit highlight */
+      .sched-side .cls .clsinfo{flex:1;min-width:0}
+      .sched-side .cls .clsinfo .sub{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+      .sched-side .cls .tm{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.04em}
+      .sched-side .cls.editing{background:var(--paper-3);border-color:var(--accent)}
+
+      /* Bottom-right action bar */
+      .sched-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
+      .sched-foot .spacer{flex:1}
+
       /* Print styles — print-optimized layout */
       @media print {
         body{background:#fff !important;color:#000 !important}
         .splash,.mast,.tagline,.rail,.shelf,.no-results,
         .site-foot,.panel-backdrop,.panel-head,.panel-foot,
-        .sched-toolbar,.sched-side,.toast{display:none !important}
+        .sched-toolbar,.sched-tabs,.sched-foot,.sched-side,.toast{display:none !important}
         .panel{
           position:static !important;transform:none !important;
           width:100% !important;max-height:none !important;height:auto !important;
@@ -20745,15 +20832,16 @@ function mountSchedule(root) {
       }
     </style>
 
-    <div class="sched-toolbar">
-      <button class="btn ghost sm" id="print">Print / PDF</button>
-      <button class="btn ghost sm" id="reset">Reset</button>
-      <div class="spacer"></div>
-      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.1em">CLICK ANY CELL TO ASSIGN</span>
-    </div>
+    <div class="sched-tabs" id="tabs"></div>
     <div class="sched-wrap">
       <div id="grid" class="sched-grid"></div>
       <div id="side" class="sched-side"></div>
+    </div>
+    <div class="sched-foot">
+      <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.1em">CLICK ANY CELL TO ASSIGN</span>
+      <div class="spacer"></div>
+      <button class="btn ghost sm" id="print">Print / PDF</button>
+      <button class="btn ghost sm" id="reset">Reset</button>
     </div>
   `;
 
@@ -20762,27 +20850,30 @@ function mountSchedule(root) {
 
   const renderGrid = () => {
     const grid = $('#grid', root);
-    const cols = state.days.length;
+    const sch = curSched();
+    const cols = sch.days.length;
     // Column template: period label + N days
     const tmpl = `100px repeat(${cols}, 1fr)`;
 
     // Header row
     let html = `<div class="sched-row" style="grid-template-columns:${tmpl}">
       <div class="sched-hcell"></div>
-      ${state.days.map(d => `<div class="sched-hcell">${escape(d)}</div>`).join('')}
+      ${sch.days.map(d => `<div class="sched-hcell">${escape(d)}</div>`).join('')}
     </div>`;
 
     // Period rows
-    state.periods.forEach((p, pi) => {
+    sch.periods.forEach((p, pi) => {
       html += `<div class="sched-row" style="grid-template-columns:${tmpl}">
         <div class="sched-pcell">${escape(p)}</div>
-        ${state.days.map((_, di) => {
-          const cid = state.grid[pi]?.[di];
+        ${sch.days.map((_, di) => {
+          const cid = sch.grid[pi]?.[di];
           const c = cid ? findClass(cid) : null;
           if (c) {
+            const rng = fmtRange(c);
             return `<div class="sched-cell filled" data-pi="${pi}" data-di="${di}" style="background:${c.color}">
               <div class="nm">${escape(c.name)}</div>
               ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
+              ${rng ? `<div class="tm">${escape(rng)}</div>` : ''}
             </div>`;
           }
           return `<div class="sched-cell empty" data-pi="${pi}" data-di="${di}">+</div>`;
@@ -20793,31 +20884,65 @@ function mountSchedule(root) {
     grid.innerHTML = html;
   };
 
+  // ---- Tabs (alternate schedules) ----
+  const renderTabs = () => {
+    const tabs = $('#tabs', root);
+    let html = '';
+    state.schedules.forEach((s, i) => {
+      html += `<div class="sched-tab${i === state.active ? ' active' : ''}" data-tab="${i}" title="Double-click to rename">
+        <span class="txt">${escape(s.name)}</span>
+        ${state.schedules.length > 1 ? `<span class="tx" data-deltab="${i}" title="Delete schedule">×</span>` : ''}
+      </div>`;
+    });
+    html += `<button class="sched-tab-add" id="addtab" title="Add an alternate schedule">+ Schedule</button>`;
+    tabs.innerHTML = html;
+  };
+
   const renderSide = () => {
     const side = $('#side', root);
+    const editing = editingId ? findClass(editingId) : null;
     let html = `<h4>Classes</h4>`;
     state.classes.forEach(c => {
-      html += `<div class="cls" data-cid="${c.id}">
+      const rng = fmtRange(c);
+      html += `<div class="cls${c.id === editingId ? ' editing' : ''}" data-edit="${c.id}" title="Click to edit">
         <div class="sw" style="background:${c.color}"></div>
-        <div class="nm">${escape(c.name)}</div>
-        ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
+        <div class="clsinfo">
+          <div class="nm">${escape(c.name)}</div>
+          ${(c.room || rng) ? `<div class="sub">
+            ${c.room ? `<span class="rm">${escape(c.room)}</span>` : ''}
+            ${rng ? `<span class="tm">${escape(rng)}</span>` : ''}
+          </div>` : ''}
+        </div>
         <span class="x" data-delete="${c.id}" title="Delete class">×</span>
       </div>`;
     });
     html += `
       <div class="sched-add">
-        <h4 style="margin-bottom:4px">Add class</h4>
+        <h4 style="margin-bottom:4px">${editing ? 'Edit class' : 'Add class'}</h4>
         <input class="input" id="new-name" placeholder="Class name" maxlength="32">
         <input class="input" id="new-room" placeholder="Room (optional)" maxlength="12">
+        <div class="sched-times">
+          <label class="tlbl">Start<input class="input" type="time" id="new-start"></label>
+          <label class="tlbl">End<input class="input" type="time" id="new-end"></label>
+        </div>
         <div class="sched-swatches" id="new-sw"></div>
-        <button class="btn sm" id="new-add" style="margin-top:4px">+ Add</button>
+        <button class="btn sm" id="new-add" style="margin-top:4px">${editing ? 'Save changes' : '+ Add'}</button>
+        ${editing ? `<button class="btn ghost sm" id="new-cancel">Cancel</button>` : ''}
       </div>
     `;
     side.innerHTML = html;
 
-    // Swatch picker for new-class color
+    // Prefill inputs via JS (avoids attribute-escaping pitfalls)
+    if (editing) {
+      $('#new-name', side).value = editing.name || '';
+      $('#new-room', side).value = editing.room || '';
+      $('#new-start', side).value = editing.start || '';
+      $('#new-end', side).value = editing.end || '';
+    }
+
+    // Swatch picker for the class color
     const swEl = $('#new-sw', side);
-    let chosenColor = PALETTE[state.classes.length % PALETTE.length];
+    let chosenColor = editing ? editing.color : PALETTE[state.classes.length % PALETTE.length];
     PALETTE.forEach(p => {
       const s = document.createElement('span');
       s.className = 'sw' + (p === chosenColor ? ' active' : '');
@@ -20833,12 +20958,28 @@ function mountSchedule(root) {
     $('#new-add', side).addEventListener('click', () => {
       const name = $('#new-name', side).value.trim();
       const room = $('#new-room', side).value.trim();
+      const start = $('#new-start', side).value;
+      const end = $('#new-end', side).value;
       if (!name) { showToast('Enter a class name.'); return; }
-      const id = 'c' + Date.now().toString(36);
-      state.classes.push({ id, name, room, color: chosenColor });
-      save();
-      renderSide();
+      if (start && end && end <= start) { showToast('End time must be after start time.'); return; }
+      if (editingId) {
+        const c = findClass(editingId);
+        if (c) { c.name = name; c.room = room; c.start = start; c.end = end; c.color = chosenColor; }
+        editingId = null;
+        save(); renderSide(); renderGrid();
+      } else {
+        const id = 'c' + Date.now().toString(36);
+        state.classes.push({ id, name, room, start, end, color: chosenColor });
+        save(); renderSide(); renderGrid();
+      }
     });
+
+    if (editing) {
+      $('#new-cancel', side).addEventListener('click', () => {
+        editingId = null;
+        renderSide();
+      });
+    }
   };
 
   // ---- Cell picker (popover) ----
@@ -20876,7 +21017,7 @@ function mountSchedule(root) {
       if (!pick) return;
       e.stopPropagation();
       const cid = pick.dataset.cid || null;
-      state.grid[pi][di] = cid;
+      curSched().grid[pi][di] = cid;
       save();
       renderGrid();
       closePicker();
@@ -20905,19 +21046,109 @@ function mountSchedule(root) {
       const cid = del.dataset.delete;
       if (!confirm(`Delete this class? Cells using it will be cleared.`)) return;
       state.classes = state.classes.filter(c => c.id !== cid);
-      // Clear any grid cells referencing it
-      for (let pi = 0; pi < state.grid.length; pi++) {
-        for (let di = 0; di < state.grid[pi].length; di++) {
-          if (state.grid[pi][di] === cid) state.grid[pi][di] = null;
+      if (editingId === cid) editingId = null;
+      // Clear any cells referencing it, across every schedule
+      state.schedules.forEach(s => {
+        for (let pi = 0; pi < s.grid.length; pi++) {
+          for (let di = 0; di < s.grid[pi].length; di++) {
+            if (s.grid[pi][di] === cid) s.grid[pi][di] = null;
+          }
         }
-      }
+      });
       save();
       renderSide();
       renderGrid();
       return;
     }
+    // Delete an alternate schedule (tab ×)
+    const dtab = e.target.closest('[data-deltab]');
+    if (dtab) {
+      e.stopPropagation();
+      const i = parseInt(dtab.dataset.deltab);
+      if (!confirm(`Delete the "${state.schedules[i].name}" schedule? This can't be undone.`)) return;
+      state.schedules.splice(i, 1);
+      if (state.active === i) state.active = Math.min(i, state.schedules.length - 1);
+      else if (state.active > i) state.active--;
+      save();
+      renderTabs();
+      renderGrid();
+      return;
+    }
+    // Switch to a schedule tab
+    const tabEl = e.target.closest('[data-tab]');
+    if (tabEl) {
+      e.stopPropagation();
+      const i = parseInt(tabEl.dataset.tab);
+      if (i !== state.active) {
+        state.active = i;
+        save();
+        renderTabs();
+        renderGrid();
+      }
+      return;
+    }
+    // Add a new alternate schedule (copies structure of the current one, empty grid)
+    if (e.target.closest('#addtab')) {
+      e.stopPropagation();
+      const src = curSched();
+      state.schedules.push({
+        id: 's' + Date.now().toString(36),
+        name: 'Schedule ' + (state.schedules.length + 1),
+        periods: src.periods.slice(),
+        days: src.days.slice(),
+        grid: blankGrid(src.periods, src.days),
+      });
+      state.active = state.schedules.length - 1;
+      save();
+      renderTabs();
+      renderGrid();
+      return;
+    }
+    // Edit a class from the sidebar
+    const editRow = e.target.closest('[data-edit]');
+    if (editRow) {
+      e.stopPropagation();
+      editingId = editRow.dataset.edit;
+      renderSide();
+      const nm = $('#new-name', root);
+      if (nm) nm.focus();
+      return;
+    }
     // Anywhere else → close popover
     closePicker();
+  });
+
+  // Double-click a tab to rename it inline
+  root.addEventListener('dblclick', (e) => {
+    const txt = e.target.closest('.sched-tab .txt');
+    if (!txt) return;
+    const tabEl = txt.closest('[data-tab]');
+    if (!tabEl) return;
+    const i = parseInt(tabEl.dataset.tab);
+    const prev = state.schedules[i].name;
+    const inp = document.createElement('input');
+    inp.className = 'sched-tab-input';
+    inp.value = prev;
+    inp.maxLength = 24;
+    txt.replaceWith(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const v = inp.value.trim();
+      state.schedules[i].name = v || prev;
+      save();
+      renderTabs();
+    };
+    inp.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+      else if (ev.key === 'Escape') { inp.value = prev; inp.blur(); }
+    });
+    inp.addEventListener('click', (ev) => ev.stopPropagation());
+    inp.addEventListener('blur', commit);
   });
 
   // Print
@@ -20927,20 +21158,27 @@ function mountSchedule(root) {
 
   // Reset
   $('#reset', root).addEventListener('click', () => {
-    if (!confirm('Reset the whole schedule? This clears every cell and every class.')) return;
-    Storage.remove('schedule:v1');
+    if (!confirm('Reset everything? This clears every class, every cell, and every alternate schedule.')) return;
+    Storage.remove('schedule:v2');
+    editingId = null;
     state = {
-      periods: DEFAULT_PERIODS.slice(),
-      days: DEFAULT_DAYS.slice(),
       classes: [],
-      grid: DEFAULT_PERIODS.map(() => DEFAULT_DAYS.map(() => null)),
+      schedules: [{
+        id: 's1', name: 'Schedule',
+        periods: DEFAULT_PERIODS.slice(),
+        days: DEFAULT_DAYS.slice(),
+        grid: blankGrid(DEFAULT_PERIODS, DEFAULT_DAYS),
+      }],
+      active: 0,
     };
     save();
+    renderTabs();
     renderSide();
     renderGrid();
   });
 
   // Initial render
+  renderTabs();
   renderSide();
   renderGrid();
 
