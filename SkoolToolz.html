@@ -20593,13 +20593,13 @@ function mountSchedule(root) {
 
   // Default classes for first-run flavor (time lives on the period, not here)
   const DEFAULT_CLASSES = [
-    { id:'c1', name:'English', room:'201', color:PALETTE[3] },
-    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0] },
-    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2] },
-    { id:'c4', name:'US History',room:'205',color:PALETTE[4] },
-    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5] },
-    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1] },
-    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6] },
+    { id:'c1', name:'English', room:'201', teacher:'Ms. Reyes',  color:PALETTE[3] },
+    { id:'c2', name:'AP Calc',  room:'318', teacher:'Mr. Okafor', color:PALETTE[0] },
+    { id:'c3', name:'Bio',      room:'112', teacher:'Dr. Lin',    color:PALETTE[2] },
+    { id:'c4', name:'US History',room:'205',teacher:'Mr. Delgado',color:PALETTE[4] },
+    { id:'c5', name:'Spanish',  room:'114', teacher:'Sra. Marín', color:PALETTE[5] },
+    { id:'c6', name:'Lunch',    room:'Caf', teacher:'',           color:PALETTE[1] },
+    { id:'c7', name:'Study',    room:'Lib', teacher:'',           color:PALETTE[6] },
   ];
 
   // Seeded example grid for first run
@@ -20740,6 +20740,7 @@ function mountSchedule(root) {
       }
       .sched-cell .nm{font-family:var(--serif);font-size:14px;line-height:1.1;letter-spacing:-.005em}
       .sched-cell .rm{font-family:var(--mono);font-size:10px;letter-spacing:.08em;opacity:.7}
+      .sched-cell .tch{font-family:var(--serif);font-size:11px;font-style:italic;line-height:1.15;opacity:.8;margin-top:1px}
       .sched-cell.empty{color:var(--muted-2);font-family:var(--mono);font-size:18px;align-items:center;justify-content:center}
 
       .sched-side{
@@ -20762,6 +20763,7 @@ function mountSchedule(root) {
       }
       .sched-side .cls .nm{flex:1;font-family:var(--serif);font-size:15px;color:var(--ink);line-height:1.1}
       .sched-side .cls .rm{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.08em}
+      .sched-side .cls .tch{font-family:var(--serif);font-size:11px;font-style:italic;color:var(--muted)}
       .sched-side .cls .x{
         color:var(--muted-2);font-size:16px;padding:0 4px;
         opacity:0;transition:opacity .12s;
@@ -20939,6 +20941,7 @@ function mountSchedule(root) {
             return `<div class="sched-cell filled" data-pi="${pi}" data-di="${di}" style="background:${c.color}">
               <div class="nm">${escape(c.name)}</div>
               ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
+              ${c.teacher ? `<div class="tch">${escape(c.teacher)}</div>` : ''}
             </div>`;
           }
           return `<div class="sched-cell empty" data-pi="${pi}" data-di="${di}">+</div>`;
@@ -20973,7 +20976,10 @@ function mountSchedule(root) {
         <div class="sw" style="background:${c.color}"></div>
         <div class="clsinfo">
           <div class="nm">${escape(c.name)}</div>
-          ${c.room ? `<div class="sub"><span class="rm">${escape(c.room)}</span></div>` : ''}
+          ${(c.room || c.teacher) ? `<div class="sub">
+            ${c.room ? `<span class="rm">${escape(c.room)}</span>` : ''}
+            ${c.teacher ? `<span class="tch">${escape(c.teacher)}</span>` : ''}
+          </div>` : ''}
         </div>
         <span class="x" data-delete="${c.id}" title="Delete class">×</span>
       </div>`;
@@ -20984,8 +20990,9 @@ function mountSchedule(root) {
     html += `
       <div class="sched-add">
         <h4 style="margin-bottom:4px">${editing ? 'Edit class' : 'Add class'}</h4>
-        <input class="input" id="new-name" placeholder="Class name" maxlength="32">
+        <input class="input" id="new-name" placeholder="Class Name" maxlength="32">
         <input class="input" id="new-room" placeholder="Room (optional)" maxlength="12">
+        <input class="input" id="new-teacher" placeholder="Teacher (optional)" maxlength="32">
         <div class="sched-swatches" id="new-sw"></div>
         <button class="btn sm" id="new-add" style="margin-top:4px">${editing ? 'Save changes' : '+ Add'}</button>
         ${editing ? `<button class="btn ghost sm" id="new-cancel">Cancel</button>` : ''}
@@ -20998,6 +21005,7 @@ function mountSchedule(root) {
     if (editing) {
       $('#new-name', side).value = editing.name || '';
       $('#new-room', side).value = editing.room || '';
+      $('#new-teacher', side).value = editing.teacher || '';
     }
 
     // Swatch picker for the class color
@@ -21018,15 +21026,16 @@ function mountSchedule(root) {
     $('#new-add', side).addEventListener('click', () => {
       const name = $('#new-name', side).value.trim();
       const room = $('#new-room', side).value.trim();
+      const teacher = $('#new-teacher', side).value.trim();
       if (!name) { showToast('Enter a class name.'); return; }
       if (editingId) {
         const c = findClass(editingId);
-        if (c) { c.name = name; c.room = room; c.color = chosenColor; }
+        if (c) { c.name = name; c.room = room; c.teacher = teacher; c.color = chosenColor; }
         editingId = null;
         save(); renderSide(); renderGrid();
       } else {
         const id = 'c' + Date.now().toString(36);
-        sch.classes.push({ id, name, room, color: chosenColor });
+        sch.classes.push({ id, name, room, teacher, color: chosenColor });
         save(); renderSide(); renderGrid();
       }
     });
