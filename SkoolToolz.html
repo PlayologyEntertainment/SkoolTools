@@ -6465,20 +6465,20 @@ function registerTools() {
     keywords:['mind map','concept map','mindmap','diagram','nodes','edges','brainstorm','graph','web','study','export','png'], mount: mountMindmap });
 
   /* ============== PLAN ============== */
+  TOOLS.push({ id:'schedule', shelf:'plan', icon:'🗓️', name:'Schedule Builder',
+    desc:'Weekly class & period grid.', tag:'new',
+    keywords:['schedule','class','timetable','period','room','classes'], mount: mountSchedule });
+  TOOLS.push({ id:'planner', shelf:'plan', icon:'📅', name:'Assignments & Planner',
+    desc:'Due dates, classes, checkboxes.', tag:'new', keywords:['assignment','due','planner','todo','homework','class'], mount: mountPlanner });
+  TOOLS.push({ id:'datecalc', shelf:'plan', icon:'📆', name:'Date Calculator',
+    desc:'Days between, add days.',
+    keywords:['date','days','between','add','calendar'], mount: mountDateCalc });
   TOOLS.push({ id:'gpa', shelf:'plan', icon:'🎓', name:'GPA Calculator',
     desc:'Weighted, +/−, multi-semester.', tag:'upgraded',
     keywords:['gpa','grade','average'], mount: mountGpa });
   TOOLS.push({ id:'finalgrade', shelf:'plan', icon:'🧾', name:'Final Grade',
     desc:'What do I need to score?',
     keywords:['final','exam','grade','need'], mount: mountFinalGrade });
-  TOOLS.push({ id:'planner', shelf:'plan', icon:'📅', name:'Assignments & Planner',
-    desc:'Due dates, classes, checkboxes.', tag:'new', keywords:['assignment','due','planner','todo','homework','class'], mount: mountPlanner });
-  TOOLS.push({ id:'schedule', shelf:'plan', icon:'🗓️', name:'Schedule Builder',
-    desc:'Weekly class & period grid.', tag:'new',
-    keywords:['schedule','class','timetable','period','room','classes'], mount: mountSchedule });
-  TOOLS.push({ id:'datecalc', shelf:'plan', icon:'📆', name:'Date Calculator',
-    desc:'Days between, add days.',
-    keywords:['date','days','between','add','calendar'], mount: mountDateCalc });
 
   /* ============== TOOLBOX ============== */
   TOOLS.push({ id:'unit', shelf:'toolbox', icon:'🔄', name:'Unit Converter',
