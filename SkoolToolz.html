@@ -20572,7 +20572,18 @@ function mountPlanner(root) {
 /* ========== SCHEDULE BUILDER ========== */
 function mountSchedule(root) {
   // ---- State ----
-  const DEFAULT_PERIODS = ['1', '2', '3', '4', 'Lunch', '5', '6', '7'];
+  // A period carries its own Start/End time; every class placed in that row
+  // inherits the period's time. Each schedule (tab) owns its own class pool.
+  const DEFAULT_PERIODS = [
+    { label:'1',     start:'08:00', end:'08:50' },
+    { label:'2',     start:'09:00', end:'09:50' },
+    { label:'3',     start:'10:00', end:'10:50' },
+    { label:'4',     start:'11:00', end:'11:50' },
+    { label:'Lunch', start:'12:00', end:'12:40' },
+    { label:'5',     start:'13:00', end:'13:50' },
+    { label:'6',     start:'14:00', end:'14:50' },
+    { label:'7',     start:'15:00', end:'15:50' },
+  ];
   const DEFAULT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   // Palette: pick saturated colors that survive on the dark theme
   const PALETTE = [
@@ -20580,15 +20591,15 @@ function mountSchedule(root) {
     '#FF7AA8', '#5BC9D6', '#F08544', '#7FB342', '#E94B92'
   ];
 
-  // Default classes for first-run flavor
+  // Default classes for first-run flavor (time lives on the period, not here)
   const DEFAULT_CLASSES = [
-    { id:'c1', name:'English', room:'201', color:PALETTE[3], start:'08:00', end:'08:50' },
-    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0], start:'09:00', end:'09:50' },
-    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2], start:'10:00', end:'10:50' },
-    { id:'c4', name:'US History',room:'205',color:PALETTE[4], start:'11:00', end:'11:50' },
-    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5], start:'13:00', end:'13:50' },
-    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1], start:'12:00', end:'12:40' },
-    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6], start:'14:00', end:'14:50' },
+    { id:'c1', name:'English', room:'201', color:PALETTE[3] },
+    { id:'c2', name:'AP Calc',  room:'318', color:PALETTE[0] },
+    { id:'c3', name:'Bio',      room:'112', color:PALETTE[2] },
+    { id:'c4', name:'US History',room:'205',color:PALETTE[4] },
+    { id:'c5', name:'Spanish',  room:'114', color:PALETTE[5] },
+    { id:'c6', name:'Lunch',    room:'Caf', color:PALETTE[1] },
+    { id:'c7', name:'Study',    room:'Lib', color:PALETTE[6] },
   ];
 
   // Seeded example grid for first run
@@ -20606,31 +20617,51 @@ function mountSchedule(root) {
     return DEFAULT_PERIODS.map((_, pi) => DEFAULT_DAYS.map((_, di) => seed[pi]?.[di] ?? null));
   };
   const blankGrid = (periods, days) => periods.map(() => days.map(() => null));
+  const clonePeriods = (periods) => periods.map(p => ({ ...p }));
 
-  // A schedule = one tab: its own periods, days and grid. Classes are shared
-  // across all schedules (add a class once, use it on any tab).
-  const defaultState = () => ({
+  // A schedule = one tab: its own periods (with times), days, class pool and grid.
+  const defaultSchedule = () => ({
+    id: 's1', name: 'Main',
+    periods: clonePeriods(DEFAULT_PERIODS),
+    days: DEFAULT_DAYS.slice(),
     classes: DEFAULT_CLASSES.map(c => ({ ...c })),
-    schedules: [{
-      id: 's1', name: 'Main',
-      periods: DEFAULT_PERIODS.slice(),
-      days: DEFAULT_DAYS.slice(),
-      grid: seedGrid(),
-    }],
-    active: 0,
+    grid: seedGrid(),
   });
+  const defaultState = () => ({ schedules: [defaultSchedule()], active: 0 });
 
-  // Load, migrating the old single-grid format (schedule:v1) if present.
-  let state = Storage.get('schedule:v2', null);
+  // Coerce a period into the {label,start,end} object shape (older formats
+  // stored periods as plain strings).
+  const asPeriod = (p) => (typeof p === 'string')
+    ? { label: p, start:'', end:'' }
+    : { label: p.label || '', start: p.start || '', end: p.end || '' };
+
+  // Load, migrating older formats (schedule:v2 shared-pool, schedule:v1 flat).
+  let state = Storage.get('schedule:v3', null);
   if (!state) {
+    const v2 = Storage.get('schedule:v2', null);
     const v1 = Storage.get('schedule:v1', null);
-    if (v1 && v1.classes) {
+    if (v2 && v2.schedules) {
+      // v2 kept a single shared class pool; give every tab its own copy.
       state = {
-        classes: v1.classes.map(c => ({ start:'', end:'', ...c })),
+        schedules: v2.schedules.map(s => ({
+          id: s.id, name: s.name,
+          periods: (s.periods || DEFAULT_PERIODS).map(asPeriod),
+          days: s.days || DEFAULT_DAYS.slice(),
+          classes: (v2.classes || []).map(c => {
+            const { start, end, ...rest } = c; // drop old per-class times
+            return { ...rest };
+          }),
+          grid: s.grid || blankGrid(s.periods || DEFAULT_PERIODS, s.days || DEFAULT_DAYS),
+        })),
+        active: v2.active || 0,
+      };
+    } else if (v1 && v1.classes) {
+      state = {
         schedules: [{
           id: 's1', name: 'Main',
-          periods: v1.periods || DEFAULT_PERIODS.slice(),
+          periods: (v1.periods || DEFAULT_PERIODS).map(asPeriod),
           days: v1.days || DEFAULT_DAYS.slice(),
+          classes: v1.classes.map(c => { const { start, end, ...rest } = c; return { ...rest }; }),
           grid: v1.grid || blankGrid(DEFAULT_PERIODS, DEFAULT_DAYS),
         }],
         active: 0,
@@ -20639,7 +20670,7 @@ function mountSchedule(root) {
       state = defaultState();
     }
   }
-  const save = () => Storage.set('schedule:v2', state);
+  const save = () => Storage.set('schedule:v3', state);
 
   const curSched = () => state.schedules[state.active];
 
@@ -20653,9 +20684,10 @@ function mountSchedule(root) {
     const hr = ((h + 11) % 12) + 1;
     return hr + ':' + String(m).padStart(2, '0');
   };
-  const fmtRange = (c) => {
-    if (c.start && c.end) return fmtTime(c.start) + '–' + fmtTime(c.end);
-    return fmtTime(c.start) || '';
+  // Time range for a period {start,end}
+  const fmtRange = (p) => {
+    if (p.start && p.end) return fmtTime(p.start) + '–' + fmtTime(p.end);
+    return fmtTime(p.start) || '';
   };
 
   // ---- Layout ----
@@ -20677,11 +20709,19 @@ function mountSchedule(root) {
         padding:6px 4px;text-align:center;
       }
       .sched-pcell{
+        display:flex;flex-direction:column;justify-content:center;gap:2px;
+        padding:8px 8px;text-align:right;align-self:stretch;
+        border-right:1px solid var(--rule);cursor:pointer;border-radius:2px;
+        transition:background .12s;
+      }
+      .sched-pcell:hover{background:var(--paper-3)}
+      .sched-pcell .plabel{
         font-family:var(--mono);font-size:11px;letter-spacing:.1em;
         text-transform:uppercase;color:var(--ink-2);
-        padding:8px 4px;text-align:right;align-self:center;
-        border-right:1px solid var(--rule);
       }
+      .sched-pcell .ptime{font-family:var(--mono);font-size:9.5px;letter-spacing:.02em;color:var(--muted)}
+      .sched-pcell .ptime.add{opacity:0;transition:opacity .12s;font-style:italic;letter-spacing:.04em}
+      .sched-pcell:hover .ptime.add{opacity:.8}
       .sched-cell{
         min-height:54px;border:1px solid var(--rule);border-radius:2px;
         padding:6px 8px;cursor:pointer;
@@ -20803,6 +20843,25 @@ function mountSchedule(root) {
       .sched-side .cls .tm{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.04em}
       .sched-side .cls.editing{background:var(--paper-3);border-color:var(--accent)}
 
+      /* Period-time editor popover */
+      .sched-period-pop{display:flex;flex-direction:column;gap:10px;min-width:220px;padding:12px}
+      .sched-period-pop .tlbl input{width:100%}
+      .sched-period-pop .pe-actions{display:flex;gap:8px;margin-top:2px}
+      .sched-picker .pick-empty{
+        font-family:var(--mono);font-size:11px;color:var(--muted);
+        padding:6px 8px;letter-spacing:.02em;
+      }
+
+      /* Sidebar empty state + period-time hint */
+      .sched-empty{
+        font-family:var(--serif);font-size:13px;color:var(--muted);
+        line-height:1.35;padding:2px 2px 4px;
+      }
+      .sched-hint{
+        font-family:var(--mono);font-size:9.5px;letter-spacing:.04em;line-height:1.4;
+        color:var(--muted-2);margin:12px 0 0;
+      }
+
       /* Bottom-right action bar */
       .sched-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
       .sched-foot .spacer{flex:1}
@@ -20822,6 +20881,8 @@ function mountSchedule(root) {
         .sched-wrap{grid-template-columns:1fr !important;display:block !important}
         .sched-grid{background:#fff !important;border:1.5px solid #000 !important;padding:0 !important}
         .sched-hcell,.sched-pcell{color:#000 !important;border-color:#000 !important}
+        .sched-pcell .plabel,.sched-pcell .ptime{color:#000 !important}
+        .sched-pcell .ptime.add{display:none !important}
         .sched-cell{border:.5px solid #888 !important;min-height:60px !important;box-shadow:none !important;transform:none !important}
         .sched-cell.filled{color:#000 !important;border:1px solid #000 !important}
         .sched-cell.filled::before{display:none}
@@ -20846,14 +20907,15 @@ function mountSchedule(root) {
   `;
 
   // ---- Renderers ----
-  const findClass = (id) => state.classes.find(c => c.id === id);
+  // Classes are per-schedule now, so always resolve against the active tab.
+  const findClass = (id) => curSched().classes.find(c => c.id === id);
 
   const renderGrid = () => {
     const grid = $('#grid', root);
     const sch = curSched();
     const cols = sch.days.length;
     // Column template: period label + N days
-    const tmpl = `100px repeat(${cols}, 1fr)`;
+    const tmpl = `120px repeat(${cols}, 1fr)`;
 
     // Header row
     let html = `<div class="sched-row" style="grid-template-columns:${tmpl}">
@@ -20861,19 +20923,22 @@ function mountSchedule(root) {
       ${sch.days.map(d => `<div class="sched-hcell">${escape(d)}</div>`).join('')}
     </div>`;
 
-    // Period rows
+    // Period rows — the period label cell shows its Start/End time and is
+    // clickable to edit the period's label and times.
     sch.periods.forEach((p, pi) => {
+      const rng = fmtRange(p);
       html += `<div class="sched-row" style="grid-template-columns:${tmpl}">
-        <div class="sched-pcell">${escape(p)}</div>
+        <div class="sched-pcell" data-period="${pi}" title="Click to set time">
+          <span class="plabel">${escape(p.label)}</span>
+          ${rng ? `<span class="ptime">${escape(rng)}</span>` : `<span class="ptime add">set time</span>`}
+        </div>
         ${sch.days.map((_, di) => {
           const cid = sch.grid[pi]?.[di];
           const c = cid ? findClass(cid) : null;
           if (c) {
-            const rng = fmtRange(c);
             return `<div class="sched-cell filled" data-pi="${pi}" data-di="${di}" style="background:${c.color}">
               <div class="nm">${escape(c.name)}</div>
               ${c.room ? `<div class="rm">${escape(c.room)}</div>` : ''}
-              ${rng ? `<div class="tm">${escape(rng)}</div>` : ''}
             </div>`;
           }
           return `<div class="sched-cell empty" data-pi="${pi}" data-di="${di}">+</div>`;
@@ -20900,35 +20965,32 @@ function mountSchedule(root) {
 
   const renderSide = () => {
     const side = $('#side', root);
+    const sch = curSched();
     const editing = editingId ? findClass(editingId) : null;
     let html = `<h4>Classes</h4>`;
-    state.classes.forEach(c => {
-      const rng = fmtRange(c);
+    sch.classes.forEach(c => {
       html += `<div class="cls${c.id === editingId ? ' editing' : ''}" data-edit="${c.id}" title="Click to edit">
         <div class="sw" style="background:${c.color}"></div>
         <div class="clsinfo">
           <div class="nm">${escape(c.name)}</div>
-          ${(c.room || rng) ? `<div class="sub">
-            ${c.room ? `<span class="rm">${escape(c.room)}</span>` : ''}
-            ${rng ? `<span class="tm">${escape(rng)}</span>` : ''}
-          </div>` : ''}
+          ${c.room ? `<div class="sub"><span class="rm">${escape(c.room)}</span></div>` : ''}
         </div>
         <span class="x" data-delete="${c.id}" title="Delete class">×</span>
       </div>`;
     });
+    if (!sch.classes.length) {
+      html += `<div class="sched-empty">No classes yet. Add one below, then click a cell to place it.</div>`;
+    }
     html += `
       <div class="sched-add">
         <h4 style="margin-bottom:4px">${editing ? 'Edit class' : 'Add class'}</h4>
         <input class="input" id="new-name" placeholder="Class name" maxlength="32">
         <input class="input" id="new-room" placeholder="Room (optional)" maxlength="12">
-        <div class="sched-times">
-          <label class="tlbl">Start<input class="input" type="time" id="new-start"></label>
-          <label class="tlbl">End<input class="input" type="time" id="new-end"></label>
-        </div>
         <div class="sched-swatches" id="new-sw"></div>
         <button class="btn sm" id="new-add" style="margin-top:4px">${editing ? 'Save changes' : '+ Add'}</button>
         ${editing ? `<button class="btn ghost sm" id="new-cancel">Cancel</button>` : ''}
       </div>
+      <p class="sched-hint">Class times are set on each period — click a period on the left of the grid.</p>
     `;
     side.innerHTML = html;
 
@@ -20936,13 +20998,11 @@ function mountSchedule(root) {
     if (editing) {
       $('#new-name', side).value = editing.name || '';
       $('#new-room', side).value = editing.room || '';
-      $('#new-start', side).value = editing.start || '';
-      $('#new-end', side).value = editing.end || '';
     }
 
     // Swatch picker for the class color
     const swEl = $('#new-sw', side);
-    let chosenColor = editing ? editing.color : PALETTE[state.classes.length % PALETTE.length];
+    let chosenColor = editing ? editing.color : PALETTE[sch.classes.length % PALETTE.length];
     PALETTE.forEach(p => {
       const s = document.createElement('span');
       s.className = 'sw' + (p === chosenColor ? ' active' : '');
@@ -20958,18 +21018,15 @@ function mountSchedule(root) {
     $('#new-add', side).addEventListener('click', () => {
       const name = $('#new-name', side).value.trim();
       const room = $('#new-room', side).value.trim();
-      const start = $('#new-start', side).value;
-      const end = $('#new-end', side).value;
       if (!name) { showToast('Enter a class name.'); return; }
-      if (start && end && end <= start) { showToast('End time must be after start time.'); return; }
       if (editingId) {
         const c = findClass(editingId);
-        if (c) { c.name = name; c.room = room; c.start = start; c.end = end; c.color = chosenColor; }
+        if (c) { c.name = name; c.room = room; c.color = chosenColor; }
         editingId = null;
         save(); renderSide(); renderGrid();
       } else {
         const id = 'c' + Date.now().toString(36);
-        state.classes.push({ id, name, room, start, end, color: chosenColor });
+        sch.classes.push({ id, name, room, color: chosenColor });
         save(); renderSide(); renderGrid();
       }
     });
@@ -20982,10 +21039,21 @@ function mountSchedule(root) {
     }
   };
 
-  // ---- Cell picker (popover) ----
+  // ---- Popovers (cell picker + period-time editor) ----
   const closePicker = () => {
-    const p = $('#sched-picker-pop', root);
-    if (p) p.remove();
+    $$('#sched-picker-pop, #sched-period-pop', root).forEach(p => p.remove());
+  };
+
+  // Position a popover just under an anchor element, relative to the grid.
+  const placePopover = (popover, anchor) => {
+    const aRect = anchor.getBoundingClientRect();
+    const gridEl = $('#grid', root);
+    const gridRect = gridEl.getBoundingClientRect();
+    gridEl.style.position = 'relative';
+    popover.style.top = (aRect.bottom - gridRect.top + 2) + 'px';
+    popover.style.left = Math.max(0, aRect.left - gridRect.left) + 'px';
+    popover.addEventListener('mousedown', (e) => e.stopPropagation());
+    gridEl.appendChild(popover);
   };
 
   const openPicker = (cell, pi, di) => {
@@ -20995,22 +21063,17 @@ function mountSchedule(root) {
     popover.className = 'sched-picker';
 
     let html = '';
-    state.classes.forEach(c => {
+    curSched().classes.forEach(c => {
       html += `<div class="pick" data-cid="${c.id}">
         <div class="sw" style="background:${c.color}"></div>
         <div class="nm">${escape(c.name)}</div>
       </div>`;
     });
+    if (!curSched().classes.length) {
+      html += `<div class="pick-empty">No classes yet — add one in the sidebar.</div>`;
+    }
     html += `<div class="pick clear" data-cid="">— Clear cell —</div>`;
     popover.innerHTML = html;
-
-    // Position relative to grid
-    const cellRect = cell.getBoundingClientRect();
-    const gridEl = $('#grid', root);
-    const gridRect = gridEl.getBoundingClientRect();
-    gridEl.style.position = 'relative';
-    popover.style.top = (cellRect.bottom - gridRect.top + 2) + 'px';
-    popover.style.left = Math.max(0, cellRect.left - gridRect.left) + 'px';
 
     popover.addEventListener('click', (e) => {
       const pick = e.target.closest('.pick');
@@ -21022,10 +21085,54 @@ function mountSchedule(root) {
       renderGrid();
       closePicker();
     });
-    // Stop the cell's click from re-opening this popover
-    popover.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    gridEl.appendChild(popover);
+    placePopover(popover, cell);
+  };
+
+  // Edit a period's label + Start/End time (times live on the period)
+  const openPeriodEditor = (pcell, pi) => {
+    closePicker();
+    const p = curSched().periods[pi];
+    const popover = document.createElement('div');
+    popover.id = 'sched-period-pop';
+    popover.className = 'sched-picker sched-period-pop';
+    popover.innerHTML = `
+      <label class="tlbl">Period label
+        <input class="input" id="pe-label" maxlength="16">
+      </label>
+      <div class="sched-times">
+        <label class="tlbl">Start<input class="input" type="time" id="pe-start"></label>
+        <label class="tlbl">End<input class="input" type="time" id="pe-end"></label>
+      </div>
+      <div class="pe-actions">
+        <button class="btn sm" id="pe-save">Save</button>
+        <button class="btn ghost sm" id="pe-clear" title="Clear the time for this period">Clear time</button>
+      </div>
+    `;
+    placePopover(popover, pcell);
+    $('#pe-label', popover).value = p.label || '';
+    $('#pe-start', popover).value = p.start || '';
+    $('#pe-end', popover).value = p.end || '';
+    $('#pe-label', popover).focus();
+
+    const commit = (start, end) => {
+      const label = $('#pe-label', popover).value.trim();
+      if (start && end && end <= start) { showToast('End time must be after start time.'); return; }
+      p.label = label || p.label;
+      p.start = start;
+      p.end = end;
+      save();
+      renderGrid();
+      closePicker();
+    };
+    $('#pe-save', popover).addEventListener('click', (e) => {
+      e.stopPropagation();
+      commit($('#pe-start', popover).value, $('#pe-end', popover).value);
+    });
+    $('#pe-clear', popover).addEventListener('click', (e) => {
+      e.stopPropagation();
+      commit('', '');
+    });
   };
 
   // ---- Wire interactions ----
@@ -21039,22 +21146,28 @@ function mountSchedule(root) {
       openPicker(cell, pi, di);
       return;
     }
-    // Delete class from sidebar
+    // Period label cell → edit that period's label + times
+    const pcell = e.target.closest('[data-period]');
+    if (pcell && root.contains(pcell)) {
+      e.stopPropagation();
+      openPeriodEditor(pcell, parseInt(pcell.dataset.period));
+      return;
+    }
+    // Delete class from sidebar (classes are per-schedule now)
     const del = e.target.closest('[data-delete]');
     if (del) {
       e.stopPropagation();
       const cid = del.dataset.delete;
       if (!confirm(`Delete this class? Cells using it will be cleared.`)) return;
-      state.classes = state.classes.filter(c => c.id !== cid);
+      const sch = curSched();
+      sch.classes = sch.classes.filter(c => c.id !== cid);
       if (editingId === cid) editingId = null;
-      // Clear any cells referencing it, across every schedule
-      state.schedules.forEach(s => {
-        for (let pi = 0; pi < s.grid.length; pi++) {
-          for (let di = 0; di < s.grid[pi].length; di++) {
-            if (s.grid[pi][di] === cid) s.grid[pi][di] = null;
-          }
+      // Clear any cells in THIS schedule referencing it
+      for (let pi = 0; pi < sch.grid.length; pi++) {
+        for (let di = 0; di < sch.grid[pi].length; di++) {
+          if (sch.grid[pi][di] === cid) sch.grid[pi][di] = null;
         }
-      });
+      }
       save();
       renderSide();
       renderGrid();
@@ -21069,38 +21182,47 @@ function mountSchedule(root) {
       state.schedules.splice(i, 1);
       if (state.active === i) state.active = Math.min(i, state.schedules.length - 1);
       else if (state.active > i) state.active--;
+      editingId = null;
       save();
       renderTabs();
+      renderSide();
       renderGrid();
       return;
     }
-    // Switch to a schedule tab
+    // Switch to a schedule tab (each tab has its own class pool → re-render side)
     const tabEl = e.target.closest('[data-tab]');
     if (tabEl) {
       e.stopPropagation();
       const i = parseInt(tabEl.dataset.tab);
       if (i !== state.active) {
         state.active = i;
+        editingId = null;
         save();
         renderTabs();
+        renderSide();
         renderGrid();
       }
       return;
     }
-    // Add a new alternate schedule (copies structure of the current one, empty grid)
+    // Add a new alternate schedule. It gets its OWN class pool, seeded as an
+    // independent copy of the current tab's classes and period times; the grid
+    // starts empty so you can lay the day out fresh.
     if (e.target.closest('#addtab')) {
       e.stopPropagation();
       const src = curSched();
       state.schedules.push({
         id: 's' + Date.now().toString(36),
         name: 'Schedule ' + (state.schedules.length + 1),
-        periods: src.periods.slice(),
+        periods: clonePeriods(src.periods),
         days: src.days.slice(),
+        classes: src.classes.map(c => ({ ...c })),
         grid: blankGrid(src.periods, src.days),
       });
       state.active = state.schedules.length - 1;
+      editingId = null;
       save();
       renderTabs();
+      renderSide();
       renderGrid();
       return;
     }
@@ -21159,14 +21281,14 @@ function mountSchedule(root) {
   // Reset
   $('#reset', root).addEventListener('click', () => {
     if (!confirm('Reset everything? This clears every class, every cell, and every alternate schedule.')) return;
-    Storage.remove('schedule:v2');
+    Storage.remove('schedule:v3');
     editingId = null;
     state = {
-      classes: [],
       schedules: [{
         id: 's1', name: 'Schedule',
-        periods: DEFAULT_PERIODS.slice(),
+        periods: clonePeriods(DEFAULT_PERIODS),
         days: DEFAULT_DAYS.slice(),
+        classes: [],
         grid: blankGrid(DEFAULT_PERIODS, DEFAULT_DAYS),
       }],
       active: 0,
