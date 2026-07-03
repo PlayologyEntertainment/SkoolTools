@@ -6515,7 +6515,7 @@ const HELP_BLURB = {
   toolbox:  "The everyday catch-alls that don't fit anywhere else, but you'll reach for constantly.",
 };
 const HELP_DESC = {
-  gpa: 'Weighted or unweighted, handles +/− grades, rolls up across multiple semesters, and suggests classes from your shared Class List.',
+  gpa: 'Weighted or unweighted, handles +/− grades, rolls up across multiple semesters, and can import classes straight from your shared Class List.',
   finalgrade: 'Figure out exactly what score you need on the final to land the grade you want.',
   planner: 'Track due dates against a shared Class List with a simple checklist.',
   schedule: 'Lay out your weekly classes and periods on a clean grid — build alternate schedules for different days, with per-period times.',
@@ -14469,6 +14469,7 @@ function mountGpa(root) {
     </table>
     <div class="btn-row">
       <button class="btn ghost sm" id="add">+ Add row</button>
+      ${ClassList.get().length ? `<button class="btn ghost sm" id="import">Import from Class List</button>` : ''}
       <button class="btn ghost sm" id="clear">Clear all</button>
     </div>
     <div class="gpa-summary">
@@ -14519,6 +14520,18 @@ function mountGpa(root) {
   };
   const save = () => Storage.set('gpa:rows', rows);
   $('#add', root).addEventListener('click', () => { rows.push({ class:'', grade:'A', credits:3, weight:'Regular' }); save(); render(); recalc(); });
+  const importBtn = $('#import', root);
+  if (importBtn) importBtn.addEventListener('click', () => {
+    const existing = new Set(rows.map(r => r.class.trim().toLowerCase()));
+    const toAdd = ClassList.get().filter(c => !existing.has(c.name.trim().toLowerCase()));
+    if (!toAdd.length) { showToast('All Class List classes are already added.'); return; }
+    toAdd.forEach(c => {
+      const weight = /\bAP\b/i.test(c.name) ? 'AP' : /honors/i.test(c.name) ? 'Honors' : 'Regular';
+      rows.push({ class: c.name, grade:'A', credits:3, weight });
+    });
+    save(); render(); recalc();
+    showToast(`Imported ${toAdd.length} class${toAdd.length === 1 ? '' : 'es'} from the Class List.`);
+  });
   $('#clear', root).addEventListener('click', () => { if (confirm('Clear all rows?')) { rows = []; save(); render(); recalc(); } });
   render(); recalc();
 }
@@ -20985,7 +20998,7 @@ function mountSchedule(root) {
     let html = `
       <div class="sched-sideview">
         <button class="svtab${sideView === 'sched' ? ' active' : ''}" data-view="sched">This Schedule</button>
-        <button class="svtab${sideView === 'master' ? ' active' : ''}" data-view="master">Class List</button>
+        <button class="svtab${sideView === 'master' ? ' active' : ''}" data-view="master">Add to Class List</button>
       </div>
       <h4>${ctx.heading}</h4>
     `;
