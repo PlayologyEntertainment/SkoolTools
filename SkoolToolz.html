@@ -14239,10 +14239,37 @@ All of this runs on voices already built into your browser, so nothing is sent a
   const playBtn = $$('#ra-play'), pauseBtn = $$('#ra-pause'), stopBtn = $$('#ra-stop'), status = $$('#ra-status');
 
   let voices = [];
-  let utter = null;
   let tokens = [];        // {start, end} word ranges
   let spans = [];         // matching span elements
   let curWord = -1;
+  let chunks = [];        // {text, start} pieces fed to synth one at a time
+  let chunkIndex = 0;
+  let playGen = 0;        // bumped on every fresh play/stop so stale utterance events are ignored
+
+  // Chrome/Edge silently stop responding to pause()/resume()/cancel() once a single
+  // utterance runs past ~15s of speech. Speaking long text as a queue of short,
+  // sentence-sized utterances keeps every individual utterance well under that
+  // threshold, so the transport controls keep working no matter how long the text is.
+  function chunkText(text) {
+    const maxLen = Math.max(60, Math.round(100 * st.rate));
+    const out = []; let i = 0;
+    const n = text.length;
+    while (i < n) {
+      let end = Math.min(i + maxLen, n);
+      if (end < n) {
+        let cut = -1;
+        for (let j = end; j > i; j--) {
+          const c = text[j - 1];
+          if (c === '.' || c === '!' || c === '?' || c === '\n') { cut = j; break; }
+        }
+        if (cut > i) end = cut;
+        else { const sp = text.lastIndexOf(' ', end); if (sp > i) end = sp + 1; }
+      }
+      out.push({ text: text.slice(i, end), start: i });
+      i = end;
+    }
+    return out;
+  }
 
   function loadVoices() {
     voices = synth.getVoices() || [];
@@ -14286,18 +14313,18 @@ All of this runs on voices already built into your browser, so nothing is sent a
     status.textContent = !on ? 'Ready' : paused ? 'Paused' : 'Speaking…';
   }
 
-  function speak() {
-    const text = input.value.trim();
-    if (!text) { showToast('Nothing to read — paste some text first.'); return; }
-    synth.cancel();
-    renderRead(input.value);
-    utter = new SpeechSynthesisUtterance(input.value);
+  function speakChunk(gen) {
+    if (gen !== playGen) return;
+    if (chunkIndex >= chunks.length) { clearHighlight(); setPlaying(false); return; }
+    const chunk = chunks[chunkIndex];
+    const u = new SpeechSynthesisUtterance(chunk.text);
     const v = voices.find(x => x.name === voiceSel.value);
-    if (v) { utter.voice = v; utter.lang = v.lang; }
-    utter.rate = st.rate; utter.pitch = st.pitch;
-    utter.addEventListener('boundary', e => {
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.rate = st.rate; u.pitch = st.pitch;
+    u.addEventListener('boundary', e => {
+      if (gen !== playGen) return;
       if (e.name && e.name !== 'word') return;
-      const ci = e.charIndex || 0;
+      const ci = chunk.start + (e.charIndex || 0);
       let lo = 0, hi = tokens.length - 1, found = -1;
       while (lo <= hi) { const mid = (lo + hi) >> 1;
         if (ci < tokens[mid].start) hi = mid - 1;
@@ -14306,10 +14333,29 @@ All of this runs on voices already built into your browser, so nothing is sent a
       if (found < 0) found = Math.max(0, lo - 1);
       highlight(found);
     });
-    utter.addEventListener('end', () => { clearHighlight(); setPlaying(false); });
-    utter.addEventListener('error', () => { clearHighlight(); setPlaying(false); });
+    u.addEventListener('end', () => {
+      if (gen !== playGen) return;
+      chunkIndex++;
+      speakChunk(gen);
+    });
+    u.addEventListener('error', e => {
+      if (gen !== playGen) return;
+      if (e.error === 'canceled' || e.error === 'interrupted') return;
+      clearHighlight(); setPlaying(false);
+    });
+    synth.speak(u);
+  }
+
+  function speak() {
+    const text = input.value.trim();
+    if (!text) { showToast('Nothing to read — paste some text first.'); return; }
+    playGen++;
+    synth.cancel();
+    renderRead(input.value);
+    chunks = chunkText(input.value);
+    chunkIndex = 0;
     setPlaying(true, false);
-    synth.speak(utter);
+    speakChunk(playGen);
   }
 
   // init controls
@@ -14321,7 +14367,7 @@ All of this runs on voices already built into your browser, so nothing is sent a
 
   input.addEventListener('input', () => { st.text = input.value; save(); });
   $$('#ra-sample').addEventListener('click', () => { st.text = SAMPLE; input.value = SAMPLE; save(); });
-  $$('#ra-clear').addEventListener('click', () => { synth.cancel(); st.text = ''; input.value = ''; readEl.innerHTML = ''; setPlaying(false); save(); input.focus(); });
+  $$('#ra-clear').addEventListener('click', () => { playGen++; synth.cancel(); st.text = ''; input.value = ''; readEl.innerHTML = ''; setPlaying(false); save(); input.focus(); });
   voiceSel.addEventListener('change', () => { st.voice = voiceSel.value; save(); });
   $$('#ra-rate').addEventListener('input', e => { st.rate = +e.target.value / 10; $$('#ra-rate-v').textContent = st.rate.toFixed(1) + '×'; save(); });
   $$('#ra-pitch').addEventListener('input', e => { st.pitch = +e.target.value / 10; $$('#ra-pitch-v').textContent = st.pitch.toFixed(1); save(); });
@@ -14331,7 +14377,7 @@ All of this runs on voices already built into your browser, so nothing is sent a
     speak();
   });
   pauseBtn.addEventListener('click', () => { if (synth.speaking && !synth.paused) { synth.pause(); setPlaying(true, true); } });
-  stopBtn.addEventListener('click', () => { synth.cancel(); clearHighlight(); setPlaying(false); });
+  stopBtn.addEventListener('click', () => { playGen++; synth.cancel(); clearHighlight(); setPlaying(false); });
 
   setPlaying(false);
 
