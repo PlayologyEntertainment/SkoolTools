@@ -2667,7 +2667,8 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
   <div class="markline">Skool<em>Toolz</em> — <span style="color:var(--muted)">a Playology product</span></div>
   <div>
     <a href="#" id="link-about">About</a> &nbsp;·&nbsp;
-    <a href="#" id="link-privacy">Privacy</a> &nbsp;·&nbsp;
+    <a href="privacy.html" id="link-privacy" target="_blank" rel="noopener">Privacy</a> &nbsp;·&nbsp;
+    <a href="terms.html" id="link-terms" target="_blank" rel="noopener">Terms</a> &nbsp;·&nbsp;
     <a href="#" id="link-shortcuts">Shortcuts</a> &nbsp;·&nbsp;
     v2.0 · ●●
   </div>
@@ -24070,7 +24071,6 @@ function boot() {
   $('#help-close').addEventListener('click', closeHelp);
   $('#help-backdrop').addEventListener('click', closeHelp);
   $('#link-about').addEventListener('click', (e) => { e.preventDefault(); showToast('<b>SkoolToolz</b> · A Playology product · v2.0'); });
-  $('#link-privacy').addEventListener('click', (e) => { e.preventDefault(); showToast('No account. No tracker. Nothing leaves your laptop.', 3200); });
 
   // Easter egg — open the Kids image in a resizable in-app frame; click anywhere closes
   (() => {

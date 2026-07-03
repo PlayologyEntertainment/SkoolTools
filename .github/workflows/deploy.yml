@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'SkoolToolz.html'
+      - 'privacy.html'
+      - 'terms.html'
       - 'calculus-engine.js'
       - 'ap-packs.js'
       - 'reading-writing-data.js'
@@ -26,6 +28,24 @@ jobs:
             --max-time 60 \
             --connect-timeout 20 \
             "ftp://ftp.playologyentertainment.com/SkoolToolz/SkoolToolz.html"
+
+      - name: Upload privacy.html via FTP
+        run: |
+          curl -T privacy.html \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/privacy.html"
+
+      - name: Upload terms.html via FTP
+        run: |
+          curl -T terms.html \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/terms.html"
 
       - name: Upload calculus-engine.js via FTP
         run: |
