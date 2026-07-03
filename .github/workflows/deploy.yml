@@ -8,6 +8,7 @@ on:
       - 'SkoolToolz.html'
       - 'calculus-engine.js'
       - 'ap-packs.js'
+      - 'reading-writing-data.js'
   workflow_dispatch:
 
 jobs:
@@ -43,3 +44,12 @@ jobs:
             --max-time 60 \
             --connect-timeout 20 \
             "ftp://ftp.playologyentertainment.com/SkoolToolz/ap-packs.js"
+
+      - name: Upload reading-writing-data.js via FTP
+        run: |
+          curl -T reading-writing-data.js \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/reading-writing-data.js"
