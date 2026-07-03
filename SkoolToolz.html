@@ -6319,19 +6319,13 @@ function mountMindmap(root) {
 }
 
 function registerTools() {
-  /* ============== NUMBERS ============== */
-  TOOLS.push({ id:'calculator', shelf:'numbers', icon:'🧮', name:'Calculator',
-    desc:'Scientific, with history & ANS.', tag:'upgraded',
-    keywords:['math','calc','scientific','sum','add'], mount: mountCalculator });
-  TOOLS.push({ id:'graphing', shelf:'numbers', icon:'📈', name:'Graphing Calculator',
-    desc:'Cartesian, polar & parametric; table, derivative & area.', tag:'upgraded',
-    keywords:['plot','graph','function','curve','roots','intersection','derivative','polar','parametric','table','area','integral'], mount: mountGraphing });
-  TOOLS.push({ id:'calculus', shelf:'numbers', icon:'∫', name:'Calculus Solver',
-    desc:'Derivatives, rule-by-rule.', tag:'new',
-    keywords:['calculus','derivative','differentiate','chain','product','quotient','power','rule','ap','calc','slope','integral','limit'], mount: mountCalculus });
-  TOOLS.push({ id:'stats', shelf:'numbers', icon:'📊', name:'Statistics Sheet',
-    desc:'Mean→t-tests, distributions, regression.', tag:'upgraded',
-    keywords:['mean','median','stddev','variance','ttest','confidence','regression','residual','predict','histogram','distribution','normal','binomial','t-distribution','probability','z-score','critical value','p-value'], mount: mountStats });
+  /* ============== NUMBERS ==============
+     Ordered ascending by educational level required; general-purpose tools
+     (Calculator, Statistics Sheet, Graphing Calculator) placed by their
+     most advanced feature. */
+  TOOLS.push({ id:'roman', shelf:'numbers', icon:'🏛️', name:'Roman Numerals',
+    desc:'Number ↔ Roman.',
+    keywords:['roman','numeral','latin'], mount: mountRoman });
   TOOLS.push({ id:'percentage', shelf:'numbers', icon:'%', name:'Percentage',
     desc:'% of, what %, % change.',
     keywords:['percent','pct','off','discount'], mount: mountPercentage });
@@ -6347,9 +6341,18 @@ function registerTools() {
   TOOLS.push({ id:'inequality', shelf:'numbers', icon:'≷', name:'Inequality Solver',
     desc:'Solve & graph on a number line; interval + set notation.', tag:'new',
     keywords:['inequality','inequalities','interval','set','number line','set builder','solve','linear','quadratic','polynomial','rational','absolute value','compound','union','intersection','complement','sign chart','algebra','precalculus','notation','solution set'], mount: mountInequality });
-  TOOLS.push({ id:'roman', shelf:'numbers', icon:'🏛️', name:'Roman Numerals',
-    desc:'Number ↔ Roman.',
-    keywords:['roman','numeral','latin'], mount: mountRoman });
+  TOOLS.push({ id:'calculator', shelf:'numbers', icon:'🧮', name:'Calculator',
+    desc:'Scientific, with history & ANS.', tag:'upgraded',
+    keywords:['math','calc','scientific','sum','add'], mount: mountCalculator });
+  TOOLS.push({ id:'stats', shelf:'numbers', icon:'📊', name:'Statistics Sheet',
+    desc:'Mean→t-tests, distributions, regression.', tag:'upgraded',
+    keywords:['mean','median','stddev','variance','ttest','confidence','regression','residual','predict','histogram','distribution','normal','binomial','t-distribution','probability','z-score','critical value','p-value'], mount: mountStats });
+  TOOLS.push({ id:'graphing', shelf:'numbers', icon:'📈', name:'Graphing Calculator',
+    desc:'Cartesian, polar & parametric; table, derivative & area.', tag:'upgraded',
+    keywords:['plot','graph','function','curve','roots','intersection','derivative','polar','parametric','table','area','integral'], mount: mountGraphing });
+  TOOLS.push({ id:'calculus', shelf:'numbers', icon:'∫', name:'Calculus Solver',
+    desc:'Derivatives, rule-by-rule.', tag:'new',
+    keywords:['calculus','derivative','differentiate','chain','product','quotient','power','rule','ap','calc','slope','integral','limit'], mount: mountCalculus });
 
   /* ============== LAB ============== */
   TOOLS.push({ id:'periodic', shelf:'lab', icon:'🧪', name:'Periodic Table',
@@ -6426,28 +6429,29 @@ function registerTools() {
     desc:'Focus sessions with breaks, soundscapes & stats.', tag:'new',
     keywords:['focus','lock','pomodoro','break','soundscape','white noise','pink noise','brown noise','rain','ocean','distraction','session','study','deep work','accessibility','adhd','fullscreen'], mount: mountFocusPlus });
 
-  /* ============== WORDS ============== */
-  TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
-    desc:'Count, reading level, reading time.', tag:'upgraded',
-    keywords:['words','characters','reading','time'], mount: mountWordCount });
-  TOOLS.push({ id:'citation', shelf:'words', icon:'📚', name:'Citation Helper',
-    desc:'MLA · APA · Chicago. DOI/ISBN autofill + annotated bibliography.', tag:'upgraded',
-    keywords:['cite','mla','apa','chicago','reference','bibliography','doi','isbn','annotated'], mount: mountCitation });
-  TOOLS.push({ id:'essay', shelf:'words', icon:'📑', name:'Essay Planner',
-    desc:'Outline-to-draft scaffold, sources, export.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist','scaffold','evidence','transition','topic sentence','print','pdf'], mount: mountEssay });
-  TOOLS.push({ id:'vocab', shelf:'words', icon:'🗂️', name:'Vocabulary Builder',
-    desc:'Build word lists, quiz with SRS.', tag:'new', keywords:['vocab','sat','act','ap','words','definitions','quiz','srs','spelling'], mount: mountVocab });
-  TOOLS.push({ id:'lang', shelf:'words', icon:'🗣️', name:'Language Drill',
-    desc:'Conjugation and vocab trainer.', tag:'new', keywords:['language','spanish','french','german','conjugate','vocab','drill'], mount: mountLang });
+  /* ============== WORDS ==============
+     Ordered ascending by educational level required. */
   TOOLS.push({ id:'textcase', shelf:'words', icon:'🔤', name:'Text Case',
     desc:'Case, trim, line-break fix.', tag:'upgraded',
     keywords:['upper','lower','title','case','clean'], mount: mountTextCase });
   TOOLS.push({ id:'typing', shelf:'words', icon:'⌨️', name:'Typing Test',
     desc:'Classroom passages, WPM, accuracy.', tag:'upgraded',
     keywords:['typing','wpm','speed'], mount: mountTyping });
+  TOOLS.push({ id:'wordcount', shelf:'words', icon:'📝', name:'Word Counter',
+    desc:'Count, reading level, reading time.', tag:'upgraded',
+    keywords:['words','characters','reading','time'], mount: mountWordCount });
+  TOOLS.push({ id:'vocab', shelf:'words', icon:'🗂️', name:'Vocabulary Builder',
+    desc:'Build word lists, quiz with SRS.', tag:'new', keywords:['vocab','sat','act','ap','words','definitions','quiz','srs','spelling'], mount: mountVocab });
+  TOOLS.push({ id:'lang', shelf:'words', icon:'🗣️', name:'Language Drill',
+    desc:'Conjugation and vocab trainer.', tag:'new', keywords:['language','spanish','french','german','conjugate','vocab','drill'], mount: mountLang });
   TOOLS.push({ id:'grammar', shelf:'words', icon:'✍️', name:'Grammar & Spellcheck',
     desc:'Spelling, grammar, style — all checked offline.', tag:'new',
     keywords:['grammar','spell','spellcheck','passive','voice','punctuation','writing','proofread','check'], mount: mountGrammar });
+  TOOLS.push({ id:'essay', shelf:'words', icon:'📑', name:'Essay Planner',
+    desc:'Outline-to-draft scaffold, sources, export.', tag:'upgraded', keywords:['essay','outline','thesis','source','draft','checklist','scaffold','evidence','transition','topic sentence','print','pdf'], mount: mountEssay });
+  TOOLS.push({ id:'citation', shelf:'words', icon:'📚', name:'Citation Helper',
+    desc:'MLA · APA · Chicago. DOI/ISBN autofill + annotated bibliography.', tag:'upgraded',
+    keywords:['cite','mla','apa','chicago','reference','bibliography','doi','isbn','annotated'], mount: mountCitation });
 
   /* ============== STUDY ============== */
   TOOLS.push({ id:'flashcards', shelf:'study', icon:'🃏', name:'Flashcards',
