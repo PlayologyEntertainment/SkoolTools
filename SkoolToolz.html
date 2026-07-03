@@ -14245,6 +14245,8 @@ All of this runs on voices already built into your browser, so nothing is sent a
   let chunks = [];        // {text, start} pieces fed to synth one at a time
   let chunkIndex = 0;
   let playGen = 0;        // bumped on every fresh play/stop so stale utterance events are ignored
+  let curAbsIndex = 0;    // absolute offset of the word currently being spoken, for resuming
+  let pausedAt = null;    // absolute offset to resume from, or null when not paused
 
   // Chrome/Edge silently stop responding to pause()/resume()/cancel() once a single
   // utterance runs past ~15s of speech. Speaking long text as a queue of short,
@@ -14317,6 +14319,7 @@ All of this runs on voices already built into your browser, so nothing is sent a
     if (gen !== playGen) return;
     if (chunkIndex >= chunks.length) { clearHighlight(); setPlaying(false); return; }
     const chunk = chunks[chunkIndex];
+    curAbsIndex = chunk.start;
     const u = new SpeechSynthesisUtterance(chunk.text);
     const v = voices.find(x => x.name === voiceSel.value);
     if (v) { u.voice = v; u.lang = v.lang; }
@@ -14325,6 +14328,7 @@ All of this runs on voices already built into your browser, so nothing is sent a
       if (gen !== playGen) return;
       if (e.name && e.name !== 'word') return;
       const ci = chunk.start + (e.charIndex || 0);
+      curAbsIndex = ci;
       let lo = 0, hi = tokens.length - 1, found = -1;
       while (lo <= hi) { const mid = (lo + hi) >> 1;
         if (ci < tokens[mid].start) hi = mid - 1;
@@ -14350,9 +14354,27 @@ All of this runs on voices already built into your browser, so nothing is sent a
     const text = input.value.trim();
     if (!text) { showToast('Nothing to read — paste some text first.'); return; }
     playGen++;
+    pausedAt = null;
     synth.cancel();
     renderRead(input.value);
     chunks = chunkText(input.value);
+    chunkIndex = 0;
+    setPlaying(true, false);
+    speakChunk(playGen);
+  }
+
+  // Resuming with the native speechSynthesis.resume() is what triggers the Chrome/Edge
+  // bug in the first place: once resume() has been called, the engine can get stuck so
+  // later pause()/cancel() calls silently do nothing. So "pause" here really means
+  // "hard stop and remember where we were", and "resume" means "re-synthesize the
+  // remaining text as a fresh chunk queue" — the native pause()/resume() pair is never used.
+  function resumeFrom(offset) {
+    const remaining = input.value.slice(offset);
+    if (!remaining.trim()) { pausedAt = null; clearHighlight(); setPlaying(false); return; }
+    playGen++;
+    pausedAt = null;
+    synth.cancel();
+    chunks = chunkText(remaining).map(c => ({ text: c.text, start: c.start + offset }));
     chunkIndex = 0;
     setPlaying(true, false);
     speakChunk(playGen);
@@ -14367,17 +14389,23 @@ All of this runs on voices already built into your browser, so nothing is sent a
 
   input.addEventListener('input', () => { st.text = input.value; save(); });
   $$('#ra-sample').addEventListener('click', () => { st.text = SAMPLE; input.value = SAMPLE; save(); });
-  $$('#ra-clear').addEventListener('click', () => { playGen++; synth.cancel(); st.text = ''; input.value = ''; readEl.innerHTML = ''; setPlaying(false); save(); input.focus(); });
+  $$('#ra-clear').addEventListener('click', () => { playGen++; pausedAt = null; synth.cancel(); st.text = ''; input.value = ''; readEl.innerHTML = ''; setPlaying(false); save(); input.focus(); });
   voiceSel.addEventListener('change', () => { st.voice = voiceSel.value; save(); });
   $$('#ra-rate').addEventListener('input', e => { st.rate = +e.target.value / 10; $$('#ra-rate-v').textContent = st.rate.toFixed(1) + '×'; save(); });
   $$('#ra-pitch').addEventListener('input', e => { st.pitch = +e.target.value / 10; $$('#ra-pitch-v').textContent = st.pitch.toFixed(1); save(); });
 
   playBtn.addEventListener('click', () => {
-    if (synth.paused && synth.speaking) { synth.resume(); setPlaying(true, false); return; }
+    if (pausedAt != null) { resumeFrom(pausedAt); return; }
     speak();
   });
-  pauseBtn.addEventListener('click', () => { if (synth.speaking && !synth.paused) { synth.pause(); setPlaying(true, true); } });
-  stopBtn.addEventListener('click', () => { playGen++; synth.cancel(); clearHighlight(); setPlaying(false); });
+  pauseBtn.addEventListener('click', () => {
+    if (pausedAt != null || pauseBtn.disabled) return;
+    pausedAt = curAbsIndex;
+    playGen++;
+    synth.cancel();
+    setPlaying(true, true);
+  });
+  stopBtn.addEventListener('click', () => { playGen++; pausedAt = null; synth.cancel(); clearHighlight(); setPlaying(false); });
 
   setPlaying(false);
 
