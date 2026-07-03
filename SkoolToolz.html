@@ -6405,6 +6405,9 @@ function registerTools() {
   TOOLS.push({ id:'mathdrill', shelf:'testprep', icon:'✏️', name:'SAT / ACT Math Drill',
     desc:'Timed multiple-choice & grid-in math practice.', tag:'new',
     keywords:['sat','act','math','drill','timed','practice','multiple choice','grid-in','digital sat','test prep','algebra','geometry','quiz','question bank'], mount: mountMathDrill });
+  TOOLS.push({ id:'rwdrill', shelf:'testprep', icon:'📖', name:'SAT / ACT Reading & Writing Drill',
+    desc:'Passage-based reading, grammar & vocab practice.', tag:'new',
+    keywords:['sat','act','reading','writing','english','drill','timed','practice','passage','grammar','conventions','vocabulary','vocab','highlight','annotate','digital sat','test prep','quiz'], mount: mountReadingWritingDrill });
   TOOLS.push({ id:'appacks', shelf:'testprep', icon:'🎴', name:'AP Flashcard Packs',
     desc:'Original AP subject decks · study, copy & share.', tag:'new',
     keywords:['ap','flashcard','packs','decks','subject','biology','chemistry','physics','environmental','calculus','statistics','history','psychology','geography','government','csp','srs','test prep'], mount: mountAPPacks });
@@ -6535,6 +6538,7 @@ const HELP_DESC = {
   frqtimer: 'Keep AP free-response sections on pace with a built-in clock.',
   cheatsheet: 'Build a one-page formula sheet for an open-note exam and print it to PDF.',
   mathdrill: 'Practice timed multiple-choice and grid-in questions styled after the real thing.',
+  rwdrill: 'Curated reading passages plus auto-generated grammar drills, with highlighting, answer elimination, and long-term weak-spot tracking.',
   appacks: 'Ready-made decks for AP subjects — study, copy, or share your own.',
   calculator: 'A scientific calculator with history and an ANS key.',
   graphing: 'Plot Cartesian, polar, and parametric functions with tables, derivatives, and area under the curve.',
@@ -15647,6 +15651,616 @@ function mountMathDrill(root) {
     // render math, and lazily render solution math when a details panel opens
     renderAllMath(view);
     $$('details', view).forEach(d => d.addEventListener('toggle', () => { if (d.open) renderAllMath(d); }));
+  }
+
+  renderSetup();
+  return { unmount() { clearInterval(timer); try { actx && actx.close(); } catch {} } };
+}
+
+/* ========== SAT / ACT READING & WRITING DRILL ==========
+   Passage-based Reading & Writing practice. Curated passages (Information &
+   Ideas, Craft & Structure, Expression of Ideas) live in a lazy-loaded
+   content module (reading-writing-data.js, mirrors the AP Flashcard Packs /
+   calculus-engine pattern). Standard English Conventions / ACT English
+   items are generated procedurally here, the same way Math Drill generates
+   infinite math problems, since grammar rules (unlike real passages) can be
+   templated. Adds three things Math Drill doesn't need: a passage
+   highlight/annotate tool, per-choice strike-through (process of
+   elimination), and a lifetime domain-accuracy tracker shown on setup. */
+function mountReadingWritingDrill(root) {
+  const SKEY = 'testprep:rwdrill';
+  const STATS_KEY = 'testprep:rwdrill:stats';
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const shuffle = (arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const LETTERS = ['A', 'B', 'C', 'D'];
+
+  /* ---- audio (same lightweight WebAudio beep pattern as Math Drill) ---- */
+  let actx = null;
+  const beep = (freq = 880, dur = 0.18) => {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = freq; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0.0001, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3, actx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch {}
+  };
+
+  const DOMAIN_LABEL = { info: 'Information & Ideas', craft: 'Craft & Structure', expression: 'Expression of Ideas', conventions: 'Standard English Conventions' };
+  const clk = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+
+  /* ================= PROCEDURAL GRAMMAR GENERATORS (Standard English
+     Conventions / ACT English) — fresh sentences every run, never a fixed
+     bank, the same philosophy as Math Drill's question generators. ================= */
+  const FANBOYS_SETS = [
+    { subj: 'The volunteers', act1: 'organized the fundraiser for months', conj: 'but', act2: 'the event still needed more publicity' },
+    { subj: 'The team', act1: 'practiced every weekend', conj: 'yet', act2: 'the championship game slipped away in the final minute' },
+    { subj: 'The researchers', act1: 'collected data throughout the summer', conj: 'so', act2: 'they were ready to publish by fall' },
+    { subj: 'The committee', act1: 'reviewed every proposal twice', conj: 'but', act2: 'a few questions still remained unanswered' },
+  ];
+  function t_commaFanboys() {
+    const s = pick(FANBOYS_SETS);
+    const correct = `, ${s.conj}`;
+    const wrongs = [` ${s.conj}`, `, ${s.conj},`, `; ${s.conj}`];
+    return {
+      subtype: 'Boundaries — comma with a coordinating conjunction',
+      stemBefore: `${s.subj} ${s.act1}`, stemAfter: ` ${s.act2}.`,
+      correct, wrongs,
+      explanation: `“${s.subj} ${s.act1}” and “${s.act2}” are both independent clauses joined by the coordinating conjunction “${s.conj},” which needs a comma before it. The other choices drop the comma, add an extra one, or wrongly pair a semicolon with a conjunction.`
+    };
+  }
+  const SPLICE_SETS = [
+    { c1: 'The bridge had been closed for repairs', c2: 'Traffic backed up for miles' },
+    { c1: 'The museum extended its hours for the summer', c2: 'Visitors could tour the new exhibit until nine' },
+    { c1: 'The recipe called for fresh basil', c2: 'The cook substituted dried basil instead' },
+    { c1: 'Ticket sales exceeded expectations', c2: 'Organizers scheduled an additional show' },
+  ];
+  function t_commaSplice() {
+    const s = pick(SPLICE_SETS);
+    const c2low = s.c2[0].toLowerCase() + s.c2.slice(1);
+    const correct = `. ${s.c2}`;
+    const wrongs = [`, ${c2low}`, ` ${c2low}`, `, and, ${c2low}`];
+    return {
+      subtype: 'Boundaries — joining two independent clauses',
+      stemBefore: s.c1, stemAfter: '',
+      correct, wrongs,
+      explanation: `“${s.c1}” and “${s.c2}” are both independent clauses, so they need a full stop, semicolon, or comma-plus-conjunction between them — not just a comma (a comma splice) or no punctuation at all (a run-on). Only “${correct}” properly separates them.`
+    };
+  }
+  const SV_SETS = [
+    { subj: 'The list of requirements', correct: 'is', wrongs: ['are', 'were', 'have been'], tails: ['long and detailed.', 'still being finalized.'], note: '“list,” not the plural “requirements” in the phrase that follows it,' },
+    { subj: 'The box of old photographs', correct: 'sits', wrongs: ['sit', 'were sitting', 'have sat'], tails: ['in the attic.', 'on the top shelf.'], note: '“box,” not the plural “photographs” in the phrase that follows it,' },
+    { subj: 'Each of the applicants', correct: 'has', wrongs: ['have', 'were having', 'has had, however,'], tails: ['already been interviewed.', 'submitted a portfolio.'], note: '“Each,” not the plural “applicants” in the phrase that follows it,' },
+    { subj: 'The number of errors', correct: 'has', wrongs: ['have', 'were', 'has been, but'], tails: ['decreased this year.', 'stayed roughly the same.'], note: '“number,” not the plural “errors” in the phrase that follows it,' },
+  ];
+  function t_svAgreement() {
+    const s = pick(SV_SETS); const tail = pick(s.tails);
+    return {
+      subtype: 'Form, Structure, and Sense — subject-verb agreement',
+      stemBefore: `${s.subj} `, stemAfter: ` ${tail}`,
+      correct: s.correct, wrongs: s.wrongs,
+      explanation: `The subject agrees with ${s.note} so it takes the singular verb “${s.correct}.”`
+    };
+  }
+  const APOS_SETS = [
+    { stemBefore: 'The ', stemAfter: ' notebooks were left on the bus.', noun: 'students', correct: "students'", wrongs: ["student's", "students's", "students"] },
+    { stemBefore: 'By Friday, the ', stemAfter: ' decision had been announced to the whole team.', noun: 'coaches', correct: "coaches'", wrongs: ["coach's", "coaches's", "coaches"] },
+  ];
+  function t_apostrophe() {
+    const s = pick(APOS_SETS);
+    return {
+      subtype: 'Boundaries — apostrophes and possessives',
+      stemBefore: s.stemBefore, stemAfter: s.stemAfter,
+      correct: s.correct, wrongs: s.wrongs,
+      explanation: `Because more than one of the ${s.noun} possesses the noun that follows, the plural possessive form (an apostrophe after the final “s”) is correct: “${s.correct}.”`
+    };
+  }
+  const PRONOUN_SETS = [
+    { stemBefore: 'Each of the dancers brought ', stemAfter: ' own costume to the dress rehearsal.', correct: 'their', wrongs: ['his', 'they', 'it'] },
+    { stemBefore: 'Every employee must submit ', stemAfter: ' timesheet by Friday.', correct: 'their', wrongs: ['his', 'they', 'our'] },
+  ];
+  function t_pronoun() {
+    const s = pick(PRONOUN_SETS);
+    return {
+      subtype: 'Form, Structure, and Sense — pronoun-antecedent agreement',
+      stemBefore: s.stemBefore, stemAfter: s.stemAfter,
+      correct: s.correct, wrongs: s.wrongs,
+      explanation: `“Each”/“Every” is grammatically singular but refers to a group of unspecified individuals, so the widely accepted singular “their” fits here; “they” isn't grammatical as a possessive determiner, and “his” assumes a gender the sentence never specifies.`
+    };
+  }
+  const TENSE_SETS = [
+    { stemBefore: 'By the time the guests arrived, she ', stemAfter: ' finished cooking.', correct: 'had already', wrongs: ['has already', 'have already', 'was already'] },
+    { stemBefore: 'By the time the movie started, they ', stemAfter: ' found their seats.', correct: 'had already', wrongs: ['has already', 'have already', 'were already'] },
+  ];
+  function t_pastPerfect() {
+    const s = pick(TENSE_SETS);
+    return {
+      subtype: 'Form, Structure, and Sense — verb tense consistency',
+      stemBefore: s.stemBefore, stemAfter: s.stemAfter,
+      correct: s.correct, wrongs: s.wrongs,
+      explanation: `One past event was completed before another past event — that calls for the past perfect “had already,” not the present perfect (“has”/“have already”) or a simple past progressive (“was”/“were already”).`
+    };
+  }
+  const PARALLEL_SETS = [
+    { stemBefore: 'The coach expects players to arrive early, practice hard, and ', stemAfter: '.', correct: 'follow the rules', wrongs: ['following the rules', 'to follow the rules', 'the rules should be followed'] },
+    { stemBefore: 'The workshop will teach students to plan an essay, draft it carefully, and ', stemAfter: '.', correct: 'revise it before submitting', wrongs: ['revising it before submitting', 'to revise it before submitting', 'it should be revised before submitting'] },
+  ];
+  function t_parallel() {
+    const s = pick(PARALLEL_SETS);
+    return {
+      subtype: 'Form, Structure, and Sense — parallel structure',
+      stemBefore: s.stemBefore, stemAfter: s.stemAfter,
+      correct: s.correct, wrongs: s.wrongs,
+      explanation: `The list already uses matching grammatical form for its earlier items, so the final item needs to match that same form — “${s.correct}” — rather than switching to a gerund, an infinitive, or a passive construction.`
+    };
+  }
+  const CONV_TEMPLATES = [t_commaFanboys, t_commaSplice, t_svAgreement, t_apostrophe, t_pronoun, t_pastPerfect, t_parallel];
+
+  function buildConventionsQuestion(test) {
+    const t = pick(CONV_TEMPLATES)();
+    if (test === 'ACT') {
+      const noChangeCorrect = Math.random() < 0.25;
+      const underlined = noChangeCorrect ? t.correct : pick(t.wrongs);
+      const restPool = noChangeCorrect ? t.wrongs.slice() : [t.correct, ...t.wrongs.filter(w => w !== underlined)];
+      const rest = shuffle(restPool).slice(0, 3);
+      const choices = ['NO CHANGE', ...rest];
+      const correctIndex = noChangeCorrect ? 0 : 1 + rest.indexOf(t.correct);
+      return {
+        domain: 'conventions', subtype: t.subtype,
+        stemHtml: `${escape(t.stemBefore)}<u>${escape(underlined)}</u>${escape(t.stemAfter)}`,
+        prompt: 'Which choice completes the sentence with the most conventional Standard English (or should it stay as it is)?',
+        choices, correctIndex, explanation: t.explanation
+      };
+    }
+    const choices = shuffle([t.correct, ...t.wrongs]);
+    const correctIndex = choices.indexOf(t.correct);
+    return {
+      domain: 'conventions', subtype: t.subtype,
+      stemHtml: `${escape(t.stemBefore)}<span class="rw-blank">_____</span>${escape(t.stemAfter)}`,
+      prompt: 'Which choice completes the text so that it conforms to the conventions of Standard English?',
+      choices, correctIndex, explanation: t.explanation
+    };
+  }
+
+  /* ================= CURATED CONTENT (lazy-loaded reading-writing-data.js) ================= */
+  let packsReady = !!window.RWPacks, loadStarted = false;
+  const packQueue = [];
+  function ensurePacks(cb) {
+    if (window.RWPacks) { cb(true); return; }
+    packQueue.push(cb);
+    if (loadStarted) return;
+    loadStarted = true;
+    const s = document.createElement('script');
+    s.src = 'reading-writing-data.js';
+    s.onload = () => { packsReady = !!window.RWPacks; packQueue.splice(0).forEach(fn => fn(packsReady)); };
+    s.onerror = () => { packsReady = false; packQueue.splice(0).forEach(fn => fn(false)); };
+    document.head.appendChild(s);
+  }
+
+  function pickSatCurated(domain) {
+    const arr = (window.RWPacks.sat || []).filter(x => x.domain === domain);
+    if (!arr.length) return null;
+    const item = pick(arr);
+    return { domain, subtype: item.subtype, passageText: item.text, question: item.question, choices: item.choices.slice(), correctIndex: item.correct, explanation: item.explanation, vocab: item.vocab || null };
+  }
+
+  /* ================= CONFIG (persisted) ================= */
+  const DEFAULT_DOMAINS = ['info', 'craft', 'expression', 'conventions'];
+  let cfg = Storage.get(SKEY, null) || {};
+  cfg = { test: 'SAT', section: 'reading', mode: 'quick', count: 10, passageCount: 2, timed: true, domains: DEFAULT_DOMAINS.slice(), ...cfg };
+  const saveCfg = () => Storage.set(SKEY, cfg);
+
+  function availableDomains() {
+    if (cfg.test === 'SAT') return ['info', 'craft', 'expression', 'conventions'];
+    return cfg.section === 'english' ? ['conventions'] : ['info', 'craft'];
+  }
+  function clampDomains() {
+    const avail = availableDomains();
+    cfg.domains = cfg.domains.filter(d => avail.includes(d));
+    if (!cfg.domains.length) cfg.domains = avail.slice();
+  }
+  clampDomains();
+
+  const PACE = { sat: 75, actEnglish: 36, actReading: 53 };       // seconds/question, quick-mode test pace
+  const FULL_SAT = { count: 27, secs: 32 * 60 };
+  const FULL_ACT_ENGLISH = { count: 75, secs: 45 * 60 };
+
+  /* ---- lifetime domain-accuracy tracking (persists across sessions, unlike
+     Math Drill's per-run-only topic table) ---- */
+  let stats = (() => { try { const s = Storage.get(STATS_KEY, {}); return (s && typeof s === 'object') ? s : {}; } catch { return {}; } })();
+  function bumpStats(domain, correct) { const s = stats[domain] = stats[domain] || { c: 0, n: 0 }; s.n++; if (correct) s.c++; Storage.set(STATS_KEY, stats); }
+
+  function estScore(test, correct, total) {
+    const pct = total ? correct / total : 0;
+    if (test === 'SAT') { const s = Math.round((200 + pct * 600) / 10) * 10; return Math.max(200, Math.min(800, s)); }
+    return Math.max(1, Math.min(36, Math.round(1 + pct * 35)));
+  }
+
+  /* ---- shell ---- */
+  root.innerHTML = `<style>
+    .rw-passage{font-size:15.5px;line-height:1.6}
+    .rw-ptitle{font-family:var(--serif);font-weight:600;margin-bottom:6px}
+    .rw-ptext mark.rw-hl{background:var(--accent-soft);border-radius:2px;padding:0 1px;cursor:pointer}
+    .rw-ptools{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0 14px;flex-wrap:wrap}
+    .rw-blank{display:inline-block;border-bottom:2px solid var(--ink-2);min-width:70px;text-align:center}
+    .rw-choice-row{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+    .rw-elim{flex:none;width:32px;border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);color:var(--muted);cursor:pointer;font-size:13px}
+    .rw-elim.on{background:var(--red);color:#fff;border-color:var(--red)}
+    .rw-choice{flex:1;display:flex;gap:10px;align-items:center;text-align:left;padding:12px 14px;border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);cursor:pointer;color:var(--ink);font-size:15.5px}
+    .rw-choice:hover{border-color:var(--ink-2)}
+    .rw-choice.sel{border-color:var(--accent);background:var(--accent-soft)}
+    .rw-choice.elim{opacity:.5;text-decoration:line-through}
+    .rw-letter{font-family:var(--mono);font-size:13px;color:var(--muted);min-width:18px;flex:none}
+    .rw-choice.sel .rw-letter{color:var(--accent)}
+    .rw-seg{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden;flex-wrap:wrap}
+    .rw-seg button{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:8px 13px;color:var(--muted);background:transparent;border:none;border-right:1px solid var(--rule);cursor:pointer}
+    .rw-seg button:last-child{border-right:none}
+    .rw-seg button.on{background:var(--accent-soft);color:var(--ink)}
+    .rw-topic{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .rw-strip{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0}
+    .rw-dot{width:12px;height:12px;border-radius:50%;border:1px solid var(--muted-2);cursor:pointer;padding:0;background:transparent}
+    .rw-dot.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+    .rw-dot.ans{background:var(--muted);border-color:var(--muted)}
+    .rw-dot.sep{margin-right:9px}
+    .rw-rev{border-left:3px solid var(--muted);padding:8px 12px;margin-bottom:10px}
+    .rw-rev.ok{border-left-color:var(--accent-3)}
+    .rw-rev.no{border-left-color:var(--red)}
+    .rw-check{display:flex;gap:8px;align-items:center;cursor:pointer;font-size:15px;color:var(--ink-2);margin-bottom:8px}
+    .rw-trend-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+    .rw-trend-label{flex:none;width:190px;color:var(--ink-2)}
+    .rw-trend-bar{flex:1;height:8px;border-radius:4px;background:var(--paper-2);border:1px solid var(--rule);overflow:hidden}
+    .rw-trend-fill{height:100%;background:var(--accent)}
+    .rw-trend-pct{flex:none;width:38px;text-align:right;color:var(--muted);font-family:var(--mono)}
+  </style><div id="rw-view"></div>`;
+  const view = $('#rw-view', root);
+
+  let timer = null, D = null;
+
+  /* ================= SETUP ================= */
+  function renderSetup() {
+    clearInterval(timer); timer = null; D = null;
+    if (!packsReady) {
+      view.innerHTML = `<div class="ap-status"><div class="ap-status-spin"></div><div class="ap-status-title">Loading passages…</div><div class="ap-status-sub">Fetching the Reading &amp; Writing content library. This loads once, then works offline.</div></div>`;
+      ensurePacks((ok) => { if (ok) renderSetup(); else showLoadError(); });
+      return;
+    }
+    const isACT = cfg.test === 'ACT';
+    const isReading = isACT && cfg.section === 'reading';
+    const isFull = cfg.mode === 'full';
+    const avail = availableDomains();
+    const countField = isReading ? 'passageCount' : 'count';
+    const countOpts = isReading ? [1, 2, 3, 4] : [5, 10, 15, 20];
+    const countLabel = isReading ? 'Passages' : 'Questions';
+    const pace = isACT ? (isReading ? PACE.actReading : PACE.actEnglish) : PACE.sat;
+
+    const seg = (name, opts, cur) => `<div class="rw-seg" data-seg="${name}">${opts.map(o => `<button data-val="${o.v}" class="${String(o.v) === String(cur) ? 'on' : ''}">${o.l}</button>`).join('')}</div>`;
+
+    const trendRows = Object.keys(stats).filter(d => stats[d].n > 0);
+    const trendsHtml = !trendRows.length ? '' : `<div class="field"><label>Your trends (lifetime)</label>${trendRows.map(d => {
+      const s = stats[d]; const pct = Math.round(s.c / s.n * 100);
+      return `<div class="rw-trend-row"><span class="rw-trend-label">${escape(DOMAIN_LABEL[d] || d)}</span><div class="rw-trend-bar"><div class="rw-trend-fill" style="width:${pct}%"></div></div><span class="rw-trend-pct">${pct}%</span></div>`;
+    }).join('')}</div>`;
+
+    view.innerHTML = `
+      <p class="help">Original, curated passages for Information &amp; Ideas, Craft &amp; Structure, and Expression of Ideas, plus auto-generated Standard English Conventions / ACT English grammar items — fresh every run. Real exam passages are copyrighted, so everything here is built to match the <em>style and difficulty</em> of the SAT and ACT, not copied from any test.</p>
+      <div class="field"><label>Test</label>${seg('test', [{ v: 'SAT', l: 'SAT' }, { v: 'ACT', l: 'ACT' }], cfg.test)}</div>
+      ${isACT ? `<div class="field"><label>Section</label>${seg('section', [{ v: 'reading', l: 'Reading' }, { v: 'english', l: 'English' }], cfg.section)}</div>` : ''}
+      <div class="field"><label>Format</label>${seg('mode', [{ v: 'quick', l: 'Quick drill' }, { v: 'full', l: 'Full module' }], cfg.mode)}</div>
+      <div id="rw-quickopts" style="${isFull ? 'display:none' : ''}">
+        <div class="field"><label>${countLabel}</label>${seg('count', countOpts.map(v => ({ v, l: String(v) })), cfg[countField])}</div>
+        <label class="rw-check"><input type="checkbox" id="rw-timed" ${cfg.timed ? 'checked' : ''}> Timed at test pace (<span id="rw-pace">${pace}</span>s per question)</label>
+      </div>
+      <div class="field"><label>Domains</label>
+        <div id="rw-domains">${avail.map(d => `<label class="rw-check"><input type="checkbox" data-domain="${d}" ${cfg.domains.includes(d) ? 'checked' : ''}> ${escape(DOMAIN_LABEL[d])}</label>`).join('')}</div>
+      </div>
+      ${trendsHtml}
+      <div class="result"><div class="result-label">This drill</div><div class="result-big" id="rw-sum-big">—</div><div class="result-sub" id="rw-sum-sub"></div></div>
+      <button class="btn" id="rw-start" style="width:100%;margin-top:12px">▶ Start drill</button>
+    `;
+
+    function estimateReadingQuestions(nPassages) {
+      const pool = (window.RWPacks.actReading || []).filter(p => p.questions.some(q => cfg.domains.includes(q.domain)));
+      if (!pool.length) return 0;
+      const totalQ = pool.reduce((a, p) => a + p.questions.filter(q => cfg.domains.includes(q.domain)).length, 0);
+      const avgPerPassage = totalQ / pool.length;
+      return Math.max(1, Math.round(avgPerPassage * nPassages));
+    }
+    function refreshSummary() {
+      let label, sub;
+      if (isReading) {
+        const pool = (window.RWPacks.actReading || []).filter(p => p.questions.some(q => cfg.domains.includes(q.domain)));
+        const n = isFull ? pool.length : Math.min(cfg.passageCount, Math.max(pool.length, 1));
+        const qN = isFull ? pool.reduce((a, p) => a + p.questions.filter(q => cfg.domains.includes(q.domain)).length, 0) : estimateReadingQuestions(n);
+        const secs = qN * PACE.actReading;
+        label = `ACT Reading <em style="font-size:.6em">· ${n} passage${n === 1 ? '' : 's'}, ~${qN} questions</em>`;
+        sub = isFull ? `Full section-style · ~${Math.round(secs / 60)} min, timed` : `Quick drill · ~${Math.round(secs / 60)} min${cfg.timed ? ', timed' : ', untimed'}`;
+      } else {
+        const testKey = isACT ? 'ACT English' : 'SAT Reading & Writing';
+        const full = isACT ? FULL_ACT_ENGLISH : FULL_SAT;
+        const n = isFull ? full.count : cfg.count;
+        const secs = isFull ? full.secs : (cfg.timed ? cfg.count * pace : 0);
+        label = `${testKey} <em style="font-size:.6em">· ${n} questions</em>`;
+        sub = isFull ? `Full module · ${Math.round(secs / 60)} min, timed` : (cfg.timed ? `Quick drill · ~${Math.round(secs / 60)} min, timed` : `Quick drill · untimed practice`);
+      }
+      $('#rw-sum-big', view).innerHTML = label;
+      $('#rw-sum-sub', view).textContent = sub;
+    }
+    refreshSummary();
+
+    $$('.rw-seg', view).forEach(grp => grp.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const name = grp.dataset.seg; let val = b.dataset.val;
+      if (name === 'count') val = +val;
+      if (name === 'count') { cfg[countField] = val; }
+      else cfg[name] = val;
+      if (name === 'test' || name === 'section') { clampDomains(); saveCfg(); renderSetup(); return; }
+      $$('button', grp).forEach(x => x.classList.toggle('on', x === b));
+      if (name === 'mode') $('#rw-quickopts', view).style.display = (val === 'full') ? 'none' : '';
+      saveCfg(); refreshSummary();
+    }));
+    $('#rw-timed', view)?.addEventListener('change', (e) => { cfg.timed = e.target.checked; saveCfg(); refreshSummary(); });
+    $$('[data-domain]', view).forEach(c => c.addEventListener('change', () => {
+      cfg.domains = $$('[data-domain]', view).filter(x => x.checked).map(x => x.dataset.domain);
+      if (!cfg.domains.length) { cfg.domains = [c.dataset.domain]; c.checked = true; showToast('Pick at least one domain.'); }
+      saveCfg(); refreshSummary();
+    }));
+    $('#rw-start', view).addEventListener('click', () => {
+      if (!cfg.domains.length) { showToast('Pick at least one domain.'); return; }
+      beep(660, 0.05);
+      startDrill();
+    });
+  }
+
+  function showLoadError() {
+    view.innerHTML = `<div class="ap-status"><div class="ap-status-ico">📡</div><div class="ap-status-title">Couldn’t load the passages.</div><div class="ap-status-sub">The content file (reading-writing-data.js) didn’t load. Make sure it sits next to the app, then reopen this tool.</div><button class="btn" id="rw-retry">Try again</button></div>`;
+    $('#rw-retry', view)?.addEventListener('click', () => { loadStarted = false; renderSetup(); });
+  }
+
+  /* ================= BUILD DRILL ITEMS ================= */
+  function buildQuestion() {
+    const domain = pick(cfg.domains);
+    if (domain === 'conventions') return buildConventionsQuestion(cfg.test);
+    return pickSatCurated(domain) || buildConventionsQuestion(cfg.test);
+  }
+  function buildActReadingItems(nPassages) {
+    let pool = (window.RWPacks.actReading || []).filter(p => p.questions.some(q => cfg.domains.includes(q.domain)));
+    if (!pool.length) pool = window.RWPacks.actReading || [];
+    pool = shuffle(pool);
+    const n = Math.min(nPassages, pool.length) || pool.length;
+    const chosen = pool.slice(0, n);
+    const items = [];
+    chosen.forEach((p, gi) => {
+      const qs = shuffle(p.questions.filter(q => cfg.domains.includes(q.domain)));
+      qs.forEach(q => items.push({ groupId: `${p.id}#${gi}`, passageTitle: p.title, passageText: p.text, q: { domain: q.domain, subtype: q.subtype, question: q.question, choices: q.choices.slice(), correctIndex: q.correct, explanation: q.explanation, vocab: q.vocab || null }, sel: null, eliminated: [] }));
+    });
+    return items;
+  }
+
+  function buildItems() {
+    const isACT = cfg.test === 'ACT';
+    const isReading = isACT && cfg.section === 'reading';
+    const isFull = cfg.mode === 'full';
+    if (isReading) {
+      const pool = (window.RWPacks.actReading || []).filter(p => p.questions.some(q => cfg.domains.includes(q.domain)));
+      const nPassages = isFull ? pool.length : cfg.passageCount;
+      return buildActReadingItems(nPassages);
+    }
+    const count = isFull ? (isACT ? FULL_ACT_ENGLISH.count : FULL_SAT.count) : cfg.count;
+    const items = [];
+    for (let i = 0; i < count; i++) items.push({ groupId: null, q: buildQuestion(), sel: null, eliminated: [] });
+    return items;
+  }
+
+  function drillDurationSec(items) {
+    const isACT = cfg.test === 'ACT';
+    const isReading = isACT && cfg.section === 'reading';
+    const isFull = cfg.mode === 'full';
+    if (isFull) {
+      if (isReading) return items.length * PACE.actReading;
+      return isACT ? FULL_ACT_ENGLISH.secs : FULL_SAT.secs;
+    }
+    if (!cfg.timed) return 0;
+    return items.length * (isReading ? PACE.actReading : (isACT ? PACE.actEnglish : PACE.sat));
+  }
+
+  /* ================= DRILL ================= */
+  function startDrill() {
+    const items = buildItems();
+    if (!items.length) { showToast('No matching content for that combination — try enabling another domain.'); return; }
+    const durationSec = drillDurationSec(items);
+    D = { test: cfg.test, section: cfg.section, items, idx: 0, timed: durationSec > 0, endTime: durationSec > 0 ? Date.now() + durationSec * 1000 : 0, highlights: {} };
+    if (D.timed) timer = setInterval(tickTimer, 250);
+    renderQuestion();
+  }
+  function tickTimer() {
+    if (!D || !D.timed) return;
+    const left = (D.endTime - Date.now()) / 1000;
+    const c = $('#rw-clock', view);
+    if (c) { c.textContent = clk(left); c.style.color = left <= 60 ? 'var(--red)' : ''; }
+    if (left <= 0) { clearInterval(timer); timer = null; beep(880, 0.3); finishDrill(); }
+  }
+
+  const answered = (it) => it.sel != null;
+  const passageKey = (it, idx) => it.groupId || ('p' + idx);
+
+  function applyHighlightListeners(container, pkey) {
+    container.addEventListener('mouseup', () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return;
+      const mark = document.createElement('mark'); mark.className = 'rw-hl';
+      try {
+        const frag = range.extractContents();
+        mark.appendChild(frag);
+        range.insertNode(mark);
+      } catch { sel.removeAllRanges(); return; }
+      sel.removeAllRanges();
+      const note = prompt('Optional note for this highlight (leave blank to skip):', '') || '';
+      if (note.trim()) mark.title = note.trim();
+      D.highlights[pkey] = container.innerHTML;
+    });
+    container.addEventListener('click', (e) => {
+      const m = e.target.closest('mark.rw-hl'); if (!m) return;
+      const parent = m.parentNode; while (m.firstChild) parent.insertBefore(m.firstChild, m); parent.removeChild(m);
+      D.highlights[pkey] = container.innerHTML;
+    });
+  }
+
+  function renderQuestion() {
+    const idx = D.idx, it = D.items[idx], q = it.q, last = idx === D.items.length - 1;
+    const pkey = passageKey(it, idx);
+    const rawPassage = it.groupId ? it.passageText : (q.passageText || null);
+    const passageHtml = D.highlights[pkey] || rawPassage;
+    const hasHl = !!D.highlights[pkey];
+
+    view.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span class="rw-topic">${it.groupId ? `Passage ${chosenPassageNum(idx)} · ` : ''}Q ${idx + 1} / ${D.items.length} · ${escape(DOMAIN_LABEL[q.domain] || q.domain)}</span>
+        <span style="display:flex;gap:10px;align-items:center">
+          ${D.timed ? `<span class="mono" id="rw-clock" style="font-size:18px;font-weight:700">${clk((D.endTime - Date.now()) / 1000)}</span>` : ''}
+          <button class="btn ghost sm" id="rw-end">End</button>
+        </span>
+      </div>
+      <div class="rw-strip" id="rw-strip"></div>
+      ${passageHtml != null ? `
+        <div class="result rw-passage">
+          ${it.groupId ? `<div class="rw-ptitle">${escape(it.passageTitle)}</div>` : ''}
+          <div class="rw-ptext" id="rw-ptext">${passageHtml}</div>
+        </div>
+        <div class="rw-ptools">
+          <span class="help" style="margin:0">Select text to highlight it, like the exam's built-in annotate tool.</span>
+          ${hasHl ? '<button class="btn ghost sm" id="rw-clearhl">Clear highlights</button>' : ''}
+        </div>` : ''}
+      <div class="result" style="font-size:16px;line-height:1.5">${q.stemHtml ? q.stemHtml : escape(q.question || q.prompt || '')}</div>
+      ${q.stemHtml ? `<p class="help" style="margin:8px 0 0">${escape(q.prompt)}</p>` : ''}
+      <div id="rw-answers" style="margin-top:12px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn ghost" id="rw-prev" style="flex:none${idx === 0 ? ';opacity:.4' : ''}" ${idx === 0 ? 'disabled' : ''}>◀ Prev</button>
+        <button class="btn" id="rw-next" style="flex:1">${last ? 'Finish ▸' : 'Next ▶'}</button>
+      </div>`;
+
+    const strip = $('#rw-strip', view);
+    strip.innerHTML = D.items.map((x, i) => {
+      const sep = (i > 0 && x.groupId && x.groupId !== D.items[i - 1].groupId) ? 'sep' : '';
+      return `<button class="rw-dot ${sep} ${i === idx ? 'cur' : ''} ${answered(x) ? 'ans' : ''}" data-i="${i}" aria-label="Question ${i + 1}"></button>`;
+    }).join('');
+    strip.addEventListener('click', (e) => { const d = e.target.closest('.rw-dot'); if (!d) return; D.idx = +d.dataset.i; renderQuestion(); });
+
+    if (passageHtml != null) {
+      const ptext = $('#rw-ptext', view);
+      applyHighlightListeners(ptext, pkey);
+      $('#rw-clearhl', view)?.addEventListener('click', () => { delete D.highlights[pkey]; renderQuestion(); });
+    }
+
+    const ansWrap = $('#rw-answers', view);
+    ansWrap.innerHTML = q.choices.map((t, i) => `
+      <div class="rw-choice-row">
+        <button class="rw-elim ${it.eliminated.includes(i) ? 'on' : ''}" data-elim="${i}" title="Cross out this choice">✕</button>
+        <button class="rw-choice ${it.sel === i ? 'sel' : ''} ${it.eliminated.includes(i) ? 'elim' : ''}" data-i="${i}"><span class="rw-letter">${LETTERS[i]}</span><span>${escape(t)}</span></button>
+      </div>`).join('');
+    ansWrap.addEventListener('click', (e) => {
+      const elimBtn = e.target.closest('[data-elim]');
+      if (elimBtn) {
+        const i = +elimBtn.dataset.elim;
+        const at = it.eliminated.indexOf(i);
+        if (at >= 0) it.eliminated.splice(at, 1); else it.eliminated.push(i);
+        renderQuestion();
+        return;
+      }
+      const b = e.target.closest('.rw-choice'); if (!b) return;
+      it.sel = +b.dataset.i;
+      $$('.rw-choice', ansWrap).forEach(x => x.classList.toggle('sel', x === b));
+      $$('.rw-dot', view)[idx].classList.add('ans');
+    });
+
+    $('#rw-prev', view).addEventListener('click', () => { if (idx > 0) { D.idx--; renderQuestion(); } });
+    $('#rw-next', view).addEventListener('click', () => {
+      if (last) { if (confirm('End the drill and see your score?')) finishDrill(); }
+      else { D.idx++; renderQuestion(); }
+    });
+    $('#rw-end', view).addEventListener('click', () => { if (confirm('End the drill now and see your score?')) finishDrill(); });
+  }
+
+  function chosenPassageNum(idx) {
+    let n = 0;
+    const seen = new Set();
+    for (let i = 0; i <= idx; i++) { const g = D.items[i].groupId; if (g && !seen.has(g)) { seen.add(g); n++; } }
+    return n;
+  }
+
+  /* ================= RESULTS ================= */
+  function copyMissedVocabToFlashcards(list) {
+    const FKEY = 'flashcards:v2';
+    let fs; try { fs = Storage.get(FKEY, null); } catch { fs = null; }
+    if (!fs || !Array.isArray(fs.decks)) fs = { decks: [], activeDeck: null };
+    const DECK_NAME = 'Missed Vocabulary (Reading & Writing)';
+    let deck = fs.decks.find(d => d.name === DECK_NAME);
+    if (!deck) { deck = { id: uid(), name: DECK_NAME, cards: [] }; fs.decks.push(deck); }
+    const existing = new Set(deck.cards.map(c => c.front));
+    let added = 0;
+    list.forEach(v => { if (!existing.has(v.word)) { deck.cards.push({ id: uid(), front: v.word, back: v.def }); existing.add(v.word); added++; } });
+    fs.activeDeck = deck.id;
+    Storage.set(FKEY, fs);
+    showToast(added ? `Added ${added} word${added > 1 ? 's' : ''} to “${DECK_NAME}” in Flashcards.` : 'Those words are already in your Flashcards deck.');
+  }
+
+  function finishDrill() {
+    clearInterval(timer); timer = null;
+    if (!D) return;
+    D.items.forEach(it => { it.correct = it.sel === it.q.correctIndex; });
+    const correct = D.items.filter(it => it.correct).length, total = D.items.length;
+    const pct = Math.round(correct / total * 100);
+    const score = estScore(D.test, correct, total);
+    const scoreLabel = D.test === 'SAT' ? 'SAT Reading & Writing (est. 200–800)' : (D.section === 'english' ? 'ACT English (est. 1–36)' : 'ACT Reading (est. 1–36)');
+
+    const byTopic = {};
+    D.items.forEach(it => {
+      const t = byTopic[it.q.domain] = byTopic[it.q.domain] || { c: 0, n: 0 }; t.n++; if (it.correct) t.c++;
+      bumpStats(it.q.domain, it.correct);
+    });
+    const topicRows = Object.keys(byTopic).map(k => `<tr><td>${escape(DOMAIN_LABEL[k] || k)}</td><td class="mono">${byTopic[k].c} / ${byTopic[k].n}</td></tr>`).join('');
+
+    const missedVocab = []; const seenWords = new Set();
+    D.items.forEach(it => { if (!it.correct && it.q.vocab && !seenWords.has(it.q.vocab.word)) { seenWords.add(it.q.vocab.word); missedVocab.push(it.q.vocab); } });
+
+    beep(correct / total >= 0.7 ? 660 : 523, 0.3);
+
+    view.innerHTML = `
+      <div class="result"><div class="result-label">${escape(scoreLabel)}</div>
+        <div class="result-big">≈ ${score}</div>
+        <div class="result-sub">Raw ${correct} / ${total} correct · ${pct}%</div></div>
+      <p class="help">The scaled score is a <em>rough, unofficial estimate</em> from your percent correct — handy for goal-setting (pair it with Score&nbsp;Goal), not an official concordance.</p>
+      <table class="data" style="margin-top:6px"><thead><tr><th>Domain</th><th>Correct</th></tr></thead><tbody>${topicRows}</tbody></table>
+      ${missedVocab.length ? `<button class="btn ghost sm" id="rw-vocab-btn" style="margin-top:10px">Add ${missedVocab.length} missed word${missedVocab.length > 1 ? 's' : ''} to Flashcards</button>` : ''}
+      <div style="display:flex;gap:8px;margin:14px 0">
+        <button class="btn" id="rw-again" style="flex:1">Same settings again</button>
+        <button class="btn ghost" id="rw-new" style="flex:1">Change settings</button>
+      </div>
+      <h3 style="font-family:var(--serif);font-weight:500;margin:18px 0 10px">Review</h3>
+      <div id="rw-review">${D.items.map((it, i) => {
+        const q = it.q;
+        const pkey = passageKey(it, i);
+        const rawP = it.groupId ? it.passageText : (q.passageText || null);
+        const passageBlock = D.highlights[pkey] || rawP;
+        const yours = it.sel != null ? `${LETTERS[it.sel]}. ${escape(q.choices[it.sel])}` : '<em style="color:var(--muted)">no answer</em>';
+        return `<div class="rw-rev ${it.correct ? 'ok' : 'no'}">
+          <div class="rw-topic" style="margin-bottom:4px">Q${i + 1} · ${escape(DOMAIN_LABEL[q.domain] || q.domain)} · ${it.correct ? '<span style="color:var(--accent-3)">correct</span>' : '<span style="color:var(--red)">missed</span>'}</div>
+          ${passageBlock != null ? `${it.groupId ? `<div class="rw-ptitle" style="font-size:14px;margin-bottom:2px">${escape(it.passageTitle)}</div>` : ''}<div style="font-size:14px;line-height:1.5;margin-bottom:6px">${passageBlock}</div>` : ''}
+          <div style="font-size:15px;line-height:1.45">${q.stemHtml ? q.stemHtml : escape(q.question)}</div>
+          <div style="font-size:14px;margin-top:6px">Your answer: ${yours}</div>
+          ${it.correct ? '' : `<div style="font-size:14px;margin-top:2px">Correct: ${LETTERS[q.correctIndex]}. ${escape(q.choices[q.correctIndex])}</div>`}
+          <details style="margin-top:6px"><summary style="cursor:pointer;color:var(--accent);font-size:13px">Show explanation</summary><div style="font-size:14px;line-height:1.5;margin-top:6px">${escape(q.explanation)}</div></details>
+        </div>`;
+      }).join('')}</div>`;
+    $('#rw-again', view).addEventListener('click', startDrill);
+    $('#rw-new', view).addEventListener('click', renderSetup);
+    $('#rw-vocab-btn', view)?.addEventListener('click', () => copyMissedVocabToFlashcards(missedVocab));
   }
 
   renderSetup();
