@@ -1,5 +1,10 @@
 # SkoolToolz Growth Plan — 1,000 Tries at $0
 
+> **Status: sidelined.** Not currently a priority — the sprint below hasn't
+> been run. Product/new-tool work (`ROADMAP.md` Phase 4) is the active focus;
+> this plan is kept as reference for whenever growth becomes the priority
+> again.
+
 > Goal: get **1,000 people to open SkoolToolz** using only free/organic channels
 > in a **2–4 week aggressive sprint**, without violating the product's own
 > promise: *no accounts, no servers, no tracking, no upsell.*
