@@ -5,8 +5,9 @@
 > **fully offline** native apps in the Google Play Store and the Apple App
 > Store — without rewriting a single tool.
 
-**Status:** Proposed · **Target:** Android (Google Play) + iOS (App Store) ·
-**Cost model:** Free app (no ads, no in-app purchases, no accounts)
+**Status:** Proposed, queued **after Phase 4** of `ROADMAP.md` (new tool/
+feature work ships first) · **Target:** Android (Google Play) + iOS (App
+Store) · **Cost model:** Free app (no ads, no in-app purchases, no accounts)
 
 ---
 

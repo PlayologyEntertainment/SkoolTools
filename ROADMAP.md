@@ -1,18 +1,28 @@
-# SkoolToolz — v2.0 Roadmap  ✅ COMPLETE
+# SkoolToolz — Roadmap
 
 > *Many small, smart, sharp tools. No account. No tracker. No upsell.*
 
-This document planned the **v2.0** expansion of SkoolToolz, and as of
-**2026-07-01 it has fully shipped.** v1.0 launched with ~39 tools across six
-shelves (Numbers, Lab, Words, Study, Plan, Toolbox), built as a single
-offline-capable HTML file with local-only storage. v2.0 grew that to **55
-tools across nine shelves** — adding Test Prep, Focus (Accessibility), and
-Code — while keeping the single-file, local-only architecture.
+This document tracks SkoolToolz's full build history and active plan. v1.0
+launched with ~39 tools across six shelves (Numbers, Lab, Words, Study, Plan,
+Toolbox), built as a single offline-capable HTML file with local-only
+storage. **v2.0 (Phases 1–3 below) shipped 2026-07-01**, growing that to 55
+tools across nine shelves — adding Test Prep, Focus (Accessibility), and Code
+— while keeping the single-file, local-only architecture.
 
-v2.0 did **not** change the mission. It deepened the tools students already
-used, added a focused set of new tools, and opened three new shelves — all
-while holding the original rails. See **Phase 4** for what's under
-consideration next.
+Work didn't stop at the v2.0 mark: a handful of tools and fixes shipped
+ad hoc afterward without ever being scoped in this document (see **"Shipped
+since v2.0"** near the bottom). The app runs **57 tools across nine shelves**
+as of this update — **Phase 4 below is where that ad hoc pattern stops:**
+every new tool from here forward gets scoped, prioritized, and checked off
+in this doc before it ships, the same discipline Phases 1–3 held.
+
+**Current cycle scope:** Phase 4 (new tools/features) is the active,
+in-scope work. Two adjacent tracks are deliberately **not** part of this
+cycle:
+- **Mobile app port** (`MOBILE_PLAN.md`) — queued to start **after** Phase 4
+  reaches a satisfying stopping point, not concurrently with it.
+- **Growth/marketing** (`GROWTH_PLAN.md`) — sidelined; the sprint hasn't been
+  run and isn't a current priority.
 
 ---
 
@@ -30,6 +40,13 @@ These constraints are the product. Every item below respects them:
   teacher/parent features in this cycle.
 - **Tool-first, integrity-safe.** If a feature mainly helps a student *skip* the
   work or *hide* the site from a teacher, we don't ship it.
+
+**Under early exploration, not committed:** optional Google OAuth for
+cross-device saves. If it ever ships, it would be additive/opt-in — local
+storage stays the default and share-by-code stays the no-backend fallback —
+and it gets its own scoped plan and a dedicated privacy review before any
+code is written. **Nothing in Phase 4 below depends on it or assumes it
+ships.**
 
 ### Single-file budget & the "tiny module split"
 
@@ -383,23 +400,147 @@ seated between Lab and Toolbox.
 
 ---
 
-## Phase 4 — Future ideas  📝 *not started, unscoped*
+## Phase 4 — New subject coverage  📝 *planned, not started — active cycle*
 
-v2.0 (Phases 1–3) is fully shipped. This section is a placeholder landing spot
-for whatever comes next — nothing below is committed or sequenced yet, and
-none of it has been scoped against the guardrails above. Candidates should be
-added here as they're proposed, then promoted into a real, numbered phase
-(with the same shipped-checklist treatment as Phases 1–3) once there's an
-actual plan.
+Scoped to **new tools and features only.** Same guardrails as Phases 1–3
+apply in full (AI-free, no accounts, HS-primary/college-secondary, tool-first
+— see the OAuth exploration note above for the one thing under review).
 
-*(No candidates recorded yet.)*
+Priorities are ordered by **curricular gap × competitive gap** — where a
+student currently has to leave SkoolToolz (for Symbolab, a subject-specific
+Quizlet deck, or nothing at all) for something the guardrails would let us
+build ourselves, deterministic and show-work.
+
+### Tier A — top priority, start here
+
+#### 4.1 Algebra / Equation Solver  *(new tool, Numbers shelf)*
+The single biggest remaining gap versus Symbolab/Mathway-style competitors —
+"solve for x" is their highest-traffic use case, and SkoolToolz has no
+general-purpose equation solver today (Calculus Solver covers derivatives/
+integrals/limits; Inequality Solver covers inequalities; nothing solves a
+plain equation).
+- Linear equations; quadratics via factoring, the quadratic formula, *and*
+  completing the square (show whichever apply, not just one method).
+- Systems of two/three linear equations, steps shown for both substitution
+  and elimination.
+- Polynomial root-finding for low-degree polynomials (rational root theorem
+  + synthetic division).
+- Lowest-risk build in this phase: reuses the no-`eval` tokenizer/parser
+  pattern already proven in the Inequality Solver and the step-rendering
+  pattern already proven in the Calculus Solver.
+- *Why first:* pure show-work, no accounts, closes the loudest and most
+  commonly searched-for gap.
+
+#### 4.2 AP Psychology tool  *(new tool, shelf TBD — Test Prep or Study)*
+Flashcards already cover AP Psych vocabulary (one of the 13 existing AP
+packs); this is the **interactive companion** the cards don't provide,
+matching the reference-plus-practice pattern of Chemistry Helpers / Periodic
+Table rather than duplicating Flashcards.
+- **Research Methods practice** — identify IV/DV, study design (experiment
+  vs. correlational vs. case study), validity threats, and ethics guidelines
+  — the FRQ topic students consistently miss most.
+- **Psych Stats reference** — z-scores, correlation strength/direction,
+  reliability vs. validity — ties into the existing Statistics Sheet rather
+  than rebuilding it.
+- **Perspectives & theorists quick-reference** with a self-check matching
+  quiz.
+- **Disorders & treatments reference table.**
+- Original-authored content only, same integrity bar as the AP Flashcard
+  Packs — nothing lifted from the exam.
+
+#### 4.3 Genetics / Punnett Square Solver  *(new tool, Lab shelf)*
+AP Biology's most FRQ-heavy topic has zero coverage today (Chemistry
+Helpers, Physics Solver, and Periodic Table cover the rest of the sciences;
+nothing covers genetics).
+- Monohybrid and dihybrid crosses, sex-linked traits, and basic pedigree
+  analysis — the cross grid and resulting genotype/phenotype ratios shown as
+  work, not just a final answer.
+- A chi-square goodness-of-fit tie-in for expected-vs-observed ratios,
+  reusing the Statistics Sheet's distribution engine.
+
+#### 4.4 Personal Finance Toolkit  *(new tool, Toolbox shelf)*
+Underserved by every adjacent competitor (Symbolab/Quizlet/Photomath don't
+touch it) and increasingly a **required HS course** in many states — squarely
+in-audience and useful past graduation, which fits the brand's practical
+streak (GPA Calculator, Schedule Builder).
+- Compound interest, loan amortization, and credit-card interest
+  calculators — each shows the formula and schedule, not just a number.
+- A simple budget builder (income vs. categorized expenses) and a
+  paycheck/withholding estimator.
+- Calculators only — no investment advice or product recommendations,
+  consistent with "shows its work, doesn't tell you what to do."
+
+### Tier B — strong candidates, sequence after Tier A
+
+#### 4.5 Economics Toolkit  *(new tool, shelf TBD — likely Numbers)*
+AP Micro/Macro have no coverage at all today.
+- Supply-and-demand curve grapher with equilibrium price/quantity,
+  surplus/shortage shading, and shift analysis — reuses the Graphing
+  Calculator's canvas patterns.
+- Elasticity, GDP components, inflation (CPI), and unemployment-rate
+  calculators, each with the formula shown.
+
+#### 4.6 AP English Language & Literature tool  *(new tool, Words shelf)*
+The Words shelf is essay-mechanics-heavy (Essay Planner, Citation Helper,
+Grammar & Spellcheck) but has nothing for the literature/rhetoric side of
+AP Lang/Lit.
+- Rhetorical devices and literary terms glossary with a self-check quiz.
+- Structural close-reading scaffolding (annotate-by-prompt, not
+  AI-generated) in the same non-generative spirit as the Essay Planner's
+  Scaffold tab.
+
+#### 4.7 Physics Solver → AP Physics C mode  *(deepen, Lab shelf)*
+The existing Physics Solver reads as algebra-based (Physics 1/2 style).
+AP Physics C is calculus-based mechanics and E&M — add a mode that ties into
+the Calculus Solver for derivative/integral-based kinematics and
+circuit/field equations.
+
+#### 4.8 US Government / Civics reference tool  *(deepen, Test Prep or Lab shelf)*
+AP Gov has a flashcard pack but no interactive tool. A Constitution /
+landmark-Supreme-Court-case / checks-and-balances reference with a
+self-check quiz would match the AP Psych tool's pattern (4.2).
+
+### Tier C — later / lower confidence, revisit after Tier A+B
+
+#### 4.9 Music Theory Helper → AP Music Theory alignment  *(deepen)*
+Interval/chord dictation and basic part-writing practice, aligned to the
+actual AP Music Theory exam sections. Niche audience — sequence only once
+Tier A/B create bandwidth.
+
+#### 4.10 AP Computer Science A (Java) — feasibility check only
+Code Playground runs JS · Python (Pyodide) · HTML today; adding Java would
+need a browser-side JVM (e.g. a WASM JVM), meaningfully heavier than
+anything else on this list. **Investigate feasibility before committing a
+real phase item** — don't scope build work until there's a proof-of-concept
+that respects the offline/lazy-load performance budget.
+
+#### 4.11 Foreign-language AP deepening (Spanish/French)  *(deepen Language Drill)*
+High content cost per language for uncertain lift over the existing generic
+drill. Revisit if specific user feedback asks for it.
+
+**Phase 4 exit criteria:** Tier A (4.1–4.4) shipped, a11y-passed, and
+performance-budget-verified — the same bar Phase 1 held. Tier B and Tier C
+are not committed; promote items individually as Tier A clears, the same way
+Phase 4 itself was just promoted from an unscoped placeholder.
+
+---
+
+## Phase 5 — Mobile app port  ⏸ *queued, starts after Phase 4*
+
+Full plan lives in `MOBILE_PLAN.md` (Capacitor wrapper, Android + iOS,
+~2–4 weeks to first submission once started). **Deliberately sequenced
+after Phase 4**, not concurrent with it — the new-tool work above ships
+first. Nothing here is scheduled yet; treat `MOBILE_PLAN.md`'s "Still open"
+section (bundle ID) as the one decision to lock before kickoff.
 
 ---
 
 ## Explicitly NOT doing (holds the line)
 
 - AI tutor / essay feedback / answer generation.
-- Accounts or cloud sync (share-by-code is the only exception).
+- Accounts or cloud sync (share-by-code is the only exception; see the
+  guardrails section above for the one thing under early, uncommitted
+  exploration — optional Google OAuth for saves).
 - Gamification, streaks, badges, engagement loops.
 - Anything designed to hide the site from a supervising adult.
 - Middle-school or teacher/parent/gradebook features (out of audience scope).
@@ -413,7 +554,10 @@ actual plan.
 | **1** | Deepen existing | Calculus, Graphing, Stats, Chem balancer, Periodic trends, Flashcards import/share, Citation autofill, Notes scaffold | ✅ **8 / 8 shipped** |
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
 | 3 | New shelves | Test Prep, Accessibility & Focus, Code | ✅ **3 / 3 shipped** — Test Prep 5/5 · A11y & Focus 4/4 · Code 5/5 |
-| 4 | Future ideas | *(unscoped)* | 📝 not started |
+| — | *(ad hoc, untracked)* | SAT/ACT Reading & Writing Drill, Extracurricular Journal, Schedule Builder upgrades, Privacy/Terms pages, GoatCounter analytics, Send Feedback, Help section | ✅ shipped 2026-07 → 2026-08, see "Shipped since v2.0" below |
+| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **0 / 11 shipped** — Tier A next |
+| 5 | Mobile app port | Capacitor · Android + iOS (`MOBILE_PLAN.md`) | ⏸ queued after Phase 4 |
+| — | Growth/marketing | Zero-dollar sprint (`GROWTH_PLAN.md`) | ⏸ sidelined, not run |
 
 **Status as of 2026-07-01: v2.0 is complete.** All eight Phase 1 deepen-items
 and all seven Phase 2 new tools (through the **Exam Cheat-Sheet Builder, 2.7**)
@@ -437,10 +581,12 @@ are shipped, and **Phase 3's three new shelves are all complete:**
   Calculator**, and **Base Converter** consolidated from their old shelves
   onto the new amber Code shelf, joined by a new **Regex Tester**.
 
-The app now runs **55 tools across nine shelves** (Numbers, Lab, Words, Study,
-Plan, Toolbox, Test Prep, Focus, Code). Nothing in the app is a `SOON`-ribbon
-placeholder — every registered tool is fully built and live. **Phase 4 is an
-open, unscoped placeholder** for whatever comes after v2.0.
+v2.0 (Phases 1–3) shipped **55 tools across nine shelves** (Numbers, Lab,
+Words, Study, Plan, Toolbox, Test Prep, Focus, Code). Nothing in the app is a
+`SOON`-ribbon placeholder — every registered tool is fully built and live.
+The app has since grown to **57 tools** via the ad hoc additions listed
+above and detailed in **"Shipped since v2.0"** below; **Phase 4 (above) is
+now the active, scoped plan** for everything after that.
 
 **Visual direction for all of the above:** see `STYLE_GUIDE.md`. Hold the current
 neon-on-black "glitch-book" course — no aesthetic changes in v2.0.
@@ -466,3 +612,26 @@ not Phase 1–3 work — listed here only so the doc reflects everything that's 
   3.2's **Enhanced Focus Lock** superseded this: the tool was rebuilt with break
   cycles, soundscapes, and stats and moved to the Focus shelf, and the original
   Study-shelf card was removed.)*
+
+---
+
+## Shipped since v2.0 (2026-07-01 → today, previously untracked)
+
+Between the v2.0 "complete" mark and this update, these shipped without ever
+being scoped in this document. Recorded here for accuracy — they're **not**
+Phase 4 work, they're why Phase 4 exists as a discipline going forward:
+
+- **SAT / ACT Reading & Writing Drill** *(Test Prep)* — added to the Test
+  Prep shelf alongside the existing Math Drill.
+- **Extracurricular Journal** *(Toolbox)* — new applet.
+- **Schedule Builder + GPA Calculator improvements** — class times, alternate
+  schedules, shared Class List.
+- **Privacy Policy and Terms of Service pages** (`privacy.html`, `terms.html`).
+- **GoatCounter analytics** — cookieless, no-PII pageview counter added to
+  `SkoolToolz.html`.
+- **Send Feedback button** and a **Help section** added to the toolbar.
+- Assorted fixes: Read Aloud pause/stop reliability, Recent-badge sizing,
+  Numbers/Words shelf applet ordering.
+
+This is also why the tool count moved from v2.0's **55** to today's **57**
+(Reading & Writing Drill + Extracurricular Journal).
