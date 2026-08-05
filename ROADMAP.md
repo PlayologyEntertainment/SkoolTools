@@ -11,8 +11,9 @@ tools across nine shelves — adding Test Prep, Focus (Accessibility), and Code
 
 Work didn't stop at the v2.0 mark: a handful of tools and fixes shipped
 ad hoc afterward without ever being scoped in this document (see **"Shipped
-since v2.0"** near the bottom). The app runs **57 tools across nine shelves**
-as of this update — **Phase 4 below is where that ad hoc pattern stops:**
+since v2.0"** near the bottom). The app runs **58 tools across nine shelves**
+as of this update (57 ad hoc + the AP Psychology tool, Phase 4's first
+scoped-and-shipped item) — **Phase 4 is where that ad hoc pattern stops:**
 every new tool from here forward gets scoped, prioritized, and checked off
 in this doc before it ships, the same discipline Phases 1–3 held.
 
@@ -431,22 +432,44 @@ plain equation).
 - *Why first:* pure show-work, no accounts, closes the loudest and most
   commonly searched-for gap.
 
-#### 4.2 AP Psychology tool  *(new tool, shelf TBD — Test Prep or Study)*
+#### 4.2 AP Psychology tool  *(new tool, Words shelf)*  ✅ *shipped*
 Flashcards already cover AP Psych vocabulary (one of the 13 existing AP
 packs); this is the **interactive companion** the cards don't provide,
 matching the reference-plus-practice pattern of Chemistry Helpers / Periodic
 Table rather than duplicating Flashcards.
-- **Research Methods practice** — identify IV/DV, study design (experiment
-  vs. correlational vs. case study), validity threats, and ethics guidelines
-  — the FRQ topic students consistently miss most.
-- **Psych Stats reference** — z-scores, correlation strength/direction,
-  reliability vs. validity — ties into the existing Statistics Sheet rather
-  than rebuilding it.
-- **Perspectives & theorists quick-reference** with a self-check matching
-  quiz.
-- **Disorders & treatments reference table.**
-- Original-authored content only, same integrity bar as the AP Flashcard
-  Packs — nothing lifted from the exam.
+- ✅ **Research Methods practice** — parameterized scenario generators (fresh
+  researcher/setting/number details every question, mirroring the SAT/ACT
+  Math Drill's generator pattern) across four categories: IV/DV
+  identification, research-design classification (experiment / correlational
+  / case study / naturalistic observation / survey / longitudinal /
+  cross-sectional), validity threats (confound, placebo effect, experimenter
+  bias, demand characteristics, social desirability bias, sampling bias,
+  order effects), and ethics guidelines — the FRQ topic students consistently
+  miss most. Multiple-choice with immediate feedback + explanation,
+  per-category toggles, and a running score.
+- ✅ **Psych Stats reference** — a z-score mini-calculator (z = (x−μ)/σ), a
+  correlation strength/direction table using the **same |r| thresholds as
+  Statistics Sheet's Regression tab**, an **"Open Statistics Sheet"** button
+  for the full distribution lookup, and original reference content for
+  reliability (test–retest, split-half, inter-rater) vs. validity (content,
+  criterion, construct) — psychometrics Statistics Sheet doesn't cover.
+- ✅ **Perspectives & theorists reference** — the 7 major perspectives
+  (biological, behavioral, psychodynamic, humanistic, cognitive,
+  sociocultural, evolutionary) each with their associated theorists/studies,
+  plus additional frequently tested figures (Harlow, Ainsworth, Kohlberg,
+  Zimbardo, Bandura, Baumrind) — with a **self-check matching quiz** (read a
+  contribution, pick the theorist).
+- ✅ **Disorders & treatments reference table** — 20 DSM-5-aligned disorders
+  across 10 categories (anxiety, OCD-related, trauma/stressor, depressive,
+  bipolar, schizophrenia spectrum, dissociative, feeding/eating, personality,
+  neurodevelopmental) with symptoms and linked treatment approaches
+  (psychodynamic, humanistic, behavioral, cognitive, CBT, biomedical),
+  searchable and filterable by category.
+- ✅ Original-authored content only, same integrity bar as the AP Flashcard
+  Packs — nothing lifted from the exam. Content lives in a **lazy-loaded
+  module** (`ap-psych.js`, fetched on first open via the same `<script>`-tag
+  pattern as `ap-packs.js`, then cached) so the single-file fast-paint budget
+  holds.
 
 #### 4.3 Genetics / Punnett Square Solver  *(new tool, Lab shelf)*
 AP Biology's most FRQ-heavy topic has zero coverage today (Chemistry
@@ -555,7 +578,7 @@ section (bundle ID) as the one decision to lock before kickoff.
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
 | 3 | New shelves | Test Prep, Accessibility & Focus, Code | ✅ **3 / 3 shipped** — Test Prep 5/5 · A11y & Focus 4/4 · Code 5/5 |
 | — | *(ad hoc, untracked)* | SAT/ACT Reading & Writing Drill, Extracurricular Journal, Schedule Builder upgrades, Privacy/Terms pages, GoatCounter analytics, Send Feedback, Help section | ✅ shipped 2026-07 → 2026-08, see "Shipped since v2.0" below |
-| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **0 / 11 shipped** — Tier A next |
+| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **1 / 11 shipped** — AP Psych tool (4.2) done; 4.1, 4.3, 4.4 next |
 | 5 | Mobile app port | Capacitor · Android + iOS (`MOBILE_PLAN.md`) | ⏸ queued after Phase 4 |
 | — | Growth/marketing | Zero-dollar sprint (`GROWTH_PLAN.md`) | ⏸ sidelined, not run |
 
