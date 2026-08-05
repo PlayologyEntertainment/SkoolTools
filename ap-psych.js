@@ -119,6 +119,7 @@
     { id: 'binge-eating', category: 'Feeding & eating disorders', name: 'Binge-eating disorder', symptoms: 'Recurrent episodes of eating large amounts with a sense of loss of control, without regular compensatory behaviors.', treatments: ['cbt'] },
     { id: 'borderline', category: 'Personality disorders', name: 'Borderline personality disorder', symptoms: 'Pervasive instability in relationships, self-image, and emotions, with marked impulsivity.', treatments: ['cbt', 'psychodynamic'] },
     { id: 'antisocial', category: 'Personality disorders', name: 'Antisocial personality disorder', symptoms: 'Pervasive disregard for and violation of the rights of others, typically since age 15.', treatments: ['cbt'] },
+    { id: 'narcissistic', category: 'Personality disorders', name: 'Narcissistic personality disorder (NPD)', symptoms: 'A pervasive pattern of grandiosity, need for admiration, and lack of empathy, often masking a fragile self-esteem sensitive to criticism.', treatments: ['psychodynamic', 'cbt'] },
     { id: 'adhd', category: 'Neurodevelopmental disorders', name: 'ADHD', symptoms: 'A persistent pattern of inattention and/or hyperactivity-impulsivity that interferes with functioning.', treatments: ['biomedical', 'behavioral'] },
     { id: 'asd', category: 'Neurodevelopmental disorders', name: 'Autism spectrum disorder', symptoms: 'Persistent deficits in social communication/interaction, plus restricted, repetitive patterns of behavior or interests.', treatments: ['behavioral'] },
   ];
