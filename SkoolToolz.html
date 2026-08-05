@@ -2887,6 +2887,18 @@ const SHELVES = [
   { id: 'toolbox', name: 'Toolbox', color: 'var(--pink-light)' },
 ];
 
+/* Cache-busting versions for lazy-loaded module files (ap-packs.js,
+   ap-psych.js, calculus-engine.js, reading-writing-data.js). Bump a file's
+   number whenever its content changes — the query string changes the
+   request URL, so browsers fetch a fresh copy instead of serving a stale
+   cached one indefinitely (these files have no other cache-busting). */
+const MODULE_VERSION = {
+  'ap-packs.js': 1,
+  'ap-psych.js': 1,
+  'calculus-engine.js': 1,
+  'reading-writing-data.js': 1,
+};
+
 const TOOLS = []; // populated by registerTools() below
 
 /* ========== NOTES ========== */
@@ -4504,7 +4516,7 @@ function mountAPPacks(root) {
     if (loadStarted) return;
     loadStarted = true;
     const s = document.createElement('script');
-    s.src = 'ap-packs.js';
+    s.src = 'ap-packs.js?v=' + MODULE_VERSION['ap-packs.js'];
     s.onload  = () => queue.splice(0).forEach(fn => fn(!!window.APPacks));
     s.onerror = () => queue.splice(0).forEach(fn => fn(false));
     document.head.appendChild(s);
@@ -4838,7 +4850,7 @@ function mountAPPsych(root) {
     if (loadStarted) return;
     loadStarted = true;
     const s = document.createElement('script');
-    s.src = 'ap-psych.js';
+    s.src = 'ap-psych.js?v=' + MODULE_VERSION['ap-psych.js'];
     s.onload  = () => queue.splice(0).forEach(fn => fn(!!window.APPsych));
     s.onerror = () => queue.splice(0).forEach(fn => fn(false));
     document.head.appendChild(s);
@@ -7097,7 +7109,7 @@ function mountCalculus(root) {
     if (engineLoading) return;
     engineLoading = true;
     const s = document.createElement('script');
-    s.src = 'calculus-engine.js';
+    s.src = 'calculus-engine.js?v=' + MODULE_VERSION['calculus-engine.js'];
     s.onload = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(!!window.CalcEngine)); };
     s.onerror = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(false)); };
     document.head.appendChild(s);
@@ -16287,7 +16299,7 @@ function mountReadingWritingDrill(root) {
     if (loadStarted) return;
     loadStarted = true;
     const s = document.createElement('script');
-    s.src = 'reading-writing-data.js';
+    s.src = 'reading-writing-data.js?v=' + MODULE_VERSION['reading-writing-data.js'];
     s.onload = () => { packsReady = !!window.RWPacks; packQueue.splice(0).forEach(fn => fn(packsReady)); };
     s.onerror = () => { packsReady = false; packQueue.splice(0).forEach(fn => fn(false)); };
     document.head.appendChild(s);
