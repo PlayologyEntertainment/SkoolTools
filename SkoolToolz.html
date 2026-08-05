@@ -4926,8 +4926,16 @@ function mountAPPsych(root) {
         .psych-dis-cat-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-3)}
         .psych-dis-symptoms{font-family:var(--serif);font-size:12.5px;color:var(--ink-2);margin:6px 0}
         .psych-tx-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-        .psych-tx-chip{font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);cursor:pointer}
+        .psych-tx-chip{font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--rule);border-radius:2px;
+          background:none;color:var(--ink-2);cursor:pointer}
         .psych-tx-chip:hover{border-color:var(--ink-2);color:var(--ink)}
+        .psych-tx-chip.active{color:var(--ink);border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 12%, transparent)}
+        .psych-tx-detail{font-family:var(--serif);font-size:12.5px;color:var(--ink-2);line-height:1.5;
+          border-left:2px solid var(--accent-3);padding-left:10px;margin-top:8px}
+        .psych-tx-detail b{color:var(--ink)}
+        .psych-tx-legend{margin-bottom:14px;border:1px solid var(--rule);border-radius:3px;padding:10px 12px;background:var(--paper-2)}
+        .psych-tx-legend summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+        .psych-tx-legend summary:hover{color:var(--ink)}
       </style>
       <div class="psych-tabs">
         ${TABS.map(t => `<button class="psych-tab${t.id === activeTab ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
@@ -5176,15 +5184,42 @@ function mountAPPsych(root) {
         <div class="psych-tx-chips">
           ${d.treatments.map(tid => {
             const t = DATA.treatments.find(x => x.id === tid);
-            return t ? `<span class="psych-tx-chip" title="${escape(t.blurb)}">${t.name}</span>` : '';
+            return t ? `<button type="button" class="psych-tx-chip" data-tid="${tid}" aria-expanded="false">${t.name}</button>` : '';
           }).join('')}
         </div>
+        <div class="psych-tx-detail" hidden></div>
       </div>
     `).join('');
+    list.querySelectorAll('.psych-tx-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const card = chip.closest('.psych-dis-card');
+        const detail = card.querySelector('.psych-tx-detail');
+        const t = DATA.treatments.find(x => x.id === chip.dataset.tid);
+        const alreadyOpen = !detail.hidden && detail.dataset.tid === chip.dataset.tid;
+        card.querySelectorAll('.psych-tx-chip').forEach(c => { c.classList.remove('active'); c.setAttribute('aria-expanded', 'false'); });
+        if (alreadyOpen) {
+          detail.hidden = true;
+          detail.dataset.tid = '';
+        } else {
+          detail.hidden = false;
+          detail.dataset.tid = chip.dataset.tid;
+          detail.innerHTML = `<b>${t.name}.</b> ${t.blurb}`;
+          chip.classList.add('active');
+          chip.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
   }
   renders.disorders = function () {
     const cats = ['all', ...new Set(DATA.disorders.map(d => d.category))];
     panel().innerHTML = `
+      <details class="psych-tx-legend">
+        <summary>Treatment approaches reference</summary>
+        <table class="psych-table" style="margin-top:8px">
+          <tr><th>Approach</th><th>What it involves</th></tr>
+          ${DATA.treatments.map(t => `<tr><td>${t.name}</td><td>${t.blurb}</td></tr>`).join('')}
+        </table>
+      </details>
       <div class="field psych-search">
         <input class="input" id="psych-dis-search" type="search" placeholder="Search disorders…" value="${escape(disQuery)}">
       </div>

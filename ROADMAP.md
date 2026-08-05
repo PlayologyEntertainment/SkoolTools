@@ -459,12 +459,16 @@ Table rather than duplicating Flashcards.
   plus additional frequently tested figures (Harlow, Ainsworth, Kohlberg,
   Zimbardo, Bandura, Baumrind) — with a **self-check matching quiz** (read a
   contribution, pick the theorist).
-- ✅ **Disorders & treatments reference table** — 20 DSM-5-aligned disorders
-  across 10 categories (anxiety, OCD-related, trauma/stressor, depressive,
-  bipolar, schizophrenia spectrum, dissociative, feeding/eating, personality,
+- ✅ **Disorders & treatments reference table** — 21 DSM-5-aligned disorders
+  (including narcissistic personality disorder, added post-ship) across 10
+  categories (anxiety, OCD-related, trauma/stressor, depressive, bipolar,
+  schizophrenia spectrum, dissociative, feeding/eating, personality,
   neurodevelopmental) with symptoms and linked treatment approaches
   (psychodynamic, humanistic, behavioral, cognitive, CBT, biomedical),
-  searchable and filterable by category.
+  searchable and filterable by category. Treatment chips are tappable
+  (expand an inline blurb — works on touch, not just hover) and the tab
+  includes a collapsible **Treatment approaches reference** table listing
+  all six approaches on their own.
 - ✅ Original-authored content only, same integrity bar as the AP Flashcard
   Packs — nothing lifted from the exam. Content lives in a **lazy-loaded
   module** (`ap-psych.js`, fetched on first open via the same `<script>`-tag
