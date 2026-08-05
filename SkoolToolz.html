@@ -4807,6 +4807,413 @@ function mountAPPacks(root) {
   return { unmount() { body._cleanup?.(); } };
 }
 
+/* ========== AP PSYCHOLOGY ==========
+   Interactive companion to the AP Psych flashcard pack: reference + practice,
+   following the Chemistry Helpers / Periodic Table pattern (not a duplicate
+   of Flashcards). Original content lives in a lazy-loaded module
+   (ap-psych.js), loaded the same script-tag way as ap-packs.js (file://
+   safe), then cached on window.APPsych for the session. */
+function mountAPPsych(root) {
+
+  const SKEY = 'appsych:v1';
+  let cfg = (() => {
+    const s = Storage.get(SKEY, null);
+    return (s && typeof s === 'object') ? s : {};
+  })();
+  if (!Array.isArray(cfg.rmCategories) || !cfg.rmCategories.length) cfg.rmCategories = ['ivdv', 'design', 'validity', 'ethics'];
+  function saveCfg() { Storage.set(SKEY, cfg); }
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function shuffle(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  root.innerHTML = `<div class="ap-shell"><div class="ap-body" id="psych-status-body"></div></div>`;
+  const statusBody = root.querySelector('#psych-status-body');
+
+  /* ── Lazy-load the content module (script tag → file:// safe, then cached) ── */
+  let loadStarted = false;
+  function ensureContent(cb) {
+    if (window.APPsych) { cb(true); return; }
+    const queue = (mountAPPsych._q = mountAPPsych._q || []);
+    queue.push(cb);
+    if (loadStarted) return;
+    loadStarted = true;
+    const s = document.createElement('script');
+    s.src = 'ap-psych.js';
+    s.onload  = () => queue.splice(0).forEach(fn => fn(!!window.APPsych));
+    s.onerror = () => queue.splice(0).forEach(fn => fn(false));
+    document.head.appendChild(s);
+  }
+  function showLoading() {
+    statusBody.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-spin"></div>
+        <div class="ap-status-title">Loading content…</div>
+        <div class="ap-status-sub">Fetching the AP Psychology reference library. This loads once, then works offline.</div>
+      </div>`;
+  }
+  function showError() {
+    statusBody.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-ico">📡</div>
+        <div class="ap-status-title">Couldn’t load the content.</div>
+        <div class="ap-status-sub">The reference file (ap-psych.js) didn’t load. Make sure it sits next to the app, then reopen this tool.</div>
+        <button class="btn" id="psych-retry">Try again</button>
+      </div>`;
+    statusBody.querySelector('#psych-retry')?.addEventListener('click', () => { loadStarted = false; boot(); });
+  }
+
+  /* ── Tab shell (built once content is ready) ── */
+  const TABS = [
+    { id: 'research',  label: 'Research Methods' },
+    { id: 'stats',      label: 'Psych Stats' },
+    { id: 'theorists',  label: 'Perspectives & Theorists' },
+    { id: 'disorders',  label: 'Disorders & Treatments' },
+  ];
+  let activeTab = 'research';
+  let DATA = null;
+  const renders = {};
+  const panel = () => $('#psych-panel', root);
+
+  function renderShell() {
+    root.innerHTML = `
+      <style>
+        .psych-tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--rule);margin-bottom:18px}
+        .psych-tab{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;
+          transition:color .12s,border-color .12s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none}
+        .psych-tab:hover{color:var(--ink-2)}
+        .psych-tab.active{color:var(--ink);border-bottom-color:var(--accent-3)}
+        .psych-panel{min-height:300px}
+        .psych-persp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+        @media(max-width:560px){.psych-persp-grid{grid-template-columns:1fr}}
+        .psych-persp-card{border:1px solid var(--rule);border-radius:4px;padding:12px;border-left:3px solid var(--cat-color,var(--accent-3))}
+        .psych-persp-card h4{font-family:var(--serif);font-size:15px;margin:0 0 4px}
+        .psych-persp-card .blurb{font-family:var(--serif);font-style:italic;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+        .psych-theorist{font-family:var(--mono);font-size:11.5px;line-height:1.5;padding:6px 0;border-top:1px dashed var(--rule)}
+        .psych-theorist:first-of-type{border-top:none}
+        .psych-theorist b{color:var(--ink)}
+        .psych-quiz-stem{font-family:var(--serif);font-size:15px;line-height:1.55;margin-bottom:14px}
+        .psych-choices{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+        .psych-choice{text-align:left;font-family:var(--serif);font-size:13.5px;padding:10px 12px;border:1px solid var(--rule);
+          border-radius:4px;background:var(--paper-2);cursor:pointer;transition:border-color .12s,background .12s;color:var(--ink)}
+        .psych-choice:hover{border-color:var(--ink-2)}
+        .psych-choice.correct{border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 14%, var(--paper-2))}
+        .psych-choice.incorrect{border-color:var(--red);background:color-mix(in srgb, var(--red) 12%, var(--paper-2))}
+        .psych-choice[disabled]{cursor:default}
+        .psych-explain{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--muted);
+          border-left:2px solid var(--rule);padding-left:10px;margin-bottom:14px;line-height:1.5}
+        .psych-quiz-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+        .psych-score{font-family:var(--mono);font-size:11px;color:var(--muted)}
+        .psych-cat-toggles{display:flex;flex-wrap:wrap;gap:6px}
+        .psych-cat-toggle{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+          padding:5px 10px;border:1px solid var(--rule);border-radius:12px;background:none;cursor:pointer;color:var(--muted)}
+        .psych-cat-toggle.on{color:var(--ink);border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 12%, transparent)}
+        .psych-stat-block{border:1px solid var(--rule);border-radius:4px;padding:14px;margin-bottom:16px}
+        .psych-stat-block h4{font-family:var(--serif);font-size:15px;margin:0 0 8px}
+        .psych-formula{font-family:var(--mono);font-size:15px;background:var(--paper-2);border:1px dashed var(--rule);
+          border-radius:3px;padding:10px 12px;margin:8px 0;text-align:center}
+        .psych-zrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+        .psych-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+        .psych-table th,.psych-table td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--rule)}
+        .psych-table th{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+        .psych-search{margin-bottom:12px}
+        .psych-dis-cats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+        .psych-dis-cat{font-family:var(--mono);font-size:10.5px;padding:5px 10px;border:1px solid var(--rule);
+          border-radius:12px;background:none;cursor:pointer;color:var(--muted)}
+        .psych-dis-cat.active{color:var(--ink);border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 12%, transparent)}
+        .psych-dis-card{border:1px solid var(--rule);border-radius:4px;padding:12px;margin-bottom:10px}
+        .psych-dis-card h4{font-family:var(--serif);font-size:14.5px;margin:0 0 2px}
+        .psych-dis-cat-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-3)}
+        .psych-dis-symptoms{font-family:var(--serif);font-size:12.5px;color:var(--ink-2);margin:6px 0}
+        .psych-tx-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+        .psych-tx-chip{font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);cursor:pointer}
+        .psych-tx-chip:hover{border-color:var(--ink-2);color:var(--ink)}
+      </style>
+      <div class="psych-tabs">
+        ${TABS.map(t => `<button class="psych-tab${t.id === activeTab ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
+      </div>
+      <div class="psych-panel" id="psych-panel"></div>
+    `;
+    root.querySelectorAll('.psych-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        root.querySelectorAll('.psych-tab').forEach(b => b.classList.toggle('active', b === btn));
+        renders[activeTab]();
+      });
+    });
+    renders[activeTab]();
+  }
+
+  /* ── Shared MC-quiz renderer (used by Research Methods + Theorist self-check) ── */
+  function renderQuizQuestion(container, q, opts) {
+    container.innerHTML = `
+      <div class="psych-quiz-stem">${q.stem}</div>
+      <div class="psych-choices">
+        ${q.choices.map((c, i) => `<button class="psych-choice" data-i="${i}">${c}</button>`).join('')}
+      </div>
+      <div id="psych-quiz-feedback"></div>
+    `;
+    let answered = false;
+    container.querySelectorAll('.psych-choice').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (answered) return;
+        answered = true;
+        const i = Number(btn.dataset.i);
+        const correct = i === q.correctIndex;
+        container.querySelectorAll('.psych-choice').forEach((b, j) => {
+          b.disabled = true;
+          if (j === q.correctIndex) b.classList.add('correct');
+          else if (j === i) b.classList.add('incorrect');
+        });
+        const fb = container.querySelector('#psych-quiz-feedback');
+        fb.innerHTML = `
+          <div class="psych-explain">${correct ? '✓ Correct. ' : '✗ Not quite. '}${q.explanation}</div>
+          <button class="btn" id="psych-quiz-next">Next question →</button>
+        `;
+        fb.querySelector('#psych-quiz-next').addEventListener('click', () => opts.onNext());
+        opts.onAnswered?.(correct);
+      });
+    });
+  }
+
+  /* ─────────────────────── Research Methods practice ─────────────────────── */
+  let rmScore = { correct: 0, total: 0 };
+  function rmNext() {
+    const cats = DATA.categories.map(c => c.id).filter(id => cfg.rmCategories.includes(id));
+    const q = DATA.generateQuestion(cats.length ? cats : DATA.categories.map(c => c.id));
+    renderQuizQuestion($('#psych-rm-q', root), q, {
+      onNext: rmNext,
+      onAnswered: (correct) => {
+        rmScore.total++; if (correct) rmScore.correct++;
+        const s = $('#psych-rm-score', root); if (s) s.textContent = `Score: ${rmScore.correct} / ${rmScore.total}`;
+      },
+    });
+  }
+  renders.research = function () {
+    panel().innerHTML = `
+      <p class="help">Randomized practice scenarios covering the FRQ topic students miss most: identifying IVs/DVs, classifying research designs, spotting validity threats, and naming the ethics guideline at stake. A fresh scenario every question — nothing repeats verbatim.</p>
+      <div class="psych-cat-toggles" id="psych-rm-cats" style="margin-bottom:14px">
+        ${DATA.categories.map(c => `<button class="psych-cat-toggle${cfg.rmCategories.includes(c.id) ? ' on' : ''}" data-cat="${c.id}">${c.label}</button>`).join('')}
+      </div>
+      <div class="psych-quiz-bar">
+        <span class="psych-score" id="psych-rm-score">Score: ${rmScore.correct} / ${rmScore.total}</span>
+        <button class="btn ghost sm" id="psych-rm-reset">Reset score</button>
+      </div>
+      <div id="psych-rm-q"></div>
+    `;
+    panel().querySelectorAll('#psych-rm-cats .psych-cat-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cat = btn.dataset.cat;
+        if (cfg.rmCategories.includes(cat)) {
+          if (cfg.rmCategories.length > 1) cfg.rmCategories = cfg.rmCategories.filter(c => c !== cat);
+        } else {
+          cfg.rmCategories.push(cat);
+        }
+        saveCfg();
+        btn.classList.toggle('on', cfg.rmCategories.includes(cat));
+      });
+    });
+    panel().querySelector('#psych-rm-reset').addEventListener('click', () => {
+      rmScore = { correct: 0, total: 0 };
+      $('#psych-rm-score', root).textContent = 'Score: 0 / 0';
+    });
+    rmNext();
+  };
+
+  /* ─────────────────────────────── Psych Stats ───────────────────────────────
+     z-scores + correlation reuse the exact thresholds Statistics Sheet's
+     Regression tab uses; reliability/validity is original reference content
+     (Statistics Sheet has no psychometrics content to reuse). */
+  renders.stats = function () {
+    panel().innerHTML = `
+      <div class="psych-stat-block">
+        <h4>Z-scores</h4>
+        <p class="help">A z-score says how many standard deviations a value sits from the mean.</p>
+        <div class="psych-formula">z = (x − μ) / σ</div>
+        <div class="psych-zrow">
+          <div class="field"><label>Value (x)</label><input class="input mono" id="psych-z-x" type="number" placeholder="x"></div>
+          <div class="field"><label>Mean (μ)</label><input class="input mono" id="psych-z-mu" type="number" placeholder="μ"></div>
+          <div class="field"><label>Std dev (σ)</label><input class="input mono" id="psych-z-sd" type="number" placeholder="σ"></div>
+        </div>
+        <div id="psych-z-result" class="psych-formula" style="display:none"></div>
+        <p class="help" style="margin-top:4px">Need a probability from a z-score, or the reverse (critical value)? The full normal/t-distribution lookup lives in Statistics Sheet.</p>
+        <button class="btn ghost sm" id="psych-open-stats">Open Statistics Sheet →</button>
+      </div>
+      <div class="psych-stat-block">
+        <h4>Correlation strength &amp; direction</h4>
+        <p class="help">Same |r| thresholds Statistics Sheet's Regression tab uses.</p>
+        <table class="psych-table">
+          <tr><th>|r|</th><th>Strength</th></tr>
+          <tr><td>0.8 – 1.0</td><td>Strong</td></tr>
+          <tr><td>0.5 – 0.8</td><td>Moderate</td></tr>
+          <tr><td>0 – 0.5</td><td>Weak</td></tr>
+        </table>
+        <p class="help" style="margin-top:8px">Direction: positive r → the two variables rise together; negative r → one rises as the other falls; r near 0 → little to no linear relationship.</p>
+      </div>
+      <div class="psych-stat-block">
+        <h4>Reliability vs. validity</h4>
+        <p class="help">A measure can be reliable without being valid — but it can't be valid without being reliable.</p>
+        <table class="psych-table">
+          <tr><th>Reliability</th><th>What it checks</th></tr>
+          <tr><td>Test–retest</td><td>The same people score similarly when retested later.</td></tr>
+          <tr><td>Split-half</td><td>Two halves of the same test correlate with each other.</td></tr>
+          <tr><td>Inter-rater</td><td>Different raters/scorers agree on the same responses.</td></tr>
+        </table>
+        <table class="psych-table" style="margin-top:10px">
+          <tr><th>Validity</th><th>What it checks</th></tr>
+          <tr><td>Content validity</td><td>The test covers the full range of the concept it claims to measure.</td></tr>
+          <tr><td>Criterion validity</td><td>Scores predict or correlate with a related real-world outcome.</td></tr>
+          <tr><td>Construct validity</td><td>The test truly measures the underlying theoretical concept, not something else.</td></tr>
+        </table>
+      </div>
+    `;
+    const xEl = panel().querySelector('#psych-z-x'), muEl = panel().querySelector('#psych-z-mu'), sdEl = panel().querySelector('#psych-z-sd');
+    const resEl = panel().querySelector('#psych-z-result');
+    function computeZ() {
+      const x = parseFloat(xEl.value), mu = parseFloat(muEl.value), sd = parseFloat(sdEl.value);
+      if (!Number.isFinite(x) || !Number.isFinite(mu) || !Number.isFinite(sd) || sd === 0) { resEl.style.display = 'none'; return; }
+      resEl.style.display = '';
+      resEl.textContent = `z = (${x} − ${mu}) / ${sd} = ${((x - mu) / sd).toFixed(3)}`;
+    }
+    [xEl, muEl, sdEl].forEach(elx => elx.addEventListener('input', computeZ));
+    panel().querySelector('#psych-open-stats').addEventListener('click', () => openTool('stats'));
+  };
+
+  /* ───────────────────────── Perspectives & Theorists ───────────────────────── */
+  let allTheorists = null;
+  function getAllTheorists() {
+    if (allTheorists) return allTheorists;
+    const grouped = DATA.perspectives.flatMap(p => p.theorists.map(t => ({ ...t, perspective: p.name })));
+    allTheorists = [...grouped, ...DATA.additionalTheorists.map(t => ({ ...t, perspective: null }))];
+    return allTheorists;
+  }
+  let theoristView = 'reference';
+  let tqScore = { correct: 0, total: 0 };
+  function tqBuildQuestion() {
+    const all = getAllTheorists();
+    const correct = pick(all);
+    const distractors = shuffle(all.filter(t => t.name !== correct.name)).slice(0, 3);
+    const choices = shuffle([correct, ...distractors]).map(t => t.name);
+    return {
+      stem: `Which theorist is associated with:<br><i>&ldquo;${correct.contribution}&rdquo;</i>`,
+      choices,
+      correctIndex: choices.indexOf(correct.name),
+      explanation: `${correct.name}${correct.perspective ? ` (${correct.perspective} perspective)` : ''} — ${correct.contribution}`,
+    };
+  }
+  function tqNext() {
+    renderQuizQuestion($('#psych-tq-q', root), tqBuildQuestion(), {
+      onNext: tqNext,
+      onAnswered: (correct) => {
+        tqScore.total++; if (correct) tqScore.correct++;
+        const s = $('#psych-tq-score', root); if (s) s.textContent = `Score: ${tqScore.correct} / ${tqScore.total}`;
+      },
+    });
+  }
+  renders.theorists = function () {
+    panel().innerHTML = `
+      <div class="psych-cat-toggles" style="margin-bottom:16px">
+        <button class="psych-cat-toggle${theoristView === 'reference' ? ' on' : ''}" data-view="reference">Reference</button>
+        <button class="psych-cat-toggle${theoristView === 'quiz' ? ' on' : ''}" data-view="quiz">Self-check quiz</button>
+      </div>
+      <div id="psych-theorist-body"></div>
+    `;
+    panel().querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => { theoristView = btn.dataset.view; renders.theorists(); });
+    });
+    const body2 = panel().querySelector('#psych-theorist-body');
+    if (theoristView === 'reference') {
+      body2.innerHTML = `
+        <div class="psych-persp-grid">
+          ${DATA.perspectives.map(p => `
+            <div class="psych-persp-card" style="--cat-color:${p.color}">
+              <h4>${p.name}</h4>
+              <div class="blurb">${p.blurb}</div>
+              ${p.theorists.map(t => `<div class="psych-theorist"><b>${t.name}</b> — ${t.contribution}</div>`).join('')}
+            </div>
+          `).join('')}
+          <div class="psych-persp-card" style="--cat-color:var(--muted)">
+            <h4>Other notable studies</h4>
+            <div class="blurb">Frequently tested figures that don't map to a single perspective.</div>
+            ${DATA.additionalTheorists.map(t => `<div class="psych-theorist"><b>${t.name}</b> — ${t.contribution}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      body2.innerHTML = `
+        <p class="help">Read the description, pick the theorist. Pulled fresh from the full list each round.</p>
+        <div class="psych-quiz-bar">
+          <span class="psych-score" id="psych-tq-score">Score: ${tqScore.correct} / ${tqScore.total}</span>
+          <button class="btn ghost sm" id="psych-tq-reset">Reset score</button>
+        </div>
+        <div id="psych-tq-q"></div>
+      `;
+      body2.querySelector('#psych-tq-reset').addEventListener('click', () => {
+        tqScore = { correct: 0, total: 0 };
+        body2.querySelector('#psych-tq-score').textContent = 'Score: 0 / 0';
+      });
+      tqNext();
+    }
+  };
+
+  /* ───────────────────────── Disorders & Treatments ───────────────────────── */
+  let disCat = 'all', disQuery = '';
+  function renderDisList() {
+    const list = panel().querySelector('#psych-dis-list');
+    if (!list) return;
+    const q = disQuery.trim().toLowerCase();
+    const items = DATA.disorders.filter(d => {
+      if (disCat !== 'all' && d.category !== disCat) return false;
+      if (!q) return true;
+      return d.name.toLowerCase().includes(q) || d.symptoms.toLowerCase().includes(q) || d.category.toLowerCase().includes(q);
+    });
+    if (!items.length) { list.innerHTML = `<p class="help">No disorders match “${escape(disQuery)}”.</p>`; return; }
+    list.innerHTML = items.map(d => `
+      <div class="psych-dis-card">
+        <div class="psych-dis-cat-label">${d.category}</div>
+        <h4>${d.name}</h4>
+        <div class="psych-dis-symptoms">${d.symptoms}</div>
+        <div class="psych-tx-chips">
+          ${d.treatments.map(tid => {
+            const t = DATA.treatments.find(x => x.id === tid);
+            return t ? `<span class="psych-tx-chip" title="${escape(t.blurb)}">${t.name}</span>` : '';
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+  renders.disorders = function () {
+    const cats = ['all', ...new Set(DATA.disorders.map(d => d.category))];
+    panel().innerHTML = `
+      <div class="field psych-search">
+        <input class="input" id="psych-dis-search" type="search" placeholder="Search disorders…" value="${escape(disQuery)}">
+      </div>
+      <div class="psych-dis-cats">
+        ${cats.map(c => `<button class="psych-dis-cat${c === disCat ? ' active' : ''}" data-cat="${escape(c)}">${c === 'all' ? 'All' : c}</button>`).join('')}
+      </div>
+      <div id="psych-dis-list"></div>
+    `;
+    panel().querySelector('#psych-dis-search').addEventListener('input', (e) => { disQuery = e.target.value; renderDisList(); });
+    panel().querySelectorAll('.psych-dis-cat').forEach(btn => {
+      btn.addEventListener('click', () => { disCat = btn.dataset.cat; renders.disorders(); });
+    });
+    renderDisList();
+  };
+
+  /* ── Boot: lazy-load content, then show the tabbed shell ── */
+  function boot() {
+    showLoading();
+    ensureContent(ok => {
+      if (!ok || !window.APPsych) { showError(); return; }
+      DATA = window.APPsych;
+      renderShell();
+    });
+  }
+  boot();
+
+  return { unmount() {} };
+}
+
 /* ========== PERIODIC TABLE ========== */
 function mountPeriodic(root) {
   /* ── Element data: all 118 ── */
@@ -6453,6 +6860,9 @@ function registerTools() {
   TOOLS.push({ id:'citation', shelf:'words', icon:'📚', name:'Citation Helper',
     desc:'MLA · APA · Chicago. DOI/ISBN autofill + annotated bibliography.', tag:'upgraded',
     keywords:['cite','mla','apa','chicago','reference','bibliography','doi','isbn','annotated'], mount: mountCitation });
+  TOOLS.push({ id:'appsych', shelf:'words', icon:'🧠', name:'AP Psychology',
+    desc:'Research methods practice, psych stats, theorists & disorders reference.', tag:'new',
+    keywords:['ap','psychology','psych','research methods','independent variable','dependent variable','validity','reliability','ethics','theorist','perspective','disorder','treatment','dsm','z-score','correlation','frq'], mount: mountAPPsych });
 
   /* ============== STUDY ============== */
   TOOLS.push({ id:'flashcards', shelf:'study', icon:'🃏', name:'Flashcards',
@@ -6557,6 +6967,7 @@ const HELP_DESC = {
   roman: 'Convert numbers to and from Roman numerals.',
   wordcount: 'Count words and characters, and estimate reading level and reading time.',
   citation: 'Generate MLA, APA, or Chicago citations, with DOI/ISBN autofill and an annotated bibliography.',
+  appsych: 'Practice research-methods scenarios, look up z-scores and correlation strength, and browse perspectives, theorists, and disorders & treatments.',
   essay: 'Scaffold an essay from outline to draft, track sources, and export.',
   vocab: 'Build custom word lists and quiz yourself with spaced repetition.',
   lang: "Practice conjugation and vocabulary for a language you're learning.",
