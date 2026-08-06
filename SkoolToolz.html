@@ -2888,13 +2888,14 @@ const SHELVES = [
 ];
 
 /* Cache-busting versions for lazy-loaded module files (ap-packs.js,
-   ap-psych.js, calculus-engine.js, reading-writing-data.js). Bump a file's
-   number whenever its content changes — the query string changes the
-   request URL, so browsers fetch a fresh copy instead of serving a stale
+   ap-psych.js, algebra-engine.js, calculus-engine.js, reading-writing-data.js).
+   Bump a file's number whenever its content changes — the query string changes
+   the request URL, so browsers fetch a fresh copy instead of serving a stale
    cached one indefinitely (these files have no other cache-busting). */
 const MODULE_VERSION = {
   'ap-packs.js': 1,
   'ap-psych.js': 1,
+  'algebra-engine.js': 1,
   'calculus-engine.js': 1,
   'reading-writing-data.js': 1,
 };
@@ -6796,6 +6797,9 @@ function registerTools() {
   TOOLS.push({ id:'inequality', shelf:'numbers', icon:'≷', name:'Inequality Solver',
     desc:'Solve & graph on a number line; interval + set notation.', tag:'new',
     keywords:['inequality','inequalities','interval','set','number line','set builder','solve','linear','quadratic','polynomial','rational','absolute value','compound','union','intersection','complement','sign chart','algebra','precalculus','notation','solution set'], mount: mountInequality });
+  TOOLS.push({ id:'algebra', shelf:'numbers', icon:'𝑥', name:'Algebra Solver',
+    desc:'Solve for x — linear, quadratic, systems, polynomial.', tag:'new',
+    keywords:['algebra','equation','solve for x','linear','quadratic','quadratic formula','completing the square','factoring','factor','system of equations','substitution','elimination','polynomial','synthetic division','rational root theorem','root','zero','show work'], mount: mountAlgebra });
   TOOLS.push({ id:'calculator', shelf:'numbers', icon:'🧮', name:'Calculator',
     desc:'Scientific, with history & ANS.', tag:'upgraded',
     keywords:['math','calc','scientific','sum','add'], mount: mountCalculator });
@@ -7642,7 +7646,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet' || id === 'extracurricular');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet' || id === 'extracurricular' || id === 'algebra');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -10281,6 +10285,391 @@ function mountInequality(root) {
     const h = location.hash || ''; const eq = h.indexOf('='); if (eq < 0 || !/inequality/i.test(h.slice(0, eq))) return;
     const data = decodeState(h.slice(eq + 1)); if (!data) return;
     setTimeout(() => { if (confirm('Load the shared inequality / sets? This replaces what’s here.')) { applyImport(data); showToast('Loaded shared work.'); } }, 350);
+  })();
+
+  return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
+}
+
+
+/* ========== ALGEBRA / EQUATION SOLVER ==========
+   Linear, quadratic, systems (2/3 linear equations), and polynomial
+   (degree ≤4) equation solving with full shown work. No-eval tokenizer +
+   recursive-descent parser and exact BigInt-fraction arithmetic (reusing
+   the pattern proven in the Inequality Solver); step rendering through the
+   shared KaTeX path (reusing the pattern proven in the Calculus Solver).
+   The engine itself is a lazy-loaded module (algebra-engine.js, fetched via
+   <script> on first open so it also works from a local file:// copy, then
+   cached) so the single-file fast-paint budget holds. Autosaves to
+   localStorage and shares by code (#algebra=…), no backend.
+   (Roadmap 4.1, Numbers shelf.) */
+function mountAlgebra(root) {
+  const SKEY = 'algebra:v1';
+  const $ = (sel, ctx) => (ctx || root).querySelector(sel);
+  const $$ = (sel, ctx) => Array.from((ctx || root).querySelectorAll(sel));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /* ---- self-contained lazy-loaders (engine + KaTeX), mirrors mountCalculus ---- */
+  let engineLoading = false;
+  const ensureEngine = (cb) => {
+    if (window.AlgebraEngine) { cb(true); return; }
+    const queue = (mountAlgebra._eq = mountAlgebra._eq || []);
+    queue.push(cb);
+    if (engineLoading) return;
+    engineLoading = true;
+    const s = document.createElement('script');
+    s.src = 'algebra-engine.js?v=' + MODULE_VERSION['algebra-engine.js'];
+    s.onload = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(!!window.AlgebraEngine)); };
+    s.onerror = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(false)); };
+    document.head.appendChild(s);
+  };
+  let katexLoadStarted = false;
+  const ensureKatex = (cb) => {
+    if (window.katex) { cb(); return; }
+    const queue = (mountAlgebra._kq = mountAlgebra._kq || []);
+    queue.push(cb);
+    if (katexLoadStarted) return;
+    katexLoadStarted = true;
+    if (!document.getElementById('katex-css')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css'; link.rel = 'stylesheet';
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css';
+      document.head.appendChild(link);
+    }
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js';
+    s.onload = () => queue.splice(0).forEach(fn => fn());
+    s.onerror = () => queue.splice(0).forEach(fn => fn());
+    document.head.appendChild(s);
+  };
+  const renderMath = (elm, latex, display) => {
+    if (!elm) return;
+    elm.dataset.tex = latex;
+    elm.textContent = latex;
+    ensureKatex(() => {
+      if (!window.katex) return;
+      try { elm.textContent = ''; window.katex.render(latex, elm, { throwOnError: false, displayMode: !!display }); }
+      catch (e) { elm.textContent = latex; }
+    });
+  };
+  const renderStepsInto = (stepsEl, steps) => {
+    if (!stepsEl) return;
+    stepsEl.innerHTML = '';
+    steps.forEach((s, i) => {
+      const li = el('li', { class: 'calc-step' });
+      li.appendChild(el('div', { class: 'calc-step-head' }, [
+        el('span', { class: 'calc-step-num', text: String(i + 1) }),
+        el('span', { class: 'calc-step-rule', text: s.rule })
+      ]));
+      const math = el('div', { class: 'calc-step-math' });
+      li.appendChild(math);
+      if (s.note) li.appendChild(el('div', { class: 'calc-step-note', text: s.note }));
+      stepsEl.appendChild(li);
+      if (s.latex) renderMath(math, s.latex, false);
+    });
+  };
+  const errBlock = (msg) => `<div class="calc-error" role="alert">${esc(msg)}</div>`;
+  const noteBlock = (msg) => `<div class="alg-note">${esc(msg)}</div>`;
+
+  /* ---- shared result/step block builders ---- */
+  const resultStepsHTML = (idPrefix, openSteps) => `
+    <div class="result"><div class="result-label">Solution</div><div class="calc-result-math" id="${idPrefix}-answer"></div></div>
+    <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" data-toggle="${idPrefix}-steps">${openSteps ? 'Hide' : 'Show'} steps</button></div>
+    <ol class="calc-steps" id="${idPrefix}-steps" ${openSteps ? '' : 'hidden'}></ol>`;
+  const paintResultSteps = (idPrefix, r) => {
+    renderMath($('#' + idPrefix + '-answer'), r.resultLatex, true);
+    renderStepsInto($('#' + idPrefix + '-steps'), r.steps);
+  };
+  const methodBlockHTML = (idPrefix, title) => `
+    <div class="alg-method">
+      <h4 class="alg-method-title">${esc(title)}</h4>
+      <div class="calc-result-math alg-method-answer" id="${idPrefix}-answer"></div>
+      <button class="btn ghost sm" data-toggle="${idPrefix}-steps">Show steps</button>
+      <ol class="calc-steps" id="${idPrefix}-steps" hidden></ol>
+    </div>`;
+  const paintMethodBlock = (idPrefix, r) => {
+    const ansEl = $('#' + idPrefix + '-answer');
+    if (r.resultLatex) renderMath(ansEl, r.resultLatex, true);
+    else if (ansEl) { ansEl.textContent = r.message || r.note || 'Could not solve.'; }
+    renderStepsInto($('#' + idPrefix + '-steps'), r.steps || []);
+  };
+
+  /* ============================ STATE ============================ */
+  const defaults = () => ({
+    tab: 'linear',
+    linear: '3(x + 2) - 5 = 2x/3 + 7',
+    quadratic: 'x^2 - 5x + 6 = 0',
+    polynomial: 'x^3 - 6x^2 + 11x - 6 = 0',
+    sysN: 2,
+    sysEqs: ['2x + 3y = 12', 'x - y = 1', 'x + y + z = 6'],
+  });
+  function load() {
+    const s = Storage.get(SKEY, null), d = defaults();
+    if (!s || typeof s !== 'object') return d;
+    return {
+      tab: ['linear', 'quadratic', 'systems', 'polynomial'].includes(s.tab) ? s.tab : d.tab,
+      linear: typeof s.linear === 'string' ? s.linear : d.linear,
+      quadratic: typeof s.quadratic === 'string' ? s.quadratic : d.quadratic,
+      polynomial: typeof s.polynomial === 'string' ? s.polynomial : d.polynomial,
+      sysN: s.sysN === 3 ? 3 : 2,
+      sysEqs: Array.isArray(s.sysEqs) && s.sysEqs.length === 3 && s.sysEqs.every(x => typeof x === 'string') ? s.sysEqs : d.sysEqs,
+    };
+  }
+  let state = load();
+  let saveTimer = null;
+  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => Storage.set(SKEY, state), 250); };
+
+  const EX_LINEAR = ['3(x + 2) - 5 = 2x/3 + 7', '5x - 3 = 3x + 7', '2(x - 4) = 2x - 8', 'x/2 + 1/3 = 5'];
+  const EX_QUAD = ['x^2 - 5x + 6 = 0', 'x^2 + 2x + 5 = 0', '2x^2 + 3x - 2 = 0', 'x^2 - 2 = 0'];
+  const EX_POLY = ['x^3 - 6x^2 + 11x - 6 = 0', 'x^4 - 5x^2 + 4 = 0', 'x^3 - 4x = 0', '2x^3 - 3x^2 - 11x + 6 = 0'];
+  const EX_SYS2 = ['2x + 3y = 12', 'x - y = 1'];
+  const EX_SYS3 = ['x + y + z = 6', '2x - y + z = 3', 'x + 2y - z = 2'];
+
+  /* ============================ RENDER: LINEAR ============================ */
+  function renderLinear() {
+    const out = $('#alg-linear-out'); if (!out) return;
+    if (!window.AlgebraEngine) { out.innerHTML = noteBlock('Loading the algebra engine…'); ensureEngine(ok => ok ? renderLinear() : (out.innerHTML = errBlock('Couldn’t load the algebra engine. Check your connection, then try again.'))); return; }
+    const E = window.AlgebraEngine;
+    let r;
+    try { r = E.linearSteps(state.linear); }
+    catch (e) { out.innerHTML = errBlock(e.message); return; }
+    if (r.unsupported) { out.innerHTML = noteBlock(r.message); return; }
+    out.innerHTML = resultStepsHTML('alg-linear', true);
+    paintResultSteps('alg-linear', r);
+  }
+
+  /* ============================ RENDER: QUADRATIC ============================ */
+  function renderQuadratic() {
+    const out = $('#alg-quadratic-out'); if (!out) return;
+    if (!window.AlgebraEngine) { out.innerHTML = noteBlock('Loading the algebra engine…'); ensureEngine(ok => ok ? renderQuadratic() : (out.innerHTML = errBlock('Couldn’t load the algebra engine. Check your connection, then try again.'))); return; }
+    const E = window.AlgebraEngine;
+    let r;
+    try { r = E.quadraticSteps(state.quadratic); }
+    catch (e) { out.innerHTML = errBlock(e.message); return; }
+    if (r.degFallback !== undefined) {
+      if (r.degFallback === 1) {
+        out.innerHTML = noteBlock(r.note) + resultStepsHTML('alg-quad-lin', true);
+        paintResultSteps('alg-quad-lin', E.linearSteps(state.quadratic));
+      } else {
+        out.innerHTML = noteBlock(r.note);
+      }
+      return;
+    }
+    let html = `<div class="result"><div class="result-label">Standard form</div><div class="calc-result-math" id="alg-quad-std"></div><p class="alg-disc-note" id="alg-quad-discnote"></p></div>`;
+    html += methodBlockHTML('alg-quad-formula', 'Quadratic Formula');
+    html += methodBlockHTML('alg-quad-cts', 'Completing the Square');
+    if (r.methods.factoring) html += methodBlockHTML('alg-quad-factor', 'Factoring');
+    out.innerHTML = html;
+    const stdStep = r.steps.find(s => s.rule === 'Standard form');
+    renderMath($('#alg-quad-std'), stdStep ? stdStep.latex : '', true);
+    const D = r.discriminant;
+    $('#alg-quad-discnote').textContent = `Discriminant Δ = ${D} — ${D > 0n ? 'two real roots.' : D === 0n ? 'one repeated real root.' : 'two complex roots.'}`;
+    paintMethodBlock('alg-quad-formula', r.methods.formula);
+    paintMethodBlock('alg-quad-cts', r.methods.completingSquare);
+    if (r.methods.factoring) paintMethodBlock('alg-quad-factor', r.methods.factoring);
+  }
+
+  /* ============================ RENDER: POLYNOMIAL ============================ */
+  function renderPolynomial() {
+    const out = $('#alg-polynomial-out'); if (!out) return;
+    if (!window.AlgebraEngine) { out.innerHTML = noteBlock('Loading the algebra engine…'); ensureEngine(ok => ok ? renderPolynomial() : (out.innerHTML = errBlock('Couldn’t load the algebra engine. Check your connection, then try again.'))); return; }
+    const E = window.AlgebraEngine;
+    let r;
+    try { r = E.polynomialSteps(state.polynomial); }
+    catch (e) { out.innerHTML = errBlock(e.message); return; }
+    if (r.unsupported) { out.innerHTML = noteBlock(r.message); return; }
+    if (r.kind === 'all' || r.kind === 'none') { out.innerHTML = resultStepsHTML('alg-poly', true); paintResultSteps('alg-poly', { resultLatex: r.kind === 'all' ? '\\text{All real numbers}' : '\\text{No solution}', steps: r.steps }); return; }
+    out.innerHTML = resultStepsHTML('alg-poly', true);
+    paintResultSteps('alg-poly', r);
+  }
+
+  /* ============================ RENDER: SYSTEMS ============================ */
+  function systemsVars() { return state.sysN === 3 ? ['x', 'y', 'z'] : ['x', 'y']; }
+  function renderSystems() {
+    const out = $('#alg-sys-out'); if (!out) return;
+    if (!window.AlgebraEngine) { out.innerHTML = noteBlock('Loading the algebra engine…'); ensureEngine(ok => ok ? renderSystems() : (out.innerHTML = errBlock('Couldn’t load the algebra engine. Check your connection, then try again.'))); return; }
+    const E = window.AlgebraEngine;
+    const eqs = state.sysEqs.slice(0, state.sysN);
+    let res;
+    try { res = state.sysN === 3 ? E.solveSystem3(eqs[0], eqs[1], eqs[2]) : E.solveSystem2(eqs[0], eqs[1]); }
+    catch (e) { out.innerHTML = errBlock(e.message); return; }
+    let html = methodBlockHTML('alg-sys-sub', 'Substitution');
+    html += methodBlockHTML('alg-sys-elim', 'Elimination');
+    out.innerHTML = html;
+    paintMethodBlock('alg-sys-sub', res.substitution);
+    paintMethodBlock('alg-sys-elim', res.elimination);
+  }
+
+  function renderCurrent() {
+    if (state.tab === 'linear') renderLinear();
+    else if (state.tab === 'quadratic') renderQuadratic();
+    else if (state.tab === 'systems') renderSystems();
+    else renderPolynomial();
+  }
+
+  /* ============================ SHARE-BY-CODE ============================ */
+  const b64e = bytes => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  function b64d(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeState() { return b64e(new TextEncoder().encode(JSON.stringify({ v: 1, t: state.tab, l: state.linear, q: state.quadratic, p: state.polynomial, n: state.sysN, s: state.sysEqs }))); }
+  function decodeState(input) {
+    let s = String(input || '').trim(); if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, ''); if (!s) return null;
+    try {
+      const o = JSON.parse(new TextDecoder().decode(b64d(s)));
+      if (!o || typeof o !== 'object') return null;
+      return {
+        tab: ['linear', 'quadratic', 'systems', 'polynomial'].includes(o.t) ? o.t : 'linear',
+        linear: typeof o.l === 'string' ? o.l : undefined,
+        quadratic: typeof o.q === 'string' ? o.q : undefined,
+        polynomial: typeof o.p === 'string' ? o.p : undefined,
+        sysN: o.n === 3 ? 3 : 2,
+        sysEqs: Array.isArray(o.s) && o.s.length === 3 ? o.s : undefined,
+      };
+    } catch { return null; }
+  }
+  function applyImport(data) {
+    state.tab = data.tab;
+    if (data.linear) state.linear = data.linear;
+    if (data.quadratic) state.quadratic = data.quadratic;
+    if (data.polynomial) state.polynomial = data.polynomial;
+    if (data.sysEqs) state.sysEqs = data.sysEqs;
+    state.sysN = data.sysN;
+    root.innerHTML = shell(); wire(); save(); renderCurrent();
+  }
+  function openShareDialog() {
+    const code = encodeState(), link = location.href.split('#')[0] + '#algebra=' + code;
+    const out = $('#alg-share-target');
+    out.innerHTML = `<div class="result"><div class="result-label">Share by code</div><p class="result-sub" style="margin:0 0 12px">No backend — this code carries all four tabs. Paste it (or the link) into Import on another device.</p><div class="field"><label>Code</label><textarea class="input mono" id="alg-sharecode" rows="3" readonly></textarea></div><div class="field"><label>Link</label><input class="input mono" id="alg-sharelink" readonly></div><div class="btn-row"><button class="btn sm" data-copytext="${escape(code)}">Copy code</button><button class="btn ghost sm" data-copytext="${escape(link)}">Copy link</button><button class="btn ghost sm" data-act="back">Back</button></div></div>`;
+    $('#alg-sharecode').value = code; $('#alg-sharelink').value = link;
+  }
+  function openImportDialog() {
+    const out = $('#alg-share-target');
+    out.innerHTML = `<div class="result"><div class="result-label">Import code</div><p class="result-sub" style="margin:0 0 12px">Paste a #algebra=… code or link. This replaces the solver's inputs.</p><div class="field"><textarea class="input mono" id="alg-importbox" rows="3" placeholder="Paste #algebra=… code or link here"></textarea></div><div class="btn-row"><button class="btn sm" data-act="import-go">Load</button><button class="btn ghost sm" data-act="back">Cancel</button></div></div>`;
+  }
+
+  /* ============================ SHELL ============================ */
+  function tabPane(id, value, examples) {
+    return `<div class="alg-pane" data-pane="${id}" ${state.tab === id ? '' : 'hidden'}>
+      <div class="field"><label for="alg-${id}-expr">Equation</label><input class="input mono" id="alg-${id}-expr" value="${escape(value)}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" placeholder="e.g. ${escape(examples[0])}"></div>
+      <div class="alg-examples"><span class="alg-ex-l">Try:</span>${examples.map(e => `<button class="alg-ex" data-ex="${id}" data-exval="${escape(e)}" type="button">${esc(e)}</button>`).join('')}</div>
+      <div id="alg-${id}-out" aria-live="polite"></div>
+    </div>`;
+  }
+  function systemsPane() {
+    const n = state.sysN, vars = systemsVars();
+    const rows = eqLabelsFor(n).map((lab, i) => `<div class="field"><label for="alg-sys-eq${i}">${lab}</label><input class="input mono" id="alg-sys-eq${i}" value="${escape(state.sysEqs[i])}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>`).join('');
+    return `<div class="alg-pane" data-pane="systems" ${state.tab === 'systems' ? '' : 'hidden'}>
+      <p class="help">Enter ${n} linear equations in <span class="mono">${vars.join(', ')}</span>. Both substitution and elimination are shown, fully worked.</p>
+      <div class="btn-row" role="group" aria-label="Number of equations">
+        <button class="btn ${n === 2 ? 'accent' : 'ghost'} sm" data-nsys="2" type="button" aria-pressed="${n === 2}">2 equations (x, y)</button>
+        <button class="btn ${n === 3 ? 'accent' : 'ghost'} sm" data-nsys="3" type="button" aria-pressed="${n === 3}">3 equations (x, y, z)</button>
+      </div>
+      ${rows}
+      <div class="btn-row"><button class="btn ghost sm" data-act="sys-example" type="button">Load example</button></div>
+      <div id="alg-sys-out" aria-live="polite"></div>
+    </div>`;
+  }
+  function eqLabelsFor(n) { return n === 3 ? ['Equation 1', 'Equation 2', 'Equation 3'] : ['Equation 1', 'Equation 2']; }
+
+  function shell() {
+    return `
+    <div class="tabs" role="tablist" aria-label="Algebra modes">
+      <button class="tab${state.tab === 'linear' ? ' active' : ''}" data-tab="linear" role="tab" aria-selected="${state.tab === 'linear'}">Linear</button>
+      <button class="tab${state.tab === 'quadratic' ? ' active' : ''}" data-tab="quadratic" role="tab" aria-selected="${state.tab === 'quadratic'}">Quadratic</button>
+      <button class="tab${state.tab === 'systems' ? ' active' : ''}" data-tab="systems" role="tab" aria-selected="${state.tab === 'systems'}">Systems</button>
+      <button class="tab${state.tab === 'polynomial' ? ' active' : ''}" data-tab="polynomial" role="tab" aria-selected="${state.tab === 'polynomial'}">Polynomial</button>
+    </div>
+    <p class="help" id="alg-tab-help"></p>
+    ${tabPane('linear', state.linear, EX_LINEAR)}
+    ${tabPane('quadratic', state.quadratic, EX_QUAD)}
+    ${systemsPane()}
+    ${tabPane('polynomial', state.polynomial, EX_POLY)}
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn ghost sm" data-act="share">Share by code</button>
+      <button class="btn ghost sm" data-act="import">Import code</button>
+    </div>
+    <div id="alg-share-target"></div>
+    <p class="alg-foot">Every solver shows full work: no black-box answers. Type an equation with <span class="mono">=</span> — distribution, fractions, and parentheses are all handled.</p>`;
+  }
+
+  const TAB_HELP = {
+    linear: 'Solve any equation that simplifies to linear — distribution, fractions, and parentheses are handled, and identities / no-solution cases are called out.',
+    quadratic: 'Solve a quadratic (degree 2) equation. Shows the quadratic formula and completing the square every time, plus a verified factoring when it applies.',
+    systems: 'Solve a system of 2 or 3 linear equations, shown both by substitution and by elimination.',
+    polynomial: 'Solve a polynomial equation up to degree 4 using the Rational Root Theorem and synthetic division, cascading down to the quadratic formula for the final factor.',
+  };
+  function syncTabHelp() { const h = $('#alg-tab-help'); if (h) h.textContent = TAB_HELP[state.tab] || ''; }
+
+  root.innerHTML = shell();
+  syncTabHelp();
+
+  function wire() { syncTabHelp(); }
+  wire();
+  renderCurrent();
+
+  root.addEventListener('input', e => {
+    if (e.target.id === 'alg-linear-expr') { state.linear = e.target.value; save(); renderLinear(); }
+    else if (e.target.id === 'alg-quadratic-expr') { state.quadratic = e.target.value; save(); renderQuadratic(); }
+    else if (e.target.id === 'alg-polynomial-expr') { state.polynomial = e.target.value; save(); renderPolynomial(); }
+    else if (/^alg-sys-eq\d$/.test(e.target.id)) { const i = +e.target.id.slice(-1); state.sysEqs[i] = e.target.value; save(); renderSystems(); }
+  });
+  root.addEventListener('click', e => {
+    let b;
+    if ((b = e.target.closest('[data-copytext]'))) { copy(b.getAttribute('data-copytext') || '', b); return; }
+    if ((b = e.target.closest('[data-toggle]'))) {
+      const id = b.getAttribute('data-toggle'); const list = $('#' + id);
+      if (list) { const hidden = list.hasAttribute('hidden'); if (hidden) { list.removeAttribute('hidden'); b.textContent = b.textContent.replace('Show', 'Hide'); } else { list.setAttribute('hidden', ''); b.textContent = b.textContent.replace('Hide', 'Show'); } }
+      return;
+    }
+    if ((b = e.target.closest('[data-ex]'))) {
+      const id = b.getAttribute('data-ex'), val = b.getAttribute('data-exval');
+      if (id === 'linear') state.linear = val; else if (id === 'quadratic') state.quadratic = val; else if (id === 'polynomial') state.polynomial = val;
+      const input = $('#alg-' + id + '-expr'); if (input) input.value = val;
+      save(); renderCurrent(); return;
+    }
+    if ((b = e.target.closest('[data-nsys]'))) { state.sysN = +b.getAttribute('data-nsys'); root.innerHTML = shell(); wire(); save(); renderCurrent(); return; }
+    if ((b = e.target.closest('[data-act="sys-example"]'))) {
+      state.sysEqs = state.sysN === 3 ? EX_SYS3.slice() : [EX_SYS2[0], EX_SYS2[1], state.sysEqs[2]];
+      root.innerHTML = shell(); wire(); save(); renderCurrent(); return;
+    }
+    if ((b = e.target.closest('[data-tab]'))) {
+      state.tab = b.getAttribute('data-tab');
+      $$('.tab', root).forEach(t => { const on = t.getAttribute('data-tab') === state.tab; t.classList.toggle('active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      $$('.alg-pane', root).forEach(p => { p.hidden = p.getAttribute('data-pane') !== state.tab; });
+      syncTabHelp(); save(); renderCurrent(); return;
+    }
+    if ((b = e.target.closest('[data-act]'))) {
+      const a = b.dataset.act;
+      if (a === 'share') openShareDialog();
+      else if (a === 'import') openImportDialog();
+      else if (a === 'back') { $('#alg-share-target').innerHTML = ''; }
+      else if (a === 'import-go') { const data = decodeState($('#alg-importbox').value); if (!data) { showToast('That code didn’t decode.'); return; } applyImport(data); showToast('Imported.'); }
+    }
+  });
+
+  /* ---- scoped styles ---- */
+  if (!document.getElementById('algebra-style')) {
+    const st = document.createElement('style'); st.id = 'algebra-style';
+    st.textContent = `
+      .alg-examples{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 16px}
+      .alg-ex-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+      .alg-ex{font-family:var(--mono);font-size:13px;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);padding:5px 9px;cursor:pointer}
+      .alg-ex:hover{color:var(--ink);border-color:var(--ink-2)}
+      .alg-note{background:var(--paper-2);border:1px solid var(--rule);border-left:2px solid var(--accent);color:var(--ink-2);font-size:14px;border-radius:3px;padding:11px 14px;margin:14px 0;line-height:1.5}
+      .alg-method{margin-top:20px;padding-top:18px;border-top:1px solid var(--rule)}
+      .alg-method-title{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+      .alg-method-answer{margin-bottom:10px}
+      .alg-disc-note{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+      .alg-foot{font-size:12px;color:var(--muted);line-height:1.6;margin-top:16px}
+      .calc-step-math .katex-display{margin:4px 0;overflow-x:auto;overflow-y:hidden}
+    `;
+    document.head.appendChild(st);
+  }
+
+  /* ---- incoming share link ---- */
+  (function checkShared() {
+    const h = location.hash || ''; const eq = h.indexOf('='); if (eq < 0 || !/algebra/i.test(h.slice(0, eq))) return;
+    const data = decodeState(h.slice(eq + 1)); if (!data) return;
+    setTimeout(() => { if (confirm('Load the shared equation(s)? This replaces what’s here.')) { applyImport(data); showToast('Loaded shared work.'); } }, 350);
   })();
 
   return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };

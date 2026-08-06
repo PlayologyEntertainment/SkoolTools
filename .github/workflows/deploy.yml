@@ -9,6 +9,7 @@ on:
       - 'privacy.html'
       - 'terms.html'
       - 'calculus-engine.js'
+      - 'algebra-engine.js'
       - 'ap-packs.js'
       - 'ap-psych.js'
       - 'reading-writing-data.js'
@@ -56,6 +57,15 @@ jobs:
             --max-time 60 \
             --connect-timeout 20 \
             "ftp://ftp.playologyentertainment.com/SkoolToolz/calculus-engine.js"
+
+      - name: Upload algebra-engine.js via FTP
+        run: |
+          curl -T algebra-engine.js \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/algebra-engine.js"
 
       - name: Upload ap-packs.js via FTP
         run: |

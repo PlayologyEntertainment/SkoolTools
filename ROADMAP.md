@@ -11,11 +11,12 @@ tools across nine shelves — adding Test Prep, Focus (Accessibility), and Code
 
 Work didn't stop at the v2.0 mark: a handful of tools and fixes shipped
 ad hoc afterward without ever being scoped in this document (see **"Shipped
-since v2.0"** near the bottom). The app runs **58 tools across nine shelves**
-as of this update (57 ad hoc + the AP Psychology tool, Phase 4's first
-scoped-and-shipped item) — **Phase 4 is where that ad hoc pattern stops:**
-every new tool from here forward gets scoped, prioritized, and checked off
-in this doc before it ships, the same discipline Phases 1–3 held.
+since v2.0"** near the bottom). The app runs **59 tools across nine shelves**
+as of this update (57 ad hoc + the AP Psychology tool and the Algebra Solver,
+Phase 4's first two scoped-and-shipped items) — **Phase 4 is where that ad
+hoc pattern stops:** every new tool from here forward gets scoped,
+prioritized, and checked off in this doc before it ships, the same
+discipline Phases 1–3 held.
 
 **Current cycle scope:** Phase 4 (new tools/features) is the active,
 in-scope work. Two adjacent tracks are deliberately **not** part of this
@@ -414,21 +415,40 @@ build ourselves, deterministic and show-work.
 
 ### Tier A — top priority, start here
 
-#### 4.1 Algebra / Equation Solver  *(new tool, Numbers shelf)*
+#### 4.1 Algebra / Equation Solver  *(new tool, Numbers shelf)*  ✅ *shipped*
 The single biggest remaining gap versus Symbolab/Mathway-style competitors —
 "solve for x" is their highest-traffic use case, and SkoolToolz has no
 general-purpose equation solver today (Calculus Solver covers derivatives/
 integrals/limits; Inequality Solver covers inequalities; nothing solves a
 plain equation).
-- Linear equations; quadratics via factoring, the quadratic formula, *and*
-  completing the square (show whichever apply, not just one method).
-- Systems of two/three linear equations, steps shown for both substitution
-  and elimination.
-- Polynomial root-finding for low-degree polynomials (rational root theorem
-  + synthetic division).
-- Lowest-risk build in this phase: reuses the no-`eval` tokenizer/parser
-  pattern already proven in the Inequality Solver and the step-rendering
-  pattern already proven in the Calculus Solver.
+- ✅ **Linear** tab — solves any equation that simplifies to linear, with
+  distribution, fractions, and nested parentheses handled by the parser
+  (not just `ax+b=cx+d` coefficient boxes). Identity (`0=0`, infinitely many
+  solutions) and contradiction (no solution) cases are detected and called
+  out rather than silently mis-answered.
+- ✅ **Quadratic** tab — shows the **quadratic formula**, **completing the
+  square**, *and* a **verified factoring** every time they apply (not just
+  one method): factoring only renders when the re-expanded factored form is
+  checked to exactly match the original equation, so a shaky derivation
+  never reaches the screen. Handles rational, irrational (simplified
+  radical), and complex (`a ± bi`) roots. An equation that turns out to be
+  degree ≤1 still solves correctly with a note, rather than erroring.
+- ✅ **Systems** tab — 2×2 and 3×3 linear systems, with **both substitution
+  and elimination shown fully worked**, side by side. Detects inconsistent
+  (no solution) and dependent (infinitely many solutions) systems.
+- ✅ **Polynomial** tab — degree ≤4, via the **Rational Root Theorem +
+  synthetic division** (tableau shown per tested root), cascading down to
+  the quadratic formula for the final degree-2 factor, with a numeric
+  bisection fallback clearly labeled as an approximation when no more
+  rational roots remain.
+- ✅ Exact **BigInt-fraction arithmetic** throughout (no floating-point
+  drift) and a no-`eval` tokenizer/recursive-descent parser, reusing the
+  pattern proven in the Inequality Solver; steps render through the shared
+  KaTeX path proven in the Calculus Solver. Autosaves to localStorage and
+  **shares by code** (`#algebra=…`), no backend.
+- ✅ Engine lives in a **lazy-loaded module** (`algebra-engine.js`, fetched
+  via `<script>` on first open so it also works from a local `file://`
+  copy, then cached) so the single-file fast-paint budget holds.
 - *Why first:* pure show-work, no accounts, closes the loudest and most
   commonly searched-for gap.
 
@@ -582,7 +602,7 @@ section (bundle ID) as the one decision to lock before kickoff.
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
 | 3 | New shelves | Test Prep, Accessibility & Focus, Code | ✅ **3 / 3 shipped** — Test Prep 5/5 · A11y & Focus 4/4 · Code 5/5 |
 | — | *(ad hoc, untracked)* | SAT/ACT Reading & Writing Drill, Extracurricular Journal, Schedule Builder upgrades, Privacy/Terms pages, GoatCounter analytics, Send Feedback, Help section | ✅ shipped 2026-07 → 2026-08, see "Shipped since v2.0" below |
-| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **1 / 11 shipped** — AP Psych tool (4.2) done; 4.1, 4.3, 4.4 next |
+| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **2 / 11 shipped** — Algebra Solver (4.1) and AP Psych tool (4.2) done; 4.3, 4.4 next |
 | 5 | Mobile app port | Capacitor · Android + iOS (`MOBILE_PLAN.md`) | ⏸ queued after Phase 4 |
 | — | Growth/marketing | Zero-dollar sprint (`GROWTH_PLAN.md`) | ⏸ sidelined, not run |
 
