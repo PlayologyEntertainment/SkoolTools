@@ -1267,6 +1267,49 @@ footer.site-foot .foot-pl:hover img{transform:scale(1.1)}
 .gpa-card .val em{color:var(--accent);font-style:italic}
 @media (max-width:520px){.gpa-summary{grid-template-columns:1fr}}
 
+/* Personal Finance Toolkit specifics */
+.fin-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+@media (max-width:640px){.fin-cards{grid-template-columns:1fr}}
+.fin-card{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;padding:14px 16px}
+.fin-card.warn{border-color:var(--accent-2)}
+.fin-card .lbl{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+.fin-card .val{
+  font-family:var(--serif);font-weight:500;font-size:22px;
+  letter-spacing:-.01em;color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.fin-card .val em{color:var(--accent);font-style:italic}
+.fin-card .sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+.fin-schedule{
+  max-height:340px;overflow-y:auto;overflow-x:auto;
+  border:1px solid var(--rule);border-radius:3px;margin:8px 0;
+}
+.fin-schedule table.data{margin:0}
+.fin-schedule thead th{position:sticky;top:0;background:var(--paper-2)}
+.fin-legend{display:flex;gap:16px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.fin-legend .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.fin-legend .dot.principal{background:var(--accent)}
+.fin-legend .dot.interest{background:var(--accent-2)}
+.fin-legend .dot.yours{background:var(--accent)}
+.fin-legend .dot.minimum{background:var(--accent-2)}
+.fin-bar{display:flex;align-items:center;gap:10px;margin:5px 0}
+.fin-bar-label{width:64px;flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+.fin-bar-track{flex:1;display:flex;height:15px;border-radius:2px;overflow:hidden;background:var(--paper-2);border:1px solid var(--rule)}
+.fin-bar-seg{height:100%}
+.fin-bar-seg.principal{background:var(--accent)}
+.fin-bar-seg.interest{background:var(--accent-2)}
+.fin-bar-seg.yours{background:var(--accent)}
+.fin-bar-seg.minimum{background:var(--accent-2)}
+.fin-group{margin:18px 0}
+.fin-group h4{
+  font-family:var(--serif);font-weight:500;font-size:16px;
+  color:var(--ink);margin-bottom:2px;
+}
+.fin-group .tgt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.result.warn{border-color:var(--accent-2)}
+
 /* =========================================================
    FLASHCARDS TOOL
    ========================================================= */
@@ -6965,6 +7008,9 @@ function registerTools() {
   TOOLS.push({ id:'extracurricular', shelf:'toolbox', icon:'🏆', name:'Extracurricular Journal',
     desc:'Athletics, jobs, clubs, arts & service — ranked and export-ready for college apps.',
     keywords:['extracurricular','activities','activity','common app','coalition app','college application','college apps','athletics','sports','job','work','internship','club','clubs','arts','music','theater','dance','volunteer','volunteering','community service','leadership','journal','resume','activities list','ranking','rank','csv','pdf','print','export'], mount: mountExtracurricular });
+  TOOLS.push({ id:'finance', shelf:'toolbox', icon:'💰', name:'Personal Finance Toolkit',
+    desc:'Compound interest, loans, credit cards, budget & paycheck.', tag:'new',
+    keywords:['finance','money','budget','budgeting','compound interest','interest','loan','amortization','mortgage','credit card','debt','payoff','minimum payment','paycheck','withholding','tax','taxes','fica','social security','medicare','net pay','take home pay','savings','50/30/20'], mount: mountFinance });
 }
 
 /* =========================================================
@@ -7042,6 +7088,7 @@ const HELP_DESC = {
   list: 'Pick, shuffle, sort, or dedupe a list of items.',
   music: 'Explore scales, intervals, chords, and keys on a real staff, with a built-in metronome.',
   extracurricular: 'Log athletics, jobs, internships, clubs, arts, and service; rank your top 10 and export a Common App-ready list.',
+  finance: 'Compound interest, loan amortization, and credit-card payoff calculators that show the schedule — plus a budget builder and a simplified federal paycheck/withholding estimator. Calculators only, no investment advice.',
 };
 
 function renderHelp() {
@@ -7646,7 +7693,7 @@ function openTool(id) {
   if (t.mount) currentMountResult = t.mount(body);
   $('#panel').dataset.shelf = t.shelf || '';
   $('#panel').classList.add('open');
-  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet' || id === 'extracurricular' || id === 'algebra');
+  $('#panel').classList.toggle('wide', id === 'periodic' || id === 'graphing' || id === 'mindmap' || id === 'labreport' || id === 'matrix' || id === 'truthtable' || id === 'inequality' || id === 'music' || id === 'cheatsheet' || id === 'extracurricular' || id === 'algebra' || id === 'finance');
   $('#panel-backdrop').classList.add('open');
   document.body.classList.add('no-scroll');
   history.replaceState(null, '', '#' + id);
@@ -21448,6 +21495,545 @@ function mountTyping(root) {
 
   renderPassage('');
   return { unmount(){ clearInterval(tickId); } };
+}
+
+/* ========== PERSONAL FINANCE TOOLKIT ========== */
+function mountFinance(root) {
+  const usd = (n, digits=2) => isFinite(n)
+    ? new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', minimumFractionDigits:digits, maximumFractionDigits:digits }).format(n)
+    : '—';
+  const clampNum = (v, fallback=0) => { const n = parseFloat(v); return isFinite(n) ? n : fallback; };
+
+  const TABS = [
+    { id:'ci',       label:'Compound Interest' },
+    { id:'loan',     label:'Loan / Amortization' },
+    { id:'cc',       label:'Credit Card' },
+    { id:'budget',   label:'Budget Builder' },
+    { id:'paycheck', label:'Paycheck Estimator' },
+  ];
+
+  root.innerHTML = `
+    <div class="tabs" role="tablist" aria-label="Personal finance calculators">
+      ${TABS.map((t,i) => `<button class="tab${i===0?' active':''}" data-tab="${t.id}" role="tab" aria-selected="${i===0}">${t.label}</button>`).join('')}
+    </div>
+    <div id="fin-body"></div>
+  `;
+  const body = $('#fin-body', root);
+
+  /* ---------------------------------------------------------
+     Compound Interest
+     A = P(1+r/n)^(nt) + PMT · [((1+r/n)^(nt) − 1) / (r/n)]
+     Simulated period-by-period (interest accrues, then the
+     period's deposit lands), rows aggregated by year for the
+     schedule table.
+     --------------------------------------------------------- */
+  function renderCompound() {
+    const saved = Storage.get('finance:ci', { principal:1000, rate:5, years:10, freq:'12', deposit:100 });
+    body.innerHTML = `
+      <p class="help">A = P(1 + r/n)<sup>nt</sup> + PMT · [((1 + r/n)<sup>nt</sup> − 1) / (r/n)] — interest compounds each period, then that period's deposit is added.</p>
+      <div class="grid-3">
+        <div class="field"><label>Starting balance</label><input class="input mono" id="ci-p" type="number" min="0" step="0.01" value="${saved.principal}"></div>
+        <div class="field"><label>Annual rate (%)</label><input class="input mono" id="ci-r" type="number" step="0.01" value="${saved.rate}"></div>
+        <div class="field"><label>Years</label><input class="input mono" id="ci-t" type="number" min="1" max="60" step="1" value="${saved.years}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Compounding</label>
+          <select class="input" id="ci-n">
+            <option value="1"${saved.freq==='1'?' selected':''}>Annually</option>
+            <option value="2"${saved.freq==='2'?' selected':''}>Semiannually</option>
+            <option value="4"${saved.freq==='4'?' selected':''}>Quarterly</option>
+            <option value="12"${saved.freq==='12'?' selected':''}>Monthly</option>
+            <option value="365"${saved.freq==='365'?' selected':''}>Daily</option>
+          </select>
+        </div>
+        <div class="field"><label>Deposit each period (optional)</label><input class="input mono" id="ci-pmt" type="number" min="0" step="0.01" value="${saved.deposit}"></div>
+      </div>
+      <div id="ci-out"></div>
+    `;
+    const $p = $('#ci-p', body), $r = $('#ci-r', body), $t = $('#ci-t', body), $n = $('#ci-n', body), $pmt = $('#ci-pmt', body);
+    const FREQ_NAME = { '1':'annually', '2':'semiannually', '4':'quarterly', '12':'monthly', '365':'daily' };
+
+    const calc = () => {
+      const P = clampNum($p.value), ratePct = clampNum($r.value), years = Math.round(clampNum($t.value)),
+            n = parseInt($n.value, 10), pmt = clampNum($pmt.value);
+      Storage.set('finance:ci', { principal:P, rate:ratePct, years, freq:String(n), deposit:pmt });
+
+      const out = $('#ci-out', body);
+      if (P < 0 || years <= 0 || !isFinite(ratePct) || n <= 0) { out.innerHTML = ''; return; }
+
+      const r = ratePct / 100;
+      let balance = P;
+      const rows = [];
+      const maxPeriods = 25000; // safety cap: 365/yr * 60yr ≈ 21,900
+      let periodCount = 0;
+      for (let y = 1; y <= years && periodCount < maxPeriods; y++) {
+        let yearDeposits = 0, yearInterest = 0;
+        for (let p = 0; p < n && periodCount < maxPeriods; p++) {
+          const interest = balance * (r / n);
+          balance += interest;
+          balance += pmt;
+          yearInterest += interest;
+          yearDeposits += pmt;
+          periodCount++;
+        }
+        rows.push({ year:y, deposits:yearDeposits, interest:yearInterest, balance });
+      }
+      const totalContributed = P + rows.reduce((s,x) => s + x.deposits, 0);
+      const totalInterest = balance - totalContributed;
+
+      out.innerHTML = `
+        <div class="fin-cards">
+          <div class="fin-card"><div class="lbl">Final balance</div><div class="val">${usd(balance)}</div></div>
+          <div class="fin-card"><div class="lbl">Total contributed</div><div class="val">${usd(totalContributed)}</div></div>
+          <div class="fin-card"><div class="lbl">Interest earned</div><div class="val"><em>${usd(totalInterest)}</em></div></div>
+        </div>
+        <div class="fin-schedule">
+          <table class="data">
+            <thead><tr><th>Year</th><th class="num">Deposits</th><th class="num">Interest</th><th class="num">Balance</th></tr></thead>
+            <tbody>${rows.map(row => `<tr><td>${row.year}</td><td class="num">${usd(row.deposits,0)}</td><td class="num">${usd(row.interest,0)}</td><td class="num">${usd(row.balance,0)}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div class="result">
+          <button class="copy-btn" data-copytext="${escape(`Compound interest: ${usd(P)} at ${ratePct}% for ${years} years, compounded ${FREQ_NAME[String(n)]}${pmt ? `, +${usd(pmt)}/period` : ''} → ${usd(balance)} final balance (${usd(totalInterest)} interest earned).`)}">Copy</button>
+          <div class="result-label">Summary</div>
+          <div class="result-sub">${usd(P)} at ${ratePct}% for ${years}y, compounded ${FREQ_NAME[String(n)]}${pmt ? `, +${usd(pmt)}/period` : ''} → <b>${usd(balance)}</b> (${usd(totalInterest)} interest).</div>
+        </div>
+      `;
+    };
+    [$p, $r, $t, $n, $pmt].forEach(i => i.addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---------------------------------------------------------
+     Loan / Amortization
+     Standard fixed-rate amortization; an optional extra
+     monthly payment shortens the schedule. Full month-by-month
+     table plus a per-year principal/interest composition bar.
+     --------------------------------------------------------- */
+  function renderLoan() {
+    const saved = Storage.get('finance:loan', { amount:20000, rate:6.5, years:5, extra:0 });
+    body.innerHTML = `
+      <p class="help">M = P · i(1+i)<sup>n</sup> / [(1+i)<sup>n</sup> − 1], where i is the monthly rate and n the number of monthly payments.</p>
+      <div class="grid-3">
+        <div class="field"><label>Loan amount</label><input class="input mono" id="ln-p" type="number" min="0" step="0.01" value="${saved.amount}"></div>
+        <div class="field"><label>Annual rate (%)</label><input class="input mono" id="ln-r" type="number" step="0.01" value="${saved.rate}"></div>
+        <div class="field"><label>Term (years)</label><input class="input mono" id="ln-y" type="number" min="0.5" max="50" step="0.5" value="${saved.years}"></div>
+      </div>
+      <div class="field"><label>Extra payment each month (optional)</label><input class="input mono" id="ln-x" type="number" min="0" step="0.01" value="${saved.extra}"></div>
+      <div id="ln-out"></div>
+    `;
+    const $p = $('#ln-p', body), $r = $('#ln-r', body), $y = $('#ln-y', body), $x = $('#ln-x', body);
+
+    const amortize = (P, i, payment, maxMonths) => {
+      let balance = P, month = 0, totalInterest = 0;
+      const rows = [];
+      while (balance > 0.005 && month < maxMonths) {
+        month++;
+        const interest = balance * i;
+        let principal = payment - interest;
+        if (principal <= 0) return { stalled:true, rows, month, totalInterest, balance };
+        if (principal > balance) principal = balance;
+        balance -= principal;
+        totalInterest += interest;
+        rows.push({ month, payment: principal + interest, principal, interest, balance: Math.max(balance,0) });
+      }
+      return { stalled: balance > 0.005, rows, month, totalInterest, balance };
+    };
+
+    const calc = () => {
+      const P = clampNum($p.value), ratePct = clampNum($r.value), years = clampNum($y.value), extra = clampNum($x.value);
+      Storage.set('finance:loan', { amount:P, rate:ratePct, years, extra });
+
+      const out = $('#ln-out', body);
+      if (P <= 0 || years <= 0 || !isFinite(ratePct) || ratePct < 0) { out.innerHTML = ''; return; }
+
+      const i = ratePct / 100 / 12;
+      const scheduledMonths = Math.round(years * 12);
+      const basePayment = i > 0 ? P * i * Math.pow(1+i, scheduledMonths) / (Math.pow(1+i, scheduledMonths) - 1) : P / scheduledMonths;
+
+      const maxMonths = 1200; // 100-year safety cap
+      const actual = amortize(P, i, basePayment + extra, maxMonths);
+
+      if (actual.stalled) {
+        out.innerHTML = `<div class="fin-card warn"><div class="lbl">Heads up</div><div class="val" style="font-size:16px">That payment doesn't cover a full month's interest — the balance won't shrink. Raise the term or the payment.</div></div>`;
+        return;
+      }
+
+      let savingsNote = '';
+      if (extra > 0) {
+        const scheduled = amortize(P, i, basePayment, maxMonths);
+        const monthsSaved = scheduled.month - actual.month;
+        const interestSaved = scheduled.totalInterest - actual.totalInterest;
+        savingsNote = `<div class="result-sub">Scheduled payoff was ${scheduled.month} months. The extra payment finishes <b>${monthsSaved} months early</b> and saves <b>${usd(interestSaved)}</b> in interest.</div>`;
+      }
+
+      const byYear = [];
+      actual.rows.forEach((row, idx) => {
+        const yIdx = Math.floor(idx / 12);
+        byYear[yIdx] = byYear[yIdx] || { year: yIdx + 1, principal:0, interest:0 };
+        byYear[yIdx].principal += row.principal;
+        byYear[yIdx].interest += row.interest;
+      });
+
+      out.innerHTML = `
+        <div class="fin-cards">
+          <div class="fin-card"><div class="lbl">Monthly payment</div><div class="val">${usd(basePayment)}</div>${extra>0?`<div class="sub">+ ${usd(extra)} extra = ${usd(basePayment+extra)}</div>`:''}</div>
+          <div class="fin-card"><div class="lbl">Payoff time</div><div class="val">${actual.month} mo<span style="font-size:.55em"> / ${(actual.month/12).toFixed(1)} yrs</span></div></div>
+          <div class="fin-card"><div class="lbl">Total interest</div><div class="val"><em>${usd(actual.totalInterest)}</em></div></div>
+        </div>
+        <div class="fin-legend"><span><span class="dot principal"></span>Principal</span><span><span class="dot interest"></span>Interest</span></div>
+        ${byYear.map(y => {
+          const total = y.principal + y.interest;
+          const pPct = total ? (y.principal/total*100) : 0;
+          return `<div class="fin-bar"><span class="fin-bar-label">Yr ${y.year}</span><div class="fin-bar-track"><div class="fin-bar-seg principal" style="width:${pPct}%"></div><div class="fin-bar-seg interest" style="width:${100-pPct}%"></div></div></div>`;
+        }).join('')}
+        <div class="fin-schedule">
+          <table class="data">
+            <thead><tr><th>#</th><th class="num">Payment</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Balance</th></tr></thead>
+            <tbody>${actual.rows.map(row => `<tr><td>${row.month}</td><td class="num">${usd(row.payment)}</td><td class="num">${usd(row.principal)}</td><td class="num">${usd(row.interest)}</td><td class="num">${usd(row.balance)}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div class="result">
+          <button class="copy-btn" data-copytext="${escape(`Loan: ${usd(P)} at ${ratePct}% for ${years}y → payment ${usd(basePayment)}/mo, ${actual.month} months, ${usd(actual.totalInterest)} total interest.`)}">Copy</button>
+          <div class="result-label">Summary</div>
+          <div class="result-sub">${usd(P)} at ${ratePct}% → <b>${usd(basePayment)}</b>/mo, paid off in ${actual.month} months, <b>${usd(actual.totalInterest)}</b> total interest.</div>
+          ${savingsNote}
+        </div>
+      `;
+    };
+    [$p, $r, $y, $x].forEach(i => i.addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---------------------------------------------------------
+     Credit Card — payoff-time calculator + a side-by-side
+     comparison against paying only the (declining) minimum,
+     to make the cost of minimum payments visible.
+     --------------------------------------------------------- */
+  function renderCreditCard() {
+    const saved = Storage.get('finance:cc', { balance:2500, apr:19.99, payment:150 });
+    body.innerHTML = `
+      <p class="help">Minimum payment is modeled as the larger of 2% of the balance or $25, recalculated every month as the balance falls — the common real-world formula.</p>
+      <div class="grid-3">
+        <div class="field"><label>Current balance</label><input class="input mono" id="cc-b" type="number" min="0" step="0.01" value="${saved.balance}"></div>
+        <div class="field"><label>APR (%)</label><input class="input mono" id="cc-a" type="number" step="0.01" value="${saved.apr}"></div>
+        <div class="field"><label>Your monthly payment</label><input class="input mono" id="cc-p" type="number" min="0" step="0.01" value="${saved.payment}"></div>
+      </div>
+      <div id="cc-out"></div>
+    `;
+    const $b = $('#cc-b', body), $a = $('#cc-a', body), $p = $('#cc-p', body);
+    const maxMonths = 600; // 50-year safety cap
+
+    const simulateFixed = (balance, i, payment) => {
+      let months = 0, totalInterest = 0;
+      while (balance > 0.005 && months < maxMonths) {
+        const interest = balance * i;
+        if (payment <= interest) return { neverPaysOff:true, months, totalInterest };
+        let principal = payment - interest;
+        if (principal > balance) principal = balance;
+        balance -= principal;
+        totalInterest += interest;
+        months++;
+      }
+      return { neverPaysOff: balance > 0.005, months, totalInterest };
+    };
+    const simulateMinimum = (balance, i) => {
+      let months = 0, totalInterest = 0;
+      while (balance > 0.005 && months < maxMonths) {
+        const interest = balance * i;
+        const payment = Math.min(Math.max(balance * 0.02, 25), balance + interest);
+        if (payment <= interest) return { neverPaysOff:true, months, totalInterest };
+        let principal = payment - interest;
+        if (principal > balance) principal = balance;
+        balance -= principal;
+        totalInterest += interest;
+        months++;
+      }
+      return { neverPaysOff: balance > 0.005, months, totalInterest };
+    };
+
+    const calc = () => {
+      const balance = clampNum($b.value), aprPct = clampNum($a.value), payment = clampNum($p.value);
+      Storage.set('finance:cc', { balance, apr:aprPct, payment });
+
+      const out = $('#cc-out', body);
+      if (balance <= 0 || !isFinite(aprPct) || aprPct < 0) { out.innerHTML = ''; return; }
+
+      const i = aprPct / 100 / 12;
+      const yours = simulateFixed(balance, i, payment);
+      const min = simulateMinimum(balance, i);
+
+      if (yours.neverPaysOff) {
+        out.innerHTML = `<div class="fin-card warn"><div class="lbl">Heads up</div><div class="val" style="font-size:16px">${usd(payment)}/mo doesn't cover this month's interest (${usd(balance*i)}). The balance will grow, not shrink — raise the payment.</div></div>`;
+        return;
+      }
+
+      const fmtPlan = (r) => r.neverPaysOff
+        ? `Over 50 years, still not paid off`
+        : `${r.months} mo <span style="font-size:.55em">/ ${(r.months/12).toFixed(1)} yrs</span>`;
+      const maxInterest = Math.max(yours.totalInterest, min.totalInterest) || 1;
+
+      out.innerHTML = `
+        <div class="grid-2">
+          <div class="fin-card"><div class="lbl">Your payment (${usd(payment)}/mo)</div><div class="val">${fmtPlan(yours)}</div><div class="sub">${usd(yours.totalInterest)} total interest</div></div>
+          <div class="fin-card"><div class="lbl">Minimum payments only</div><div class="val">${fmtPlan(min)}</div><div class="sub">${usd(min.totalInterest)} total interest</div></div>
+        </div>
+        <div class="fin-legend"><span><span class="dot yours"></span>Your payment</span><span><span class="dot minimum"></span>Minimum only</span></div>
+        <div class="fin-bar"><span class="fin-bar-label">Interest</span><div class="fin-bar-track"><div class="fin-bar-seg yours" style="width:${yours.totalInterest/maxInterest*100}%"></div></div></div>
+        <div class="fin-bar"><span class="fin-bar-label"></span><div class="fin-bar-track"><div class="fin-bar-seg minimum" style="width:${min.totalInterest/maxInterest*100}%"></div></div></div>
+        <div class="result">
+          <button class="copy-btn" data-copytext="${escape(`Credit card: ${usd(balance)} at ${aprPct}% APR — paying ${usd(payment)}/mo pays it off in ${fmtPlan(yours).replace(/<[^>]+>/g,'')} (${usd(yours.totalInterest)} interest); minimum payments only would take ${fmtPlan(min).replace(/<[^>]+>/g,'')} (${usd(min.totalInterest)} interest).`)}">Copy</button>
+          <div class="result-label">The cost of minimums</div>
+          <div class="result-sub">${min.neverPaysOff || yours.neverPaysOff ? 'Minimum payments alone would take far longer and cost far more.' : `Sticking to minimums costs <b>${usd(min.totalInterest - yours.totalInterest)}</b> more in interest and takes <b>${min.months - yours.months} months</b> longer than your ${usd(payment)}/mo plan.`}</div>
+        </div>
+      `;
+    };
+    [$b, $a, $p].forEach(i => i.addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---------------------------------------------------------
+     Budget Builder — starter needs/wants/savings categories,
+     freely editable, framed against the 50/30/20 split
+     (informational only, not a recommendation).
+     --------------------------------------------------------- */
+  const BUDGET_TARGETS = { needs:50, wants:30, savings:20 };
+  const BUDGET_GROUP_LABEL = { needs:'Needs', wants:'Wants', savings:'Savings' };
+  function defaultBudget() {
+    return {
+      income: 3000,
+      rows: [
+        { name:'Housing / Rent',  group:'needs',   amount:1000 },
+        { name:'Utilities',       group:'needs',   amount:150 },
+        { name:'Groceries',       group:'needs',   amount:300 },
+        { name:'Transportation',  group:'needs',   amount:150 },
+        { name:'Insurance',       group:'needs',   amount:100 },
+        { name:'Dining Out',      group:'wants',   amount:100 },
+        { name:'Entertainment',   group:'wants',   amount:60 },
+        { name:'Subscriptions',   group:'wants',   amount:40 },
+        { name:'Shopping',        group:'wants',   amount:100 },
+        { name:'Emergency Fund',  group:'savings', amount:100 },
+        { name:'Retirement / Savings', group:'savings', amount:150 },
+        { name:'Extra Debt Payoff', group:'savings', amount:50 },
+      ],
+    };
+  }
+  function renderBudget() {
+    let state = Storage.get('finance:budget', null) || defaultBudget();
+    const save = () => Storage.set('finance:budget', state);
+
+    body.innerHTML = `
+      <div class="field" style="max-width:260px"><label>Monthly income (after tax)</label><input class="input mono" id="bg-income" type="number" min="0" step="0.01" value="${state.income}"></div>
+      <table class="data">
+        <thead><tr><th>Category</th><th>Group</th><th class="num">Monthly $</th><th class="actions"></th></tr></thead>
+        <tbody id="bg-rows"></tbody>
+      </table>
+      <div class="btn-row">
+        <button class="btn ghost sm" id="bg-add">+ Add row</button>
+        <button class="btn ghost sm" id="bg-clear">Clear all</button>
+      </div>
+      <div id="bg-out"></div>
+      <p class="help">50/30/20 is shown as a reference point, not a rule — rename, regroup, add, or delete any row.</p>
+    `;
+
+    const renderRows = () => {
+      const tbody = $('#bg-rows', body);
+      tbody.innerHTML = '';
+      state.rows.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input class="input" data-k="name" value="${escape(row.name)}" style="padding:6px 8px;font-size:14px"></td>
+          <td><select class="input" data-k="group" style="padding:6px 8px;font-size:14px">
+            <option value="needs"${row.group==='needs'?' selected':''}>Needs</option>
+            <option value="wants"${row.group==='wants'?' selected':''}>Wants</option>
+            <option value="savings"${row.group==='savings'?' selected':''}>Savings</option>
+          </select></td>
+          <td class="num"><input class="input mono" data-k="amount" type="number" min="0" step="0.01" value="${row.amount}" style="padding:6px 8px;font-size:14px;text-align:right;width:100px"></td>
+          <td class="actions"><span class="del" data-i="${idx}" role="button" aria-label="Delete row">×</span></td>
+        `;
+        $$('input,select', tr).forEach(i => i.addEventListener('input', () => {
+          row[i.dataset.k] = i.dataset.k === 'amount' ? clampNum(i.value) : i.value;
+          save(); recalc();
+        }));
+        $('.del', tr).addEventListener('click', () => { state.rows.splice(idx, 1); save(); renderRows(); recalc(); });
+        tbody.appendChild(tr);
+      });
+      if (state.rows.length === 0) tbody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);font-style:italic;font-family:var(--serif);padding:14px">No categories yet. Add one →</td></tr>`;
+    };
+
+    const recalc = () => {
+      const out = $('#bg-out', body);
+      const income = state.income;
+      const totals = { needs:0, wants:0, savings:0 };
+      state.rows.forEach(r => { if (totals[r.group] !== undefined) totals[r.group] += (r.amount || 0); });
+      const totalExpenses = totals.needs + totals.wants + totals.savings;
+      const leftover = income - totalExpenses;
+
+      out.innerHTML = `
+        <div class="fin-cards">
+          ${['needs','wants','savings'].map(g => {
+            const amt = totals[g];
+            const actualPct = income > 0 ? (amt / income * 100) : 0;
+            const target = BUDGET_TARGETS[g];
+            const over = income > 0 && actualPct > target + 5;
+            return `<div class="fin-card${over ? ' warn' : ''}">
+              <div class="lbl">${BUDGET_GROUP_LABEL[g]}</div>
+              <div class="val">${usd(amt,0)}</div>
+              <div class="sub">${income > 0 ? actualPct.toFixed(0) : '—'}% of income · target ~${target}%${over ? ' <span class="chip warn">over target</span>' : ''}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="result${leftover < 0 ? ' warn' : ''}">
+          <div class="result-label">${leftover >= 0 ? 'Left over' : 'Over budget by'}</div>
+          <div class="result-big">${usd(Math.abs(leftover),0)}</div>
+          <div class="result-sub">${usd(income,0)} income − ${usd(totalExpenses,0)} in categorized expenses.</div>
+        </div>
+      `;
+    };
+
+    $('#bg-income', body).addEventListener('input', (e) => { state.income = clampNum(e.target.value); save(); recalc(); });
+    $('#bg-add', body).addEventListener('click', () => { state.rows.push({ name:'', group:'needs', amount:0 }); save(); renderRows(); recalc(); });
+    $('#bg-clear', body).addEventListener('click', () => { if (confirm('Clear all budget categories?')) { state.rows = []; save(); renderRows(); recalc(); } });
+
+    renderRows(); recalc();
+  }
+
+  /* ---------------------------------------------------------
+     Paycheck / Withholding Estimator — simplified federal
+     income tax (progressive brackets + standard deduction,
+     no credits) plus Social Security and Medicare (FICA).
+     2026 figures; no state/local tax. Estimate only.
+     --------------------------------------------------------- */
+  const TAX_YEAR = 2026;
+  const STANDARD_DEDUCTION = { single: 16100, mfj: 32200 };
+  const TAX_BRACKETS = {
+    single: [
+      { upTo:12400,      rate:0.10 },
+      { upTo:50400,      rate:0.12 },
+      { upTo:105700,     rate:0.22 },
+      { upTo:201775,     rate:0.24 },
+      { upTo:256225,     rate:0.32 },
+      { upTo:640600,     rate:0.35 },
+      { upTo:Infinity,   rate:0.37 },
+    ],
+    mfj: [
+      { upTo:24800,      rate:0.10 },
+      { upTo:100800,     rate:0.12 },
+      { upTo:211400,     rate:0.22 },
+      { upTo:403550,     rate:0.24 },
+      { upTo:512450,     rate:0.32 },
+      { upTo:768700,     rate:0.35 },
+      { upTo:Infinity,   rate:0.37 },
+    ],
+  };
+  const SS_RATE = 0.062, SS_WAGE_BASE = 184500;
+  const MEDICARE_RATE = 0.0145, ADDL_MEDICARE_RATE = 0.009;
+  const ADDL_MEDICARE_THRESHOLD = { single:200000, mfj:250000 };
+  const PAY_FREQ = { weekly:52, biweekly:26, semimonthly:24, monthly:12 };
+
+  function progressiveTax(taxable, brackets) {
+    let tax = 0, lower = 0;
+    for (const b of brackets) {
+      if (taxable <= lower) break;
+      tax += (Math.min(taxable, b.upTo) - lower) * b.rate;
+      lower = b.upTo;
+    }
+    return tax;
+  }
+
+  function renderPaycheck() {
+    const saved = Storage.get('finance:paycheck', { freq:'biweekly', gross:2000, status:'single', pretax:0 });
+    body.innerHTML = `
+      <p class="help">Federal income tax + Social Security + Medicare only, using ${TAX_YEAR} brackets and the standard deduction — no credits, no state or local tax. This estimates a paystub; it isn't one.</p>
+      <div class="grid-3">
+        <div class="field"><label>Pay frequency</label>
+          <select class="input" id="pc-freq">
+            <option value="weekly"${saved.freq==='weekly'?' selected':''}>Weekly (52/yr)</option>
+            <option value="biweekly"${saved.freq==='biweekly'?' selected':''}>Biweekly (26/yr)</option>
+            <option value="semimonthly"${saved.freq==='semimonthly'?' selected':''}>Semimonthly (24/yr)</option>
+            <option value="monthly"${saved.freq==='monthly'?' selected':''}>Monthly (12/yr)</option>
+          </select>
+        </div>
+        <div class="field"><label>Gross pay per period</label><input class="input mono" id="pc-gross" type="number" min="0" step="0.01" value="${saved.gross}"></div>
+        <div class="field"><label>Filing status</label>
+          <select class="input" id="pc-status">
+            <option value="single"${saved.status==='single'?' selected':''}>Single</option>
+            <option value="mfj"${saved.status==='mfj'?' selected':''}>Married filing jointly</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="max-width:320px"><label>Pre-tax deductions per period (401k, health, etc. — optional)</label><input class="input mono" id="pc-pretax" type="number" min="0" step="0.01" value="${saved.pretax}"></div>
+      <div id="pc-out"></div>
+    `;
+    const $freq = $('#pc-freq', body), $gross = $('#pc-gross', body), $status = $('#pc-status', body), $pretax = $('#pc-pretax', body);
+
+    const calc = () => {
+      const freq = $freq.value, status = $status.value;
+      const grossPerPeriod = clampNum($gross.value), pretaxPerPeriod = clampNum($pretax.value);
+      Storage.set('finance:paycheck', { freq, gross:grossPerPeriod, status, pretax:pretaxPerPeriod });
+
+      const out = $('#pc-out', body);
+      if (grossPerPeriod <= 0) { out.innerHTML = ''; return; }
+
+      const periodsPerYear = PAY_FREQ[freq];
+      const grossAnnual = grossPerPeriod * periodsPerYear;
+      const pretaxAnnual = Math.min(pretaxPerPeriod, grossPerPeriod) * periodsPerYear;
+      const wagesAnnual = Math.max(grossAnnual - pretaxAnnual, 0);
+
+      const federalTaxableAnnual = Math.max(0, wagesAnnual - STANDARD_DEDUCTION[status]);
+      const federalTaxAnnual = progressiveTax(federalTaxableAnnual, TAX_BRACKETS[status]);
+
+      const ssWagesAnnual = Math.min(wagesAnnual, SS_WAGE_BASE);
+      const ssTaxAnnual = ssWagesAnnual * SS_RATE;
+
+      const addlThreshold = ADDL_MEDICARE_THRESHOLD[status];
+      const medicareTaxAnnual = wagesAnnual * MEDICARE_RATE + Math.max(0, wagesAnnual - addlThreshold) * ADDL_MEDICARE_RATE;
+
+      const netAnnual = wagesAnnual - federalTaxAnnual - ssTaxAnnual - medicareTaxAnnual;
+      const effRate = grossAnnual > 0 ? (federalTaxAnnual + ssTaxAnnual + medicareTaxAnnual) / grossAnnual * 100 : 0;
+
+      const row = (label, annual) => `<tr><td>${label}</td><td class="num">${usd(annual / periodsPerYear)}</td><td class="num">${usd(annual)}</td></tr>`;
+
+      out.innerHTML = `
+        <table class="data">
+          <thead><tr><th></th><th class="num">Per paycheck</th><th class="num">Annual</th></tr></thead>
+          <tbody>
+            ${row('Gross pay', grossAnnual)}
+            ${pretaxAnnual > 0 ? row('Pre-tax deductions', -pretaxAnnual) : ''}
+            ${row('Federal income tax', -federalTaxAnnual)}
+            ${row('Social Security (6.2%)', -ssTaxAnnual)}
+            ${row('Medicare (1.45%+)', -medicareTaxAnnual)}
+          </tbody>
+        </table>
+        <div class="result">
+          <button class="copy-btn" data-copytext="${escape(`Paycheck estimate (${TAX_YEAR}, ${status==='mfj'?'married filing jointly':'single'}): ${usd(grossPerPeriod)} gross per ${freq} period → ${usd(netAnnual/periodsPerYear)} net (${usd(netAnnual)}/yr). Federal + FICA effective rate ${effRate.toFixed(1)}%.`)}">Copy</button>
+          <div class="result-label">Net (take-home) pay</div>
+          <div class="result-big">${usd(netAnnual / periodsPerYear)}</div>
+          <div class="result-sub">${usd(netAnnual)}/yr · effective federal + FICA rate ${effRate.toFixed(1)}%</div>
+        </div>
+      `;
+    };
+    [$freq, $gross, $status, $pretax].forEach(i => i.addEventListener('input', calc));
+    calc();
+  }
+
+  /* ---------------------------------------------------------
+     Tab wiring
+     --------------------------------------------------------- */
+  const RENDERERS = { ci:renderCompound, loan:renderLoan, cc:renderCreditCard, budget:renderBudget, paycheck:renderPaycheck };
+  const openTab = (id) => {
+    $$('.tab', root).forEach(t => { const active = t.dataset.tab === id; t.classList.toggle('active', active); t.setAttribute('aria-selected', String(active)); });
+    RENDERERS[id]();
+    Storage.set('finance:tab', id);
+  };
+  root.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
+    if (tab && tab.dataset.tab) { openTab(tab.dataset.tab); return; }
+    const copyBtn = e.target.closest('[data-copytext]');
+    if (copyBtn) { copy(copyBtn.getAttribute('data-copytext') || '', copyBtn); return; }
+  });
+  const savedTab = Storage.get('finance:tab', 'ci');
+  openTab(RENDERERS[savedTab] ? savedTab : 'ci');
 }
 
 /* ========== LIST UTILITY ========== */
