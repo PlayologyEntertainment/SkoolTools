@@ -2941,6 +2941,7 @@ const MODULE_VERSION = {
   'algebra-engine.js': 1,
   'calculus-engine.js': 1,
   'reading-writing-data.js': 1,
+  'genetics-engine.js': 1,
 };
 
 const TOOLS = []; // populated by registerTools() below
@@ -6865,6 +6866,9 @@ function registerTools() {
     mount: mountChem });
   TOOLS.push({ id:'physics', shelf:'lab', icon:'🧲', name:'Physics Solver',
     desc:'Rearrange & solve with units.', tag:'upgraded', keywords:['physics','equation','solve','kinematics','force','energy','wave','ohm','coulomb','momentum','circular','projectile'], mount: mountPhysics });
+  TOOLS.push({ id:'genetics', shelf:'lab', icon:'🧬', name:'Genetics Solver',
+    desc:'Punnett squares, sex-linked traits, pedigrees & chi-square.', tag:'new',
+    keywords:['genetics','punnett','square','cross','monohybrid','dihybrid','allele','genotype','phenotype','dominant','recessive','sex-linked','x-linked','pedigree','chi-square','chi square','goodness of fit','heredity','trait','biology','ap bio'], mount: mountGenetics });
   TOOLS.push({ id:'sigfig', shelf:'lab', icon:'🔬', name:'Sig Figs',
     desc:'Rounding & sci notation.', tag:'upgraded',
     keywords:['significant','figures','notation'], mount: mountSigFig });
@@ -19788,6 +19792,561 @@ function mountPhysics(root) {
   /* ─── Init ──────────────────────────────────────────────────── */
   populateEqSelect();
   renderVars();
+}
+
+/* ========== GENETICS / PUNNETT SQUARE SOLVER ==========
+   Monohybrid, dihybrid, and sex-linked (X-linked) crosses shown as a full
+   worked Punnett square, plus basic pedigree analysis (checks a small
+   family tree against the four classic Mendelian inheritance patterns)
+   and a self-contained chi-square goodness-of-fit calculator. The cross/
+   pedigree/chi-square logic lives in a lazy-loaded module
+   (genetics-engine.js, fetched via <script> on first open so it also
+   works from a local file:// copy, then cached), following the
+   mountAlgebra pattern. Autosaves to localStorage and shares by code
+   (#genetics=…), no backend. (Roadmap 4.3, Lab shelf.) */
+function mountGenetics(root) {
+  const SKEY = 'genetics:v1';
+  const $ = (sel, ctx) => (ctx || root).querySelector(sel);
+  const $$ = (sel, ctx) => Array.from((ctx || root).querySelectorAll(sel));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const escape = esc;
+
+  /* ---- lazy-loaded engine, mirrors mountAlgebra's ensureEngine ---- */
+  let engineLoading = false;
+  const ensureEngine = (cb) => {
+    if (window.GeneticsEngine) { cb(true); return; }
+    const queue = (mountGenetics._eq = mountGenetics._eq || []);
+    queue.push(cb);
+    if (engineLoading) return;
+    engineLoading = true;
+    const s = document.createElement('script');
+    s.src = 'genetics-engine.js?v=' + MODULE_VERSION['genetics-engine.js'];
+    s.onload = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(!!window.GeneticsEngine)); };
+    s.onerror = () => { engineLoading = false; queue.splice(0).forEach(fn => fn(false)); };
+    document.head.appendChild(s);
+  };
+  const errBlock = (msg) => `<div class="calc-error" role="alert">${esc(msg)}</div>`;
+  const noteBlock = (msg) => `<div class="gen-note">${esc(msg)}</div>`;
+  const stepsHTML = (idPrefix, steps) => `
+    <div class="calc-steps-head"><span>Step by step</span><button class="btn ghost sm" data-toggle="${idPrefix}-steps">Show steps</button></div>
+    <ol class="gen-steps" id="${idPrefix}-steps" hidden>${steps.map(s => `<li class="calc-step"><div class="calc-step-math gen-step-text">${esc(s)}</div></li>`).join('')}</ol>`;
+
+  /* ============================ PEDIGREE TEMPLATES ============================ */
+  const PED_TEMPLATES = {
+    trio: {
+      label: 'Two generations',
+      viewBox: '0 0 340 220',
+      individuals: [
+        { id: 'F1', role: 'father', sex: 'M', fatherId: null, motherId: null, x: 110, y: 30 },
+        { id: 'M1', role: 'mother', sex: 'F', fatherId: null, motherId: null, x: 210, y: 30 },
+        { id: 'C1', role: 'child', sex: 'M', fatherId: 'F1', motherId: 'M1', x: 60, y: 160 },
+        { id: 'C2', role: 'child', sex: 'F', fatherId: 'F1', motherId: 'M1', x: 160, y: 160 },
+        { id: 'C3', role: 'child', sex: 'M', fatherId: 'F1', motherId: 'M1', x: 260, y: 160 },
+      ],
+    },
+    threeGen: {
+      label: 'Three generations',
+      viewBox: '0 0 380 330',
+      individuals: [
+        { id: 'GF1', role: 'father', sex: 'M', fatherId: null, motherId: null, x: 70, y: 20 },
+        { id: 'GM1', role: 'mother', sex: 'F', fatherId: null, motherId: null, x: 170, y: 20 },
+        { id: 'F1', role: 'child', sex: 'M', fatherId: 'GF1', motherId: 'GM1', x: 120, y: 140 },
+        { id: 'M1', role: 'mother', sex: 'F', fatherId: null, motherId: null, x: 240, y: 140 },
+        { id: 'C1', role: 'child', sex: 'M', fatherId: 'F1', motherId: 'M1', x: 80, y: 260 },
+        { id: 'C2', role: 'child', sex: 'F', fatherId: 'F1', motherId: 'M1', x: 180, y: 260 },
+        { id: 'C3', role: 'child', sex: 'M', fatherId: 'F1', motherId: 'M1', x: 280, y: 260 },
+      ],
+    },
+  };
+  function pedigreeDefaultsFor(templateKey) {
+    const t = PED_TEMPLATES[templateKey];
+    const overrides = {};
+    t.individuals.forEach(p => { overrides[p.id] = { sex: p.sex, affected: false }; });
+    const firstChild = t.individuals.find(p => p.role === 'child');
+    if (firstChild) overrides[firstChild.id].affected = true;
+    return overrides;
+  }
+  function effectivePedIndividuals() {
+    const t = PED_TEMPLATES[state.pedigree.template];
+    return t.individuals.map(p => {
+      const o = state.pedigree.overrides[p.id] || {};
+      return { ...p, sex: o.sex || p.sex, affected: !!o.affected };
+    });
+  }
+  const PED_SZ = 28;
+  function pedigreeLinesSVG(indiv) {
+    const byId = {}; indiv.forEach(p => { byId[p.id] = p; });
+    const groups = {};
+    indiv.forEach(p => {
+      if (p.fatherId && p.motherId) {
+        const key = p.fatherId + '|' + p.motherId;
+        (groups[key] = groups[key] || []).push(p);
+      }
+    });
+    const lines = [];
+    Object.keys(groups).forEach(key => {
+      const [fid, mid] = key.split('|');
+      const f = byId[fid], m = byId[mid];
+      if (!f || !m) return;
+      const fx = f.x + PED_SZ / 2, fy = f.y + PED_SZ / 2, mx = m.x + PED_SZ / 2, my = m.y + PED_SZ / 2;
+      lines.push([fx, fy, mx, my]);
+      const midX = (fx + mx) / 2, midY = (fy + my) / 2, busY = midY + 40;
+      lines.push([midX, midY, midX, busY]);
+      const kids = groups[key];
+      const kidXs = kids.map(k => k.x + PED_SZ / 2);
+      lines.push([Math.min(...kidXs), busY, Math.max(...kidXs), busY]);
+      kids.forEach(k => lines.push([k.x + PED_SZ / 2, busY, k.x + PED_SZ / 2, k.y]));
+    });
+    return lines.map(([x1, y1, x2, y2]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="gen-ped-line"></line>`).join('');
+  }
+  function pedigreeShape(p) {
+    const shape = p.sex === 'M'
+      ? `<rect x="${p.x}" y="${p.y}" width="${PED_SZ}" height="${PED_SZ}" class="gen-ped-shape ${p.affected ? 'affected' : ''}"></rect>`
+      : `<circle cx="${p.x + PED_SZ / 2}" cy="${p.y + PED_SZ / 2}" r="${PED_SZ / 2}" class="gen-ped-shape ${p.affected ? 'affected' : ''}"></circle>`;
+    const sexToggle = p.role === 'child'
+      ? `<text data-ped-sex="${esc(p.id)}" x="${p.x + PED_SZ / 2}" y="${p.y + PED_SZ + 28}" text-anchor="middle" class="gen-ped-sextoggle">⇄</text>`
+      : '';
+    return `<g data-ped-id="${esc(p.id)}" tabindex="0" role="button"
+        aria-label="${esc(p.id)}, ${p.sex === 'M' ? 'male' : 'female'}, ${p.affected ? 'affected' : 'unaffected'} — click to toggle affected">
+      ${shape}
+      <text x="${p.x + PED_SZ / 2}" y="${p.y + PED_SZ + 14}" text-anchor="middle" class="gen-ped-label">${esc(p.id)}</text>
+      ${sexToggle}
+    </g>`;
+  }
+
+  /* ============================ STATE ============================ */
+  const defaults = () => ({
+    tab: 'mono',
+    mono: { genoA: 'Aa', genoB: 'Aa', domLabel: '', recLabel: '' },
+    di: { genoA: 'AaBb', genoB: 'AaBb', dom1: '', rec1: '', dom2: '', rec2: '' },
+    sex: { genoA: 'XAXa', genoB: 'XAY', domLabel: '', recLabel: '' },
+    pedigree: { template: 'trio', overrides: pedigreeDefaultsFor('trio') },
+    chi: { categories: [{ label: 'Dominant', observed: 0, expectedRatio: 3 }, { label: 'Recessive', observed: 0, expectedRatio: 1 }], alpha: 0.05 },
+  });
+  function load() {
+    const s = Storage.get(SKEY, null), d = defaults();
+    if (!s || typeof s !== 'object') return d;
+    const out = d;
+    if (['mono', 'di', 'sex', 'pedigree', 'chi'].includes(s.tab)) out.tab = s.tab;
+    if (s.mono && typeof s.mono === 'object') out.mono = { genoA: s.mono.genoA || d.mono.genoA, genoB: s.mono.genoB || d.mono.genoB, domLabel: s.mono.domLabel || '', recLabel: s.mono.recLabel || '' };
+    if (s.di && typeof s.di === 'object') out.di = { genoA: s.di.genoA || d.di.genoA, genoB: s.di.genoB || d.di.genoB, dom1: s.di.dom1 || '', rec1: s.di.rec1 || '', dom2: s.di.dom2 || '', rec2: s.di.rec2 || '' };
+    if (s.sex && typeof s.sex === 'object') out.sex = { genoA: s.sex.genoA || d.sex.genoA, genoB: s.sex.genoB || d.sex.genoB, domLabel: s.sex.domLabel || '', recLabel: s.sex.recLabel || '' };
+    if (s.pedigree && typeof s.pedigree === 'object' && PED_TEMPLATES[s.pedigree.template]) {
+      out.pedigree = { template: s.pedigree.template, overrides: (s.pedigree.overrides && typeof s.pedigree.overrides === 'object') ? s.pedigree.overrides : pedigreeDefaultsFor(s.pedigree.template) };
+    }
+    if (s.chi && Array.isArray(s.chi.categories) && s.chi.categories.length >= 2) out.chi = { categories: s.chi.categories, alpha: s.chi.alpha === 0.01 ? 0.01 : 0.05 };
+    return out;
+  }
+  let state = load();
+  let lastPhenotypeRatio = null;
+  let saveTimer = null;
+  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => Storage.set(SKEY, state), 250); };
+
+  /* ============================ RENDER: CROSSES ============================ */
+  function punnettGridHTML(r) {
+    let html = '<div class="gen-grid-wrap"><table class="gen-punnett"><tr><td class="gen-corner"></td>' +
+      r.gametesB.map(g => `<th>${esc(g)}</th>`).join('') + '</tr>';
+    r.grid.forEach((row, i) => {
+      html += `<tr><th>${esc(r.gametesA[i])}</th>${row.map(cell => `<td>${esc(cell)}</td>`).join('')}</tr>`;
+    });
+    return html + '</table></div>';
+  }
+  function sexGridHTML(r) {
+    let html = `<div class="gen-grid-wrap"><table class="gen-punnett"><tr><td class="gen-corner"></td><th>X${esc(r.maleAllele)}</th><th>Y</th></tr>`;
+    r.grid.forEach((row, i) => {
+      html += `<tr><th>X${esc(r.femaleGametes[i])}</th>${row.map(cell => `<td class="gen-cell-${cell.sex === 'F' ? 'f' : 'm'}">${esc(cell.genotype)}<span class="gen-cell-sex">${cell.sex === 'F' ? '♀' : '♂'}</span></td>`).join('')}</tr>`;
+    });
+    return html + '</table></div>';
+  }
+  function ratioResultHTML(r) {
+    return `<div class="result"><div class="result-label">Genotype ratio</div><p class="gen-ratio">${r.genotypeRatio.map(x => `${x.count} ${esc(x.key)}`).join(' : ')}</p>
+      <div class="result-label" style="margin-top:12px">Phenotype ratio</div><p class="gen-ratio">${r.phenotypeRatio.map(x => `${x.count} ${esc(x.key)}`).join(' : ')}</p></div>`;
+  }
+  const sendToChiHTML = () => `<div class="btn-row" style="margin-top:14px"><button class="btn ghost sm" data-act="send-chi" type="button">Test this ratio with chi-square →</button></div>`;
+
+  function renderMono() {
+    const out = $('#gen-mono-out'); if (!out) return;
+    if (!window.GeneticsEngine) { out.innerHTML = noteBlock('Loading the genetics engine…'); ensureEngine(ok => ok ? renderMono() : (out.innerHTML = errBlock('Couldn’t load the genetics engine. Check your connection, then try again.'))); return; }
+    const E = window.GeneticsEngine, s = state.mono;
+    const traits = (s.domLabel || s.recLabel) ? [{ dominant: s.domLabel || 'Dominant', recessive: s.recLabel || 'Recessive' }] : undefined;
+    let r;
+    try { r = E.monohybridCross(s.genoA, s.genoB, traits); } catch (e) { out.innerHTML = errBlock(e.message); return; }
+    lastPhenotypeRatio = r.phenotypeRatio;
+    out.innerHTML = punnettGridHTML(r) + ratioResultHTML(r) + stepsHTML('gen-mono', r.steps) + sendToChiHTML();
+  }
+  function renderDi() {
+    const out = $('#gen-di-out'); if (!out) return;
+    if (!window.GeneticsEngine) { out.innerHTML = noteBlock('Loading the genetics engine…'); ensureEngine(ok => ok ? renderDi() : (out.innerHTML = errBlock('Couldn’t load the genetics engine. Check your connection, then try again.'))); return; }
+    const E = window.GeneticsEngine, s = state.di;
+    const traits = [
+      (s.dom1 || s.rec1) ? { dominant: s.dom1 || 'Dominant (trait 1)', recessive: s.rec1 || 'Recessive (trait 1)' } : undefined,
+      (s.dom2 || s.rec2) ? { dominant: s.dom2 || 'Dominant (trait 2)', recessive: s.rec2 || 'Recessive (trait 2)' } : undefined,
+    ];
+    let r;
+    try { r = E.dihybridCross(s.genoA, s.genoB, traits); } catch (e) { out.innerHTML = errBlock(e.message); return; }
+    lastPhenotypeRatio = r.phenotypeRatio;
+    out.innerHTML = punnettGridHTML(r) + ratioResultHTML(r) + stepsHTML('gen-di', r.steps) + sendToChiHTML();
+  }
+  function renderSex() {
+    const out = $('#gen-sex-out'); if (!out) return;
+    if (!window.GeneticsEngine) { out.innerHTML = noteBlock('Loading the genetics engine…'); ensureEngine(ok => ok ? renderSex() : (out.innerHTML = errBlock('Couldn’t load the genetics engine. Check your connection, then try again.'))); return; }
+    const E = window.GeneticsEngine, s = state.sex;
+    const trait = (s.domLabel || s.recLabel) ? { dominant: s.domLabel || 'Dominant', recessive: s.recLabel || 'Recessive' } : undefined;
+    let r;
+    try { r = E.sexLinkedCross(s.genoA, s.genoB, trait); } catch (e) { out.innerHTML = errBlock(e.message); return; }
+    lastPhenotypeRatio = r.phenotypeRatio;
+    out.innerHTML = sexGridHTML(r) + ratioResultHTML(r) + stepsHTML('gen-sex', r.steps) + sendToChiHTML();
+  }
+
+  /* ============================ RENDER: PEDIGREE ============================ */
+  const PATTERN_NAMES = { AD: 'Autosomal dominant', AR: 'Autosomal recessive', XD: 'X-linked dominant', XR: 'X-linked recessive' };
+  function renderPedigreeResult(r) {
+    let html = '<div class="result"><div class="result-label">Inheritance pattern check</div><div class="gen-pattern-grid">';
+    ['AD', 'AR', 'XD', 'XR'].forEach(k => {
+      const c = r.checks[k];
+      html += `<div class="gen-pattern-card ${c.consistent ? 'ok' : 'no'}"><div class="gen-pattern-name">${esc(PATTERN_NAMES[k])}</div><div class="gen-pattern-verdict">${c.consistent ? 'Consistent' : 'Ruled out'}</div>${c.reasons.length ? `<p class="gen-pattern-reason">${esc(c.reasons[0])}</p>` : ''}</div>`;
+    });
+    html += '</div>';
+    if (r.consistentPatterns.length > 1) html += `<p class="result-sub">More than one pattern still fits this pedigree — that's realistic; distinguishing them can need more generations of data.</p>`;
+    if (!r.consistentPatterns.length) html += `<p class="result-sub">No classic Mendelian pattern fits this pedigree as drawn — double-check the affected/sex markings.</p>`;
+    html += '</div>';
+    r.consistentPatterns.forEach(k => {
+      html += `<div class="result"><div class="result-label">${esc(PATTERN_NAMES[k])} — likely genotypes</div><table class="gen-geno-table"><thead><tr><th>Individual</th><th>Genotype</th></tr></thead><tbody>`;
+      Object.keys(r.genotypes[k]).forEach(id => {
+        const g = r.genotypes[k][id];
+        html += `<tr><td>${esc(id)}</td><td>${esc(g.genotype)}${g.determined ? '' : ' <span class="gen-undetermined">(not fully determined by this pedigree)</span>'}</td></tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+    return html;
+  }
+  function renderPedigreeSVG() {
+    const wrap = $('#gen-ped-svg-wrap'); if (!wrap) return;
+    const t = PED_TEMPLATES[state.pedigree.template];
+    const indiv = effectivePedIndividuals();
+    wrap.innerHTML = `<svg viewBox="${t.viewBox}" class="gen-ped-svg">${pedigreeLinesSVG(indiv)}${indiv.map(pedigreeShape).join('')}</svg>`;
+  }
+  function analyzePedigreeNow() {
+    const resultEl = $('#gen-ped-result'); if (!resultEl) return;
+    if (!window.GeneticsEngine) { resultEl.innerHTML = noteBlock('Loading the genetics engine…'); ensureEngine(ok => ok ? analyzePedigreeNow() : (resultEl.innerHTML = errBlock('Couldn’t load the genetics engine. Check your connection, then try again.'))); return; }
+    const individuals = effectivePedIndividuals().map(p => ({ id: p.id, sex: p.sex, affected: p.affected, fatherId: p.fatherId, motherId: p.motherId }));
+    let r;
+    try { r = window.GeneticsEngine.analyzePedigree(individuals); } catch (e) { resultEl.innerHTML = errBlock(e.message); return; }
+    resultEl.innerHTML = renderPedigreeResult(r);
+  }
+
+  /* ============================ RENDER: CHI-SQUARE ============================ */
+  function chiRowsHTML() {
+    return state.chi.categories.map((c, i) => `
+      <div class="gen-chi-row">
+        <input class="input mono" data-chi-field="label" data-chi-i="${i}" value="${escape(c.label)}" placeholder="Category">
+        <input class="input mono" type="number" min="0" step="1" data-chi-field="observed" data-chi-i="${i}" value="${c.observed}" placeholder="Observed">
+        <input class="input mono" type="number" min="0" step="1" data-chi-field="expectedRatio" data-chi-i="${i}" value="${c.expectedRatio}" placeholder="Expected ratio">
+        <button class="btn ghost sm" data-act="chi-remove" data-chi-i="${i}" type="button" ${state.chi.categories.length <= 2 ? 'disabled' : ''}>Remove</button>
+      </div>`).join('');
+  }
+  function renderChiRows() {
+    const el = $('#gen-chi-rows'); if (el) el.innerHTML = chiRowsHTML();
+  }
+  function renderChi() {
+    const out = $('#gen-chi-out'); if (!out) return;
+    if (!window.GeneticsEngine) { out.innerHTML = noteBlock('Loading the genetics engine…'); ensureEngine(ok => ok ? renderChi() : (out.innerHTML = errBlock('Couldn’t load the genetics engine. Check your connection, then try again.'))); return; }
+    const E = window.GeneticsEngine;
+    let r;
+    try { r = E.chiSquareTest(state.chi.categories, state.chi.alpha); } catch (e) { out.innerHTML = errBlock(e.message); return; }
+    let html = `<div class="result"><div class="result-label">Result</div>
+      <p class="gen-chi-stat">χ² = ${r.chiSquare.toFixed(3)} · df = ${r.df} · critical value (α = ${r.alpha}) = ${r.criticalValue != null ? r.criticalValue : '—'}</p>
+      <p class="gen-chi-verdict ${r.verdict || ''}">${r.verdict === 'reject' ? 'Reject the null hypothesis — the observed data differs significantly from the expected ratio.' : r.verdict === 'fail-to-reject' ? 'Fail to reject the null hypothesis — the observed data is consistent with the expected ratio.' : 'No critical value available for this many categories.'}</p></div>`;
+    out.innerHTML = html + stepsHTML('gen-chi', r.steps);
+  }
+
+  function renderCurrent() {
+    if (state.tab === 'mono') renderMono();
+    else if (state.tab === 'di') renderDi();
+    else if (state.tab === 'sex') renderSex();
+    else if (state.tab === 'pedigree') { renderPedigreeSVG(); }
+    else renderChi();
+  }
+
+  /* ============================ SHARE-BY-CODE ============================ */
+  const b64e = bytes => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  function b64d(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function encodeState() {
+    return b64e(new TextEncoder().encode(JSON.stringify({
+      v: 1, t: state.tab,
+      mo: [state.mono.genoA, state.mono.genoB, state.mono.domLabel, state.mono.recLabel],
+      di: [state.di.genoA, state.di.genoB, state.di.dom1, state.di.rec1, state.di.dom2, state.di.rec2],
+      sx: [state.sex.genoA, state.sex.genoB, state.sex.domLabel, state.sex.recLabel],
+      pd: [state.pedigree.template, state.pedigree.overrides],
+      ch: [state.chi.categories, state.chi.alpha],
+    })));
+  }
+  function decodeState(input) {
+    let s = String(input || '').trim(); if (s.includes('=')) s = s.slice(s.lastIndexOf('=') + 1);
+    s = s.replace(/[^A-Za-z0-9\-_]/g, ''); if (!s) return null;
+    try { const o = JSON.parse(new TextDecoder().decode(b64d(s))); return (o && typeof o === 'object') ? o : null; }
+    catch { return null; }
+  }
+  function applyImport(o) {
+    const d = defaults();
+    state.tab = ['mono', 'di', 'sex', 'pedigree', 'chi'].includes(o.t) ? o.t : d.tab;
+    if (Array.isArray(o.mo)) state.mono = { genoA: o.mo[0] || d.mono.genoA, genoB: o.mo[1] || d.mono.genoB, domLabel: o.mo[2] || '', recLabel: o.mo[3] || '' };
+    if (Array.isArray(o.di)) state.di = { genoA: o.di[0] || d.di.genoA, genoB: o.di[1] || d.di.genoB, dom1: o.di[2] || '', rec1: o.di[3] || '', dom2: o.di[4] || '', rec2: o.di[5] || '' };
+    if (Array.isArray(o.sx)) state.sex = { genoA: o.sx[0] || d.sex.genoA, genoB: o.sx[1] || d.sex.genoB, domLabel: o.sx[2] || '', recLabel: o.sx[3] || '' };
+    if (Array.isArray(o.pd) && PED_TEMPLATES[o.pd[0]]) state.pedigree = { template: o.pd[0], overrides: (o.pd[1] && typeof o.pd[1] === 'object') ? o.pd[1] : pedigreeDefaultsFor(o.pd[0]) };
+    if (Array.isArray(o.ch) && Array.isArray(o.ch[0]) && o.ch[0].length >= 2) state.chi = { categories: o.ch[0], alpha: o.ch[1] === 0.01 ? 0.01 : 0.05 };
+    root.innerHTML = shell(); wire(); save(); renderCurrent();
+  }
+  function openShareDialog() {
+    const code = encodeState(), link = location.href.split('#')[0] + '#genetics=' + code;
+    const out = $('#gen-share-target');
+    out.innerHTML = `<div class="result"><div class="result-label">Share by code</div><p class="result-sub" style="margin:0 0 12px">No backend — this code carries every tab's inputs. Paste it (or the link) into Import on another device.</p><div class="field"><label>Code</label><textarea class="input mono" id="gen-sharecode" rows="3" readonly></textarea></div><div class="field"><label>Link</label><input class="input mono" id="gen-sharelink" readonly></div><div class="btn-row"><button class="btn sm" data-copytext="${escape(code)}">Copy code</button><button class="btn ghost sm" data-copytext="${escape(link)}">Copy link</button><button class="btn ghost sm" data-act="back">Back</button></div></div>`;
+    $('#gen-sharecode').value = code; $('#gen-sharelink').value = link;
+  }
+  function openImportDialog() {
+    const out = $('#gen-share-target');
+    out.innerHTML = `<div class="result"><div class="result-label">Import code</div><p class="result-sub" style="margin:0 0 12px">Paste a #genetics=… code or link. This replaces the solver's inputs.</p><div class="field"><textarea class="input mono" id="gen-importbox" rows="3" placeholder="Paste #genetics=… code or link here"></textarea></div><div class="btn-row"><button class="btn sm" data-act="import-go">Load</button><button class="btn ghost sm" data-act="back">Cancel</button></div></div>`;
+  }
+
+  /* ============================ PANES ============================ */
+  function monoPane() {
+    const s = state.mono;
+    return `<div class="alg-pane" data-pane="mono" ${state.tab === 'mono' ? '' : 'hidden'}>
+      <p class="help">Enter each parent's genotype for one gene, e.g. "Aa" × "Aa". Uppercase = dominant allele, lowercase = recessive.</p>
+      <div class="field"><label for="gen-mono-a">Parent 1 genotype</label><input class="input mono" id="gen-mono-a" value="${escape(s.genoA)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="field"><label for="gen-mono-b">Parent 2 genotype</label><input class="input mono" id="gen-mono-b" value="${escape(s.genoB)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="gen-trait-labels">
+        <div class="field"><label for="gen-mono-dom">Dominant phenotype (optional)</label><input class="input" id="gen-mono-dom" value="${escape(s.domLabel)}" placeholder="e.g. Purple flowers"></div>
+        <div class="field"><label for="gen-mono-rec">Recessive phenotype (optional)</label><input class="input" id="gen-mono-rec" value="${escape(s.recLabel)}" placeholder="e.g. White flowers"></div>
+      </div>
+      <div class="gen-examples"><span class="gen-ex-l">Try:</span>${['Aa,Aa', 'AA,aa', 'Aa,aa'].map(p => { const [a, b] = p.split(','); return `<button class="gen-ex" data-mono-ex="${a}|${b}" type="button">${a} × ${b}</button>`; }).join('')}</div>
+      <div id="gen-mono-out" aria-live="polite"></div>
+    </div>`;
+  }
+  function diPane() {
+    const s = state.di;
+    return `<div class="alg-pane" data-pane="di" ${state.tab === 'di' ? '' : 'hidden'}>
+      <p class="help">Enter each parent's genotype for two genes, e.g. "AaBb" × "AaBb" — both parents must use the same two letters in the same order.</p>
+      <div class="field"><label for="gen-di-a">Parent 1 genotype</label><input class="input mono" id="gen-di-a" value="${escape(s.genoA)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="field"><label for="gen-di-b">Parent 2 genotype</label><input class="input mono" id="gen-di-b" value="${escape(s.genoB)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="gen-trait-labels">
+        <div class="field"><label for="gen-di-dom1">Trait 1 dominant (optional)</label><input class="input" id="gen-di-dom1" value="${escape(s.dom1)}" placeholder="e.g. Round seeds"></div>
+        <div class="field"><label for="gen-di-rec1">Trait 1 recessive (optional)</label><input class="input" id="gen-di-rec1" value="${escape(s.rec1)}" placeholder="e.g. Wrinkled seeds"></div>
+        <div class="field"><label for="gen-di-dom2">Trait 2 dominant (optional)</label><input class="input" id="gen-di-dom2" value="${escape(s.dom2)}" placeholder="e.g. Yellow seeds"></div>
+        <div class="field"><label for="gen-di-rec2">Trait 2 recessive (optional)</label><input class="input" id="gen-di-rec2" value="${escape(s.rec2)}" placeholder="e.g. Green seeds"></div>
+      </div>
+      <div class="gen-examples"><span class="gen-ex-l">Try:</span>${['AaBb,AaBb', 'AaBb,aabb', 'AABb,AaBb'].map(p => { const [a, b] = p.split(','); return `<button class="gen-ex" data-di-ex="${a}|${b}" type="button">${a} × ${b}</button>`; }).join('')}</div>
+      <div id="gen-di-out" aria-live="polite"></div>
+    </div>`;
+  }
+  function sexPane() {
+    const s = state.sex;
+    return `<div class="alg-pane" data-pane="sex" ${state.tab === 'sex' ? '' : 'hidden'}>
+      <p class="help">X-linked notation: a female is two X alleles, e.g. "XAXa"; a male is one X allele + Y, e.g. "XAY". Enter one of each.</p>
+      <div class="field"><label for="gen-sex-a">Parent 1 genotype</label><input class="input mono" id="gen-sex-a" value="${escape(s.genoA)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="field"><label for="gen-sex-b">Parent 2 genotype</label><input class="input mono" id="gen-sex-b" value="${escape(s.genoB)}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>
+      <div class="gen-trait-labels">
+        <div class="field"><label for="gen-sex-dom">Dominant phenotype (optional)</label><input class="input" id="gen-sex-dom" value="${escape(s.domLabel)}" placeholder="e.g. Normal vision"></div>
+        <div class="field"><label for="gen-sex-rec">Recessive phenotype (optional)</label><input class="input" id="gen-sex-rec" value="${escape(s.recLabel)}" placeholder="e.g. Colorblind"></div>
+      </div>
+      <div class="gen-examples"><span class="gen-ex-l">Try:</span>${['XAXa,XAY', 'XAXa,XaY', 'XaXa,XAY'].map(p => { const [a, b] = p.split(','); return `<button class="gen-ex" data-sex-ex="${a}|${b}" type="button">${a} × ${b}</button>`; }).join('')}</div>
+      <div id="gen-sex-out" aria-live="polite"></div>
+    </div>`;
+  }
+  function pedigreePane() {
+    return `<div class="alg-pane" data-pane="pedigree" ${state.tab === 'pedigree' ? '' : 'hidden'}>
+      <p class="help">Click a symbol to toggle affected/unaffected. Children's sex can be flipped with the ⇄ button beneath them. Square = male, circle = female, filled = affected.</p>
+      <div class="btn-row" role="group" aria-label="Pedigree template">
+        <button class="btn ${state.pedigree.template === 'trio' ? 'accent' : 'ghost'} sm" data-ped-template="trio" type="button" aria-pressed="${state.pedigree.template === 'trio'}">Two generations</button>
+        <button class="btn ${state.pedigree.template === 'threeGen' ? 'accent' : 'ghost'} sm" data-ped-template="threeGen" type="button" aria-pressed="${state.pedigree.template === 'threeGen'}">Three generations</button>
+      </div>
+      <div id="gen-ped-svg-wrap" class="gen-ped-svg-wrap"></div>
+      <div class="btn-row"><button class="btn sm" data-act="ped-analyze" type="button">Analyze pedigree</button></div>
+      <div id="gen-ped-result" aria-live="polite"></div>
+    </div>`;
+  }
+  function chiPane() {
+    return `<div class="alg-pane" data-pane="chi" ${state.tab === 'chi' ? '' : 'hidden'}>
+      <p class="help">Compare observed counts against an expected ratio (e.g. 3:1) with a chi-square goodness-of-fit test.</p>
+      <div class="gen-chi-rows" id="gen-chi-rows">${chiRowsHTML()}</div>
+      <div class="btn-row"><button class="btn ghost sm" data-act="chi-add" type="button">Add category</button></div>
+      <div class="field"><label for="gen-chi-alpha">Significance level (α)</label>
+        <select class="input" id="gen-chi-alpha"><option value="0.05" ${state.chi.alpha === 0.05 ? 'selected' : ''}>0.05</option><option value="0.01" ${state.chi.alpha === 0.01 ? 'selected' : ''}>0.01</option></select>
+      </div>
+      <div id="gen-chi-out" aria-live="polite"></div>
+    </div>`;
+  }
+
+  function shell() {
+    return `
+    <div class="tabs" role="tablist" aria-label="Genetics modes">
+      <button class="tab${state.tab === 'mono' ? ' active' : ''}" data-tab="mono" role="tab" aria-selected="${state.tab === 'mono'}">Monohybrid</button>
+      <button class="tab${state.tab === 'di' ? ' active' : ''}" data-tab="di" role="tab" aria-selected="${state.tab === 'di'}">Dihybrid</button>
+      <button class="tab${state.tab === 'sex' ? ' active' : ''}" data-tab="sex" role="tab" aria-selected="${state.tab === 'sex'}">Sex-Linked</button>
+      <button class="tab${state.tab === 'pedigree' ? ' active' : ''}" data-tab="pedigree" role="tab" aria-selected="${state.tab === 'pedigree'}">Pedigree</button>
+      <button class="tab${state.tab === 'chi' ? ' active' : ''}" data-tab="chi" role="tab" aria-selected="${state.tab === 'chi'}">Chi-Square</button>
+    </div>
+    ${monoPane()}${diPane()}${sexPane()}${pedigreePane()}${chiPane()}
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn ghost sm" data-act="share">Share by code</button>
+      <button class="btn ghost sm" data-act="import">Import code</button>
+    </div>
+    <div id="gen-share-target"></div>
+    <p class="gen-foot">Every cross shows the full Punnett square and ratios as work, not just an answer.</p>`;
+  }
+
+  root.innerHTML = shell();
+
+  function wire() { /* tab panes render lazily via renderCurrent(); nothing extra to bind on rebuild */ }
+  wire();
+  renderCurrent();
+
+  root.addEventListener('input', e => {
+    const id = e.target.id;
+    if (id === 'gen-mono-a') { state.mono.genoA = e.target.value; save(); renderMono(); }
+    else if (id === 'gen-mono-b') { state.mono.genoB = e.target.value; save(); renderMono(); }
+    else if (id === 'gen-mono-dom') { state.mono.domLabel = e.target.value; save(); renderMono(); }
+    else if (id === 'gen-mono-rec') { state.mono.recLabel = e.target.value; save(); renderMono(); }
+    else if (id === 'gen-di-a') { state.di.genoA = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-di-b') { state.di.genoB = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-di-dom1') { state.di.dom1 = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-di-rec1') { state.di.rec1 = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-di-dom2') { state.di.dom2 = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-di-rec2') { state.di.rec2 = e.target.value; save(); renderDi(); }
+    else if (id === 'gen-sex-a') { state.sex.genoA = e.target.value; save(); renderSex(); }
+    else if (id === 'gen-sex-b') { state.sex.genoB = e.target.value; save(); renderSex(); }
+    else if (id === 'gen-sex-dom') { state.sex.domLabel = e.target.value; save(); renderSex(); }
+    else if (id === 'gen-sex-rec') { state.sex.recLabel = e.target.value; save(); renderSex(); }
+    else if (e.target.matches('[data-chi-field]')) {
+      const i = +e.target.getAttribute('data-chi-i'), field = e.target.getAttribute('data-chi-field');
+      const cat = state.chi.categories[i]; if (!cat) return;
+      cat[field] = field === 'label' ? e.target.value : Math.max(0, Number(e.target.value) || 0);
+      save(); renderChi();
+    }
+    else if (id === 'gen-chi-alpha') { state.chi.alpha = Number(e.target.value) === 0.01 ? 0.01 : 0.05; save(); renderChi(); }
+  });
+
+  root.addEventListener('click', e => {
+    let b;
+    if ((b = e.target.closest('[data-copytext]'))) { copy(b.getAttribute('data-copytext') || '', b); return; }
+    if ((b = e.target.closest('[data-toggle]'))) {
+      const tid = b.getAttribute('data-toggle'); const list = $('#' + tid);
+      if (list) { const hidden = list.hasAttribute('hidden'); if (hidden) { list.removeAttribute('hidden'); b.textContent = b.textContent.replace('Show', 'Hide'); } else { list.setAttribute('hidden', ''); b.textContent = b.textContent.replace('Hide', 'Show'); } }
+      return;
+    }
+    if ((b = e.target.closest('[data-mono-ex]'))) { const [a, c] = b.getAttribute('data-mono-ex').split('|'); state.mono.genoA = a; state.mono.genoB = c; root.innerHTML = shell(); wire(); save(); renderCurrent(); return; }
+    if ((b = e.target.closest('[data-di-ex]'))) { const [a, c] = b.getAttribute('data-di-ex').split('|'); state.di.genoA = a; state.di.genoB = c; root.innerHTML = shell(); wire(); save(); renderCurrent(); return; }
+    if ((b = e.target.closest('[data-sex-ex]'))) { const [a, c] = b.getAttribute('data-sex-ex').split('|'); state.sex.genoA = a; state.sex.genoB = c; root.innerHTML = shell(); wire(); save(); renderCurrent(); return; }
+    if ((b = e.target.closest('[data-ped-template]'))) {
+      const key = b.getAttribute('data-ped-template');
+      state.pedigree = { template: key, overrides: pedigreeDefaultsFor(key) };
+      root.innerHTML = shell(); wire(); save(); renderCurrent(); return;
+    }
+    if ((b = e.target.closest('[data-ped-sex]'))) {
+      const pid = b.getAttribute('data-ped-sex');
+      const t = PED_TEMPLATES[state.pedigree.template];
+      const p = t.individuals.find(x => x.id === pid);
+      if (p && p.role === 'child') {
+        const ov = state.pedigree.overrides[pid];
+        ov.sex = ov.sex === 'M' ? 'F' : 'M';
+        save(); renderPedigreeSVG();
+      }
+      return;
+    }
+    if ((b = e.target.closest('[data-ped-id]'))) {
+      const pid = b.getAttribute('data-ped-id');
+      const ov = state.pedigree.overrides[pid];
+      if (ov) { ov.affected = !ov.affected; save(); renderPedigreeSVG(); }
+      return;
+    }
+    if ((b = e.target.closest('[data-act="ped-analyze"]'))) { analyzePedigreeNow(); return; }
+    if ((b = e.target.closest('[data-act="chi-add"]'))) {
+      state.chi.categories.push({ label: `Category ${state.chi.categories.length + 1}`, observed: 0, expectedRatio: 1 });
+      save(); renderChiRows(); renderChi(); return;
+    }
+    if ((b = e.target.closest('[data-act="chi-remove"]'))) {
+      const i = +b.getAttribute('data-chi-i');
+      if (state.chi.categories.length > 2) { state.chi.categories.splice(i, 1); save(); renderChiRows(); renderChi(); }
+      return;
+    }
+    if ((b = e.target.closest('[data-act="send-chi"]'))) {
+      if (lastPhenotypeRatio && lastPhenotypeRatio.length) {
+        state.chi.categories = lastPhenotypeRatio.map(x => ({ label: x.key, observed: 0, expectedRatio: x.count }));
+        state.tab = 'chi'; root.innerHTML = shell(); wire(); save(); renderCurrent();
+      }
+      return;
+    }
+    if ((b = e.target.closest('[data-tab]'))) {
+      state.tab = b.getAttribute('data-tab');
+      $$('.tab', root).forEach(t => { const on = t.getAttribute('data-tab') === state.tab; t.classList.toggle('active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      $$('.alg-pane', root).forEach(p => { p.hidden = p.getAttribute('data-pane') !== state.tab; });
+      save(); renderCurrent(); return;
+    }
+    if ((b = e.target.closest('[data-act]'))) {
+      const a = b.dataset.act;
+      if (a === 'share') openShareDialog();
+      else if (a === 'import') openImportDialog();
+      else if (a === 'back') { $('#gen-share-target').innerHTML = ''; }
+      else if (a === 'import-go') { const data = decodeState($('#gen-importbox').value); if (!data) { showToast('That code didn’t decode.'); return; } applyImport(data); showToast('Imported.'); }
+    }
+  });
+
+  /* ---- scoped styles ---- */
+  if (!document.getElementById('genetics-style')) {
+    const st = document.createElement('style'); st.id = 'genetics-style';
+    st.textContent = `
+      .gen-examples{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 16px}
+      .gen-ex-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+      .gen-ex{font-family:var(--mono);font-size:13px;background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--ink-2);padding:5px 9px;cursor:pointer}
+      .gen-ex:hover{color:var(--ink);border-color:var(--ink-2)}
+      .gen-note{background:var(--paper-2);border:1px solid var(--rule);border-left:2px solid var(--accent);color:var(--ink-2);font-size:14px;border-radius:3px;padding:11px 14px;margin:14px 0;line-height:1.5}
+      .gen-foot{font-size:12px;color:var(--muted);line-height:1.6;margin-top:16px}
+      .gen-trait-labels{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+      .gen-grid-wrap{overflow-x:auto;margin:14px 0}
+      table.gen-punnett{border-collapse:collapse;font-family:var(--mono);font-size:14px;min-width:220px}
+      table.gen-punnett th,table.gen-punnett td{border:1px solid var(--rule);padding:8px 12px;text-align:center}
+      table.gen-punnett th{background:var(--paper-2);color:var(--ink-2);font-weight:600}
+      table.gen-punnett .gen-corner{background:var(--paper-2)}
+      table.gen-punnett td.gen-cell-f{background:color-mix(in srgb, var(--accent) 6%, transparent)}
+      .gen-cell-sex{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+      .gen-ratio{font-family:var(--mono);font-size:15px;margin:4px 0 0}
+      .gen-step-text{font-family:var(--sans);font-size:14px;line-height:1.5}
+      .gen-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+      .gen-steps[hidden]{display:none}
+      .gen-ped-svg-wrap{margin:14px 0;overflow-x:auto}
+      svg.gen-ped-svg{width:100%;max-width:420px;height:auto}
+      .gen-ped-shape{fill:var(--paper);stroke:var(--ink-2);stroke-width:2;cursor:pointer}
+      .gen-ped-shape.affected{fill:var(--accent)}
+      .gen-ped-line{stroke:var(--ink-2);stroke-width:1.5}
+      .gen-ped-label{font-family:var(--mono);font-size:11px;fill:var(--ink-2)}
+      .gen-ped-sextoggle{font-size:13px;fill:var(--muted);cursor:pointer}
+      .gen-pattern-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+      .gen-pattern-card{border:1px solid var(--rule);border-radius:4px;padding:10px 12px}
+      .gen-pattern-card.ok{border-left:3px solid var(--accent)}
+      .gen-pattern-card.no{border-left:3px solid var(--muted);opacity:.65}
+      .gen-pattern-name{font-size:12.5px;font-weight:600}
+      .gen-pattern-verdict{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:2px}
+      .gen-pattern-reason{font-size:12px;color:var(--muted);margin:6px 0 0;line-height:1.4}
+      table.gen-geno-table{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:8px}
+      table.gen-geno-table th,table.gen-geno-table td{border:1px solid var(--rule);padding:6px 10px;text-align:left}
+      .gen-undetermined{color:var(--muted);font-size:12px}
+      .gen-chi-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+      .gen-chi-stat{font-family:var(--mono);font-size:14px;margin:4px 0 0}
+      .gen-chi-verdict{font-size:14px;margin:8px 0 0;font-weight:600}
+      .gen-chi-verdict.reject{color:var(--accent)}
+      @media (max-width:520px){.gen-trait-labels{grid-template-columns:1fr}.gen-chi-row{grid-template-columns:1fr 1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  /* ---- incoming share link ---- */
+  (function checkShared() {
+    const h = location.hash || ''; const eq = h.indexOf('='); if (eq < 0 || !/genetics/i.test(h.slice(0, eq))) return;
+    const data = decodeState(h.slice(eq + 1)); if (!data) return;
+    setTimeout(() => { if (confirm('Load the shared genetics work? This replaces what’s here.')) { applyImport(data); showToast('Loaded shared work.'); } }, 350);
+  })();
+
+  return { unmount() { clearTimeout(saveTimer); Storage.set(SKEY, state); } };
 }
 
 function mountSigFig(root) {
