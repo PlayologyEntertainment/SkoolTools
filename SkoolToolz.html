@@ -2931,10 +2931,11 @@ const SHELVES = [
 ];
 
 /* Cache-busting versions for lazy-loaded module files (ap-packs.js,
-   ap-psych.js, algebra-engine.js, calculus-engine.js, reading-writing-data.js).
-   Bump a file's number whenever its content changes — the query string changes
-   the request URL, so browsers fetch a fresh copy instead of serving a stale
-   cached one indefinitely (these files have no other cache-busting). */
+   ap-psych.js, algebra-engine.js, calculus-engine.js, reading-writing-data.js,
+   ap-english.js). Bump a file's number whenever its content changes — the
+   query string changes the request URL, so browsers fetch a fresh copy
+   instead of serving a stale cached one indefinitely (these files have no
+   other cache-busting). */
 const MODULE_VERSION = {
   'ap-packs.js': 1,
   'ap-psych.js': 1,
@@ -2942,6 +2943,7 @@ const MODULE_VERSION = {
   'calculus-engine.js': 1,
   'reading-writing-data.js': 1,
   'genetics-engine.js': 1,
+  'ap-english.js': 1,
 };
 
 const TOOLS = []; // populated by registerTools() below
@@ -5306,6 +5308,466 @@ function mountAPPsych(root) {
   return { unmount() {} };
 }
 
+/* ========== AP ENGLISH LANGUAGE & LITERATURE ==========
+   Two halves per the roadmap: (1) an original rhetorical-devices / literary-terms
+   glossary with a self-check quiz, following the AP Psychology tool's reference-plus-
+   practice pattern; (2) a structural, non-generative close-reading scaffold — student
+   pastes a passage and fills in prompted slots (rhetorical situation, then
+   quote → device → effect annotations, then a synthesis line) — following the Essay
+   Planner Scaffold tab's fill-in-the-skeleton spirit. Nothing is generated for the
+   student in either half. Glossary content lives in a lazy-loaded module
+   (ap-english.js), loaded the same script-tag way as ap-psych.js (file:// safe), then
+   cached on window.APEnglish for the session. The close-reading scaffold autosaves to
+   localStorage like Essay Planner's scaffold; unlike Essay Planner it has no
+   share-by-code, matching that sibling tool (the closest analog for saved user work on
+   this shelf) rather than inventing a new pattern. */
+function mountAPEnglish(root) {
+
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function shuffle(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  /* ── Quiz config (which categories to draw from) — persisted like AP Psych's rmCategories ── */
+  const CFGKEY = 'apenglish:v1';
+  let cfg = (() => { const s = Storage.get(CFGKEY, null); return (s && typeof s === 'object') ? s : {}; })();
+  function saveCfg() { Storage.set(CFGKEY, cfg); }
+
+  /* ── Close-reading scaffold state — autosaves like Essay Planner's scaffold ── */
+  const CRKEY = 'apenglish:closereading:v1';
+  const annoSlot = () => ({ id: uid(), quote: '', device: '', effect: '' });
+  const crDefaults = () => ({
+    passage: '',
+    soap: { speaker: '', occasion: '', audience: '', purpose: '', subject: '', tone: '' },
+    annotations: [annoSlot(), annoSlot(), annoSlot()],
+    synthesis: '',
+  });
+  let cr = Storage.get(CRKEY, null);
+  if (!cr || typeof cr !== 'object') cr = crDefaults();
+  if (typeof cr.passage !== 'string') cr.passage = '';
+  if (typeof cr.synthesis !== 'string') cr.synthesis = '';
+  if (!cr.soap || typeof cr.soap !== 'object') cr.soap = crDefaults().soap;
+  ['speaker', 'occasion', 'audience', 'purpose', 'subject', 'tone'].forEach(k => { if (typeof cr.soap[k] !== 'string') cr.soap[k] = ''; });
+  if (!Array.isArray(cr.annotations) || !cr.annotations.length) cr.annotations = [annoSlot()];
+  cr.annotations.forEach(a => {
+    if (typeof a.quote !== 'string') a.quote = '';
+    if (typeof a.device !== 'string') a.device = '';
+    if (typeof a.effect !== 'string') a.effect = '';
+  });
+  function crSave() { Storage.set(CRKEY, cr); }
+  const findAnno = (id) => cr.annotations.find(a => a.id === id);
+
+  const SOAP_FIELDS = [
+    { key: 'speaker',  label: 'Speaker',  hint: 'Who is speaking or writing? What do we know about them?' },
+    { key: 'occasion', label: 'Occasion', hint: 'What event or context prompted this text?' },
+    { key: 'audience', label: 'Audience', hint: 'Who is the text meant for?' },
+    { key: 'purpose',  label: 'Purpose',  hint: 'What is the speaker trying to accomplish?' },
+    { key: 'subject',  label: 'Subject',  hint: 'What is this actually about, in one line?' },
+    { key: 'tone',     label: 'Tone',     hint: 'What attitude do the word choices reveal?' },
+  ];
+
+  root.innerHTML = `<div class="ap-shell"><div class="ap-body" id="ape-status-body"></div></div>`;
+  const statusBody = root.querySelector('#ape-status-body');
+
+  /* ── Lazy-load the glossary module (script tag → file:// safe, then cached) ── */
+  let loadStarted = false;
+  function ensureContent(cb) {
+    if (window.APEnglish) { cb(true); return; }
+    const queue = (mountAPEnglish._q = mountAPEnglish._q || []);
+    queue.push(cb);
+    if (loadStarted) return;
+    loadStarted = true;
+    const s = document.createElement('script');
+    s.src = 'ap-english.js?v=' + MODULE_VERSION['ap-english.js'];
+    s.onload  = () => queue.splice(0).forEach(fn => fn(!!window.APEnglish));
+    s.onerror = () => queue.splice(0).forEach(fn => fn(false));
+    document.head.appendChild(s);
+  }
+  function showLoading() {
+    statusBody.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-spin"></div>
+        <div class="ap-status-title">Loading content…</div>
+        <div class="ap-status-sub">Fetching the AP English glossary. This loads once, then works offline.</div>
+      </div>`;
+  }
+  function showError() {
+    statusBody.innerHTML = `
+      <div class="ap-status">
+        <div class="ap-status-ico">📡</div>
+        <div class="ap-status-title">Couldn’t load the content.</div>
+        <div class="ap-status-sub">The reference file (ap-english.js) didn’t load. Make sure it sits next to the app, then reopen this tool.</div>
+        <button class="btn" id="ape-retry">Try again</button>
+      </div>`;
+    statusBody.querySelector('#ape-retry')?.addEventListener('click', () => { loadStarted = false; boot(); });
+  }
+
+  /* ── Tab shell ── */
+  const TABS = [
+    { id: 'glossary',     label: 'Glossary & Quiz' },
+    { id: 'closereading', label: 'Close Reading Scaffold' },
+  ];
+  let activeTab = 'glossary';
+  let DATA = null;
+  const renders = {};
+  const panel = () => $('#ape-panel', root);
+
+  function renderShell() {
+    root.innerHTML = `
+      <style>
+        .ape-tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--rule);margin-bottom:18px}
+        .ape-tab{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;
+          transition:color .12s,border-color .12s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none}
+        .ape-tab:hover{color:var(--ink-2)}
+        .ape-tab.active{color:var(--ink);border-bottom-color:var(--accent-3)}
+        .ape-panel{min-height:300px}
+        .ape-cat-toggles{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+        .ape-cat-toggle{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+          padding:5px 10px;border:1px solid var(--rule);border-radius:12px;background:none;cursor:pointer;color:var(--muted)}
+        .ape-cat-toggle.on{color:var(--ink);border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 12%, transparent)}
+        .ape-search{margin-bottom:12px}
+        .ape-term-card{border:1px solid var(--rule);border-radius:4px;padding:12px;margin-bottom:10px;border-left:3px solid var(--cat-color,var(--accent-3))}
+        .ape-term-card h4{font-family:var(--serif);font-size:15px;margin:0 0 2px}
+        .ape-term-cat-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-3)}
+        .ape-term-def{font-family:var(--serif);font-size:13px;color:var(--ink-2);margin:6px 0}
+        .ape-term-ex{font-family:var(--serif);font-style:italic;font-size:12.5px;color:var(--muted);
+          border-left:2px solid var(--rule);padding-left:10px}
+        .ape-quiz-stem{font-family:var(--serif);font-size:15px;line-height:1.55;margin-bottom:14px}
+        .ape-choices{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+        .ape-choice{text-align:left;font-family:var(--serif);font-size:13.5px;padding:10px 12px;border:1px solid var(--rule);
+          border-radius:4px;background:var(--paper-2);cursor:pointer;transition:border-color .12s,background .12s;color:var(--ink)}
+        .ape-choice:hover{border-color:var(--ink-2)}
+        .ape-choice.correct{border-color:var(--accent-3);background:color-mix(in srgb, var(--accent-3) 14%, var(--paper-2))}
+        .ape-choice.incorrect{border-color:var(--red);background:color-mix(in srgb, var(--red) 12%, var(--paper-2))}
+        .ape-choice[disabled]{cursor:default}
+        .ape-explain{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--muted);
+          border-left:2px solid var(--rule);padding-left:10px;margin-bottom:14px;line-height:1.5}
+        .ape-quiz-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+        .ape-score{font-family:var(--mono);font-size:11px;color:var(--muted)}
+        .ape-cr-help{font-family:var(--serif);font-size:13px;color:var(--ink-2);line-height:1.5;margin-bottom:14px}
+        .ape-cr-sec-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--muted);margin:18px 0 8px;border-top:1px dashed var(--rule);padding-top:14px}
+        .ape-cr-sec-label:first-of-type{border-top:none;padding-top:0;margin-top:0}
+        .ape-cr-field{margin-bottom:10px}
+        .ape-cr-field label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+        .ape-cr-ta{width:100%;font-family:var(--serif);font-size:13px;padding:8px 10px;border:1px solid var(--rule);
+          border-radius:3px;background:var(--paper-2);color:var(--ink);resize:vertical;min-height:52px;box-sizing:border-box}
+        .ape-cr-passage{min-height:110px}
+        .ape-cr-inp{width:100%;font-family:var(--serif);font-size:13px;padding:8px 10px;border:1px solid var(--rule);
+          border-radius:3px;background:var(--paper-2);color:var(--ink);box-sizing:border-box}
+        .ape-cr-soap-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+        @media(max-width:560px){.ape-cr-soap-grid{grid-template-columns:1fr}}
+        .ape-cr-anno{border:1px solid var(--rule);border-radius:4px;padding:12px;margin-bottom:10px}
+        .ape-cr-anno-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+        .ape-cr-anno-num{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+        .ape-cr-anno-row{display:flex;gap:12px;flex-wrap:wrap}
+        .ape-cr-anno-row .ape-cr-field{flex:1;min-width:160px}
+        .ape-cr-actions{display:flex;gap:8px;flex-wrap:wrap}
+        .ape-cr-del{font-family:var(--mono);font-size:12px;padding:2px 8px;border:1px solid var(--rule);border-radius:3px;
+          background:none;color:var(--muted);cursor:pointer}
+        .ape-cr-del:hover{color:var(--red);border-color:var(--red)}
+      </style>
+      <div class="ape-tabs">
+        ${TABS.map(t => `<button class="ape-tab${t.id === activeTab ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
+      </div>
+      <div class="ape-panel" id="ape-panel"></div>
+    `;
+    root.querySelectorAll('.ape-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        root.querySelectorAll('.ape-tab').forEach(b => b.classList.toggle('active', b === btn));
+        renders[activeTab]();
+      });
+    });
+    renders[activeTab]();
+  }
+
+  /* ── Shared MC-quiz renderer (mirrors AP Psychology's renderQuizQuestion) ── */
+  function renderQuizQuestion(container, q, opts) {
+    container.innerHTML = `
+      <div class="ape-quiz-stem">${q.stem}</div>
+      <div class="ape-choices">
+        ${q.choices.map((c, i) => `<button class="ape-choice" data-i="${i}">${escape(c)}</button>`).join('')}
+      </div>
+      <div id="ape-quiz-feedback"></div>
+    `;
+    let answered = false;
+    container.querySelectorAll('.ape-choice').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (answered) return;
+        answered = true;
+        const i = Number(btn.dataset.i);
+        const correct = i === q.correctIndex;
+        container.querySelectorAll('.ape-choice').forEach((b, j) => {
+          b.disabled = true;
+          if (j === q.correctIndex) b.classList.add('correct');
+          else if (j === i) b.classList.add('incorrect');
+        });
+        const fb = container.querySelector('#ape-quiz-feedback');
+        fb.innerHTML = `
+          <div class="ape-explain">${correct ? '✓ Correct. ' : '✗ Not quite. '}${q.explanation}</div>
+          <button class="btn" id="ape-quiz-next">Next question →</button>
+        `;
+        fb.querySelector('#ape-quiz-next').addEventListener('click', () => opts.onNext());
+        opts.onAnswered?.(correct);
+      });
+    });
+  }
+
+  /* ─────────────────────── Glossary: Browse + Self-check quiz ─────────────────────── */
+  let glossaryView = 'browse';
+  let glossQuery = '';
+  let glossCat = 'all';
+  if (!Array.isArray(cfg.quizCategories) || !cfg.quizCategories.length) cfg.quizCategories = DATA ? DATA.categories.map(c => c.id) : [];
+
+  function catColor(catId) {
+    const idx = DATA.categories.findIndex(c => c.id === catId);
+    const palette = ['var(--accent-3)', 'var(--accent)', 'var(--accent-4)', 'var(--amber)', 'var(--pink-light)'];
+    return palette[idx % palette.length] || 'var(--accent-3)';
+  }
+
+  function renderGlossaryList() {
+    const list = panel().querySelector('#ape-gloss-list');
+    if (!list) return;
+    const q = glossQuery.trim().toLowerCase();
+    const items = DATA.terms.filter(t => {
+      if (glossCat !== 'all' && t.category !== glossCat) return false;
+      if (!q) return true;
+      return t.term.toLowerCase().includes(q) || t.definition.toLowerCase().includes(q);
+    });
+    if (!items.length) { list.innerHTML = `<p class="help">No terms match “${escape(glossQuery)}”.</p>`; return; }
+    const catLabel = (id) => DATA.categories.find(c => c.id === id)?.label || id;
+    list.innerHTML = items.map(t => `
+      <div class="ape-term-card" style="--cat-color:${catColor(t.category)}">
+        <div class="ape-term-cat-label">${escape(catLabel(t.category))}</div>
+        <h4>${escape(t.term)}</h4>
+        <div class="ape-term-def">${escape(t.definition)}</div>
+        <div class="ape-term-ex">${escape(t.example)}</div>
+      </div>
+    `).join('');
+  }
+
+  let gqScore = { correct: 0, total: 0 };
+  function buildGlossaryQuestion() {
+    let pool = DATA.terms.filter(t => cfg.quizCategories.includes(t.category));
+    if (pool.length < 4) pool = DATA.terms;
+    const correct = pick(pool);
+    const useExample = Math.random() < 0.5;
+    const distractors = shuffle(DATA.terms.filter(t => t.term !== correct.term)).slice(0, 3);
+    const choices = shuffle([correct, ...distractors]).map(t => t.term);
+    return {
+      stem: useExample
+        ? `Which term does this example best illustrate?<br><i>${escape(correct.example)}</i>`
+        : `Which term is being defined?<br><i>${escape(correct.definition)}</i>`,
+      choices,
+      correctIndex: choices.indexOf(correct.term),
+      explanation: `<b>${escape(correct.term)}</b> — ${escape(correct.definition)} ${escape(correct.example)}`,
+    };
+  }
+  function gqNext() {
+    renderQuizQuestion($('#ape-gq-q', root), buildGlossaryQuestion(), {
+      onNext: gqNext,
+      onAnswered: (correct) => {
+        gqScore.total++; if (correct) gqScore.correct++;
+        const s = $('#ape-gq-score', root); if (s) s.textContent = `Score: ${gqScore.correct} / ${gqScore.total}`;
+      },
+    });
+  }
+
+  renders.glossary = function () {
+    panel().innerHTML = `
+      <div class="ape-cat-toggles">
+        <button class="ape-cat-toggle${glossaryView === 'browse' ? ' on' : ''}" data-view="browse">Browse</button>
+        <button class="ape-cat-toggle${glossaryView === 'quiz' ? ' on' : ''}" data-view="quiz">Self-check quiz</button>
+      </div>
+      <div id="ape-gloss-body"></div>
+    `;
+    panel().querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => { glossaryView = btn.dataset.view; renders.glossary(); });
+    });
+    const body = panel().querySelector('#ape-gloss-body');
+    if (glossaryView === 'browse') {
+      const cats = ['all', ...DATA.categories.map(c => c.id)];
+      const catLabel = (id) => id === 'all' ? 'All' : (DATA.categories.find(c => c.id === id)?.label || id);
+      body.innerHTML = `
+        <p class="help">${DATA.terms.length} rhetorical devices and literary terms for AP Lang &amp; AP Lit, each with a short original example — original content, nothing lifted from the exam.</p>
+        <div class="field ape-search">
+          <input class="input" id="ape-gloss-search" type="search" placeholder="Search terms…" value="${escape(glossQuery)}">
+        </div>
+        <div class="ape-cat-toggles">
+          ${cats.map(c => `<button class="ape-cat-toggle${c === glossCat ? ' on' : ''}" data-cat="${escape(c)}">${escape(catLabel(c))}</button>`).join('')}
+        </div>
+        <div id="ape-gloss-list"></div>
+      `;
+      body.querySelector('#ape-gloss-search').addEventListener('input', (e) => { glossQuery = e.target.value; renderGlossaryList(); });
+      body.querySelectorAll('.ape-cat-toggle[data-cat]').forEach(btn => {
+        btn.addEventListener('click', () => { glossCat = btn.dataset.cat; renders.glossary(); });
+      });
+      renderGlossaryList();
+    } else {
+      body.innerHTML = `
+        <p class="help">Read the definition (or a short example), then pick the matching term. Multiple choice, immediate feedback, nothing repeats verbatim.</p>
+        <div class="ape-cat-toggles" id="ape-gq-cats">
+          ${DATA.categories.map(c => `<button class="ape-cat-toggle${cfg.quizCategories.includes(c.id) ? ' on' : ''}" data-cat="${c.id}">${escape(c.label)}</button>`).join('')}
+        </div>
+        <div class="ape-quiz-bar">
+          <span class="ape-score" id="ape-gq-score">Score: ${gqScore.correct} / ${gqScore.total}</span>
+          <button class="btn ghost sm" id="ape-gq-reset">Reset score</button>
+        </div>
+        <div id="ape-gq-q"></div>
+      `;
+      body.querySelectorAll('#ape-gq-cats .ape-cat-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const cat = btn.dataset.cat;
+          if (cfg.quizCategories.includes(cat)) {
+            if (cfg.quizCategories.length > 1) cfg.quizCategories = cfg.quizCategories.filter(c => c !== cat);
+          } else {
+            cfg.quizCategories.push(cat);
+          }
+          saveCfg();
+          btn.classList.toggle('on', cfg.quizCategories.includes(cat));
+        });
+      });
+      body.querySelector('#ape-gq-reset').addEventListener('click', () => {
+        gqScore = { correct: 0, total: 0 };
+        $('#ape-gq-score', root).textContent = 'Score: 0 / 0';
+      });
+      gqNext();
+    }
+  };
+
+  /* ─────────────────────── Close Reading Scaffold ───────────────────────
+     Structural, non-generative: the tool frames the prompts (rhetorical
+     situation, then quote → device → effect annotation slots, then a
+     synthesis line); the student supplies every word of the actual reading.
+     Nothing here is generated for them, matching the Essay Planner Scaffold. */
+  const crDownload = (name, content, type) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    showToast('Exported ' + name.split('.').pop().toUpperCase());
+  };
+
+  function buildCRText() {
+    const ph = (t) => `[${t}]`;
+    let md = `# Close reading\n\n`;
+    if (cr.passage.trim()) md += `## Passage\n\n> ${cr.passage.trim().replace(/\n/g, '\n> ')}\n\n`;
+    md += `## Rhetorical situation (SOAPSTone)\n\n`;
+    SOAP_FIELDS.forEach(f => { md += `**${f.label}:** ${cr.soap[f.key].trim() || ph(f.hint)}\n\n`; });
+    md += `## Annotations\n\n`;
+    cr.annotations.forEach((a, i) => {
+      md += `${i + 1}. **Quote:** ${a.quote.trim() || ph('exact words')}\n`;
+      md += `   **Device:** ${a.device.trim() || ph('device / technique')}\n`;
+      md += `   **Effect:** ${a.effect.trim() || ph('what it does & why it matters')}\n\n`;
+    });
+    md += `## Synthesis\n\n${cr.synthesis.trim() || ph('one sentence: what is this passage doing, and how?')}\n`;
+    return md;
+  }
+
+  function renderAnnoHTML(a, i) {
+    return `
+      <div class="ape-cr-anno" data-aid="${a.id}">
+        <div class="ape-cr-anno-head">
+          <span class="ape-cr-anno-num">Moment ${i + 1}</span>
+          <button class="ape-cr-del" data-adel="${a.id}" title="Remove">✕</button>
+        </div>
+        <div class="ape-cr-field">
+          <label>Quote / exact words</label>
+          <textarea class="ape-cr-ta" data-aquote="${a.id}" placeholder="Copy the exact line or phrase…">${escape(a.quote)}</textarea>
+        </div>
+        <div class="ape-cr-anno-row">
+          <div class="ape-cr-field">
+            <label>Device / technique</label>
+            <input class="ape-cr-inp" list="ape-glossary-terms" data-adevice="${a.id}" value="${escape(a.device)}" placeholder="e.g. anaphora, imagery…">
+          </div>
+          <div class="ape-cr-field" style="flex:2">
+            <label>Effect — what it does &amp; why it matters</label>
+            <textarea class="ape-cr-ta" data-aeffect="${a.id}" placeholder="How this shapes meaning, tone, or the reader's response…">${escape(a.effect)}</textarea>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  renders.closereading = function () {
+    const termOpts = DATA.terms.map(t => `<option value="${escape(t.term)}"></option>`).join('');
+    panel().innerHTML = `
+      <p class="ape-cr-help">Paste a passage, then work through it with prompts — nothing here is generated for you. Frame the rhetorical situation, mark the specific moments where technique shapes meaning, then pull it together into one analytical claim. Everything autosaves.</p>
+
+      <datalist id="ape-glossary-terms">${termOpts}</datalist>
+
+      <div class="ape-cr-sec-label">Passage</div>
+      <div class="ape-cr-field">
+        <label>Paste the text you're analyzing</label>
+        <textarea class="ape-cr-ta ape-cr-passage" id="ape-cr-passage" placeholder="Paste the passage here…">${escape(cr.passage)}</textarea>
+      </div>
+
+      <div class="ape-cr-sec-label">Rhetorical situation (SOAPSTone)</div>
+      <div class="ape-cr-soap-grid">
+        ${SOAP_FIELDS.map(f => `
+          <div class="ape-cr-field">
+            <label>${f.label}</label>
+            <textarea class="ape-cr-ta" data-soap="${f.key}" placeholder="${escape(f.hint)}">${escape(cr.soap[f.key])}</textarea>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="ape-cr-sec-label">Annotate by prompt</div>
+      <p class="help">For each moment you flag, quote the exact words, name the device or technique at work (check the Glossary &amp; Quiz tab if you need a refresher — the field below suggests terms from it), then explain the effect.</p>
+      <div id="ape-cr-annos">
+        ${cr.annotations.map((a, i) => renderAnnoHTML(a, i)).join('')}
+      </div>
+      <div class="ape-cr-actions"><button class="btn ghost sm" id="ape-cr-add">+ Annotation slot</button></div>
+
+      <div class="ape-cr-sec-label">Synthesis</div>
+      <div class="ape-cr-field">
+        <label>Put it together — one sentence: what is this passage doing, and how?</label>
+        <textarea class="ape-cr-ta" id="ape-cr-synth" placeholder="Across these moments, the writer's technique builds toward…">${escape(cr.synthesis)}</textarea>
+      </div>
+
+      <div class="ape-cr-actions" style="margin-top:6px;border-top:1px solid var(--rule);padding-top:16px">
+        <button class="btn accent sm" id="ape-cr-copy">Copy annotations</button>
+        <button class="btn ghost sm" id="ape-cr-export">Export .md</button>
+        <button class="btn ghost sm" id="ape-cr-clear">Clear passage</button>
+      </div>
+    `;
+
+    const p = panel();
+    p.querySelector('#ape-cr-passage').addEventListener('input', (e) => { cr.passage = e.target.value; crSave(); });
+    $$('[data-soap]', p).forEach(el => el.addEventListener('input', () => { cr.soap[el.dataset.soap] = el.value; crSave(); }));
+    $$('[data-aquote]', p).forEach(el => el.addEventListener('input', () => { const a = findAnno(el.dataset.aquote); if (a) { a.quote = el.value; crSave(); } }));
+    $$('[data-adevice]', p).forEach(el => el.addEventListener('input', () => { const a = findAnno(el.dataset.adevice); if (a) { a.device = el.value; crSave(); } }));
+    $$('[data-aeffect]', p).forEach(el => el.addEventListener('input', () => { const a = findAnno(el.dataset.aeffect); if (a) { a.effect = el.value; crSave(); } }));
+    p.querySelector('#ape-cr-synth').addEventListener('input', (e) => { cr.synthesis = e.target.value; crSave(); });
+    p.querySelector('#ape-cr-add').addEventListener('click', () => { cr.annotations.push(annoSlot()); crSave(); renders.closereading(); });
+    $$('[data-adel]', p).forEach(b => b.addEventListener('click', () => {
+      if (cr.annotations.length <= 1) { showToast('Keep at least one annotation slot.'); return; }
+      cr.annotations = cr.annotations.filter(a => a.id !== b.dataset.adel); crSave(); renders.closereading();
+    }));
+    p.querySelector('#ape-cr-clear').addEventListener('click', () => {
+      if (!confirm('Clear the passage, rhetorical situation, and all annotations? This can\'t be undone.')) return;
+      cr = crDefaults(); crSave(); renders.closereading();
+    });
+    p.querySelector('#ape-cr-copy').addEventListener('click', () => copy(buildCRText(), p.querySelector('#ape-cr-copy')));
+    p.querySelector('#ape-cr-export').addEventListener('click', () => crDownload('close-reading.md', buildCRText(), 'text/markdown'));
+  };
+
+  /* ── Boot: lazy-load content, then show the tabbed shell ── */
+  function boot() {
+    showLoading();
+    ensureContent(ok => {
+      if (!ok || !window.APEnglish) { showError(); return; }
+      DATA = window.APEnglish;
+      if (!Array.isArray(cfg.quizCategories) || !cfg.quizCategories.length) cfg.quizCategories = DATA.categories.map(c => c.id);
+      renderShell();
+    });
+  }
+  boot();
+
+  return { unmount() {} };
+}
+
 /* ========== PERIODIC TABLE ========== */
 function mountPeriodic(root) {
   /* ── Element data: all 118 ── */
@@ -6961,6 +7423,9 @@ function registerTools() {
   TOOLS.push({ id:'appsych', shelf:'words', icon:'🧠', name:'AP Psychology',
     desc:'Research methods practice, psych stats, theorists & disorders reference.', tag:'new',
     keywords:['ap','psychology','psych','research methods','independent variable','dependent variable','validity','reliability','ethics','theorist','perspective','disorder','treatment','dsm','z-score','correlation','frq'], mount: mountAPPsych });
+  TOOLS.push({ id:'apenglish', shelf:'words', icon:'🎭', name:'AP English Lang & Lit',
+    desc:'Rhetoric & literary devices glossary + quiz, plus a close-reading scaffold.', tag:'new',
+    keywords:['ap english','ap lang','ap lit','rhetoric','rhetorical devices','literary devices','literary terms','glossary','close reading','annotate','annotation','soapstone','rhetorical situation','ethos','pathos','logos','figurative language','poetry','literature','quiz'], mount: mountAPEnglish });
 
   /* ============== STUDY ============== */
   TOOLS.push({ id:'flashcards', shelf:'study', icon:'🃏', name:'Flashcards',
@@ -7069,6 +7534,7 @@ const HELP_DESC = {
   wordcount: 'Count words and characters, and estimate reading level and reading time.',
   citation: 'Generate MLA, APA, or Chicago citations, with DOI/ISBN autofill and an annotated bibliography.',
   appsych: 'Practice research-methods scenarios, look up z-scores and correlation strength, and browse perspectives, theorists, and disorders & treatments.',
+  apenglish: 'Browse a rhetorical devices & literary terms glossary with a self-check quiz, then work through a passage with a structural, fill-in-the-slots close-reading scaffold.',
   essay: 'Scaffold an essay from outline to draft, track sources, and export.',
   vocab: 'Build custom word lists and quiz yourself with spaced repetition.',
   lang: "Practice conjugation and vocabulary for a language you're learning.",
