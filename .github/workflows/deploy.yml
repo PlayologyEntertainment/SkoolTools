@@ -14,6 +14,7 @@ on:
       - 'ap-psych.js'
       - 'reading-writing-data.js'
       - 'genetics-engine.js'
+      - 'ap-english.js'
   workflow_dispatch:
 
 jobs:
@@ -103,3 +104,12 @@ jobs:
             --max-time 60 \
             --connect-timeout 20 \
             "ftp://ftp.playologyentertainment.com/SkoolToolz/genetics-engine.js"
+
+      - name: Upload ap-english.js via FTP
+        run: |
+          curl -T ap-english.js \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/ap-english.js"

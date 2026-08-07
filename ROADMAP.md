@@ -11,9 +11,10 @@ tools across nine shelves — adding Test Prep, Focus (Accessibility), and Code
 
 Work didn't stop at the v2.0 mark: a handful of tools and fixes shipped
 ad hoc afterward without ever being scoped in this document (see **"Shipped
-since v2.0"** near the bottom). The app runs **59 tools across nine shelves**
-as of this update (57 ad hoc + the AP Psychology tool and the Algebra Solver,
-Phase 4's first two scoped-and-shipped items) — **Phase 4 is where that ad
+since v2.0"** near the bottom). The app runs **61 tools across nine shelves**
+as of this update (57 ad hoc + all four of Phase 4 Tier A's scoped-and-shipped
+items: the Algebra Solver, the AP Psychology tool, the Genetics / Punnett
+Square Solver, and the Personal Finance Toolkit) — **Phase 4 is where that ad
 hoc pattern stops:** every new tool from here forward gets scoped,
 prioritized, and checked off in this doc before it ships, the same
 discipline Phases 1–3 held.
@@ -495,27 +496,34 @@ Table rather than duplicating Flashcards.
   pattern as `ap-packs.js`, then cached) so the single-file fast-paint budget
   holds.
 
-#### 4.3 Genetics / Punnett Square Solver  *(new tool, Lab shelf)*
-AP Biology's most FRQ-heavy topic has zero coverage today (Chemistry
+#### 4.3 Genetics / Punnett Square Solver  *(new tool, Lab shelf)*  ✅ *shipped*
+AP Biology's most FRQ-heavy topic had zero coverage before this (Chemistry
 Helpers, Physics Solver, and Periodic Table cover the rest of the sciences;
-nothing covers genetics).
-- Monohybrid and dihybrid crosses, sex-linked traits, and basic pedigree
-  analysis — the cross grid and resulting genotype/phenotype ratios shown as
-  work, not just a final answer.
-- A chi-square goodness-of-fit tie-in for expected-vs-observed ratios,
-  reusing the Statistics Sheet's distribution engine.
+nothing covered genetics).
+- ✅ **Monohybrid, dihybrid, and sex-linked crosses** with full worked Punnett
+  squares and the resulting genotype/phenotype ratios shown as work, not
+  just a final answer.
+- ✅ **Basic pedigree analysis** against the four classic Mendelian
+  inheritance patterns.
+- ✅ **Chi-square goodness-of-fit** calculator for expected-vs-observed
+  ratios.
+- ✅ Cross/pedigree/chi-square logic lives in a **lazy-loaded module**
+  (`genetics-engine.js`, following the `algebra-engine.js` pattern), wired
+  into the Lab shelf.
 
-#### 4.4 Personal Finance Toolkit  *(new tool, Toolbox shelf)*
+#### 4.4 Personal Finance Toolkit  *(new tool, Toolbox shelf)*  ✅ *shipped*
 Underserved by every adjacent competitor (Symbolab/Quizlet/Photomath don't
 touch it) and increasingly a **required HS course** in many states — squarely
 in-audience and useful past graduation, which fits the brand's practical
 streak (GPA Calculator, Schedule Builder).
-- Compound interest, loan amortization, and credit-card interest
-  calculators — each shows the formula and schedule, not just a number.
-- A simple budget builder (income vs. categorized expenses) and a
-  paycheck/withholding estimator.
-- Calculators only — no investment advice or product recommendations,
-  consistent with "shows its work, doesn't tell you what to do."
+- ✅ **Compound interest**, **loan amortization**, and a **credit-card
+  payoff** calculator (with a minimum-payment comparison) — each shows the
+  formula and a schedule/breakdown, not just a final number.
+- ✅ A **50/30/20-framed budget builder** (income vs. categorized expenses)
+  and a simplified **2026 federal paycheck/withholding estimator**.
+- ✅ Calculators only — no investment advice or product recommendations,
+  consistent with "shows its work, doesn't tell you what to do." Inputs
+  persist locally via the existing Storage helper, no accounts.
 
 ### Tier B — strong candidates, sequence after Tier A
 
@@ -527,14 +535,44 @@ AP Micro/Macro have no coverage at all today.
 - Elasticity, GDP components, inflation (CPI), and unemployment-rate
   calculators, each with the formula shown.
 
-#### 4.6 AP English Language & Literature tool  *(new tool, Words shelf)*
+#### 4.6 AP English Language & Literature tool  *(new tool, Words shelf)*  ✅ *shipped*
 The Words shelf is essay-mechanics-heavy (Essay Planner, Citation Helper,
 Grammar & Spellcheck) but has nothing for the literature/rhetoric side of
 AP Lang/Lit.
-- Rhetorical devices and literary terms glossary with a self-check quiz.
-- Structural close-reading scaffolding (annotate-by-prompt, not
-  AI-generated) in the same non-generative spirit as the Essay Planner's
-  Scaffold tab.
+- ✅ **Rhetorical devices & literary terms glossary** — **71 original-authored
+  terms** across five groups spanning both AP Lang and AP Lit: Rhetorical
+  Devices (anaphora, chiasmus, antithesis, asyndeton/polysyndeton, …),
+  Argument & Appeals (ethos/pathos/logos/kairos, claim/warrant/concession,
+  and the logical fallacies FRQs test — straw man, ad hominem, slippery
+  slope, false dilemma, hasty generalization, circular reasoning), Literary
+  Devices (imagery, symbolism, foreshadowing, the three ironies, tone vs.
+  mood, characterization, diction/syntax, …), Sound & Poetic Devices
+  (alliteration, meter, enjambment, metaphor/simile, synecdoche/metonymy,
+  …), and Narrative Elements & Style (point of view, unreliable narrator,
+  stream of consciousness, in medias res, …) — each with a concise
+  definition and a short **original example sentence** (nothing lifted from
+  the exam or any copyrighted text, same integrity bar as the AP Psychology
+  tool and AP Flashcard Packs). A searchable, category-filterable **Browse**
+  view sits alongside a **Self-check quiz** view: read a definition (or a
+  short example), pick the matching term from four multiple-choice options,
+  with immediate feedback + explanation, category on/off toggles to scope
+  the draw pool, and a running score.
+- ✅ **Close Reading Scaffold** — a structural, non-generative tab in the
+  same spirit as the Essay Planner's Scaffold tab: the student pastes a
+  passage, frames its **rhetorical situation (SOAPSTone)** — speaker,
+  occasion, audience, purpose, subject, tone — then works through
+  repeatable **annotate-by-prompt slots** (quote the exact words → name the
+  device/technique → explain the effect, with a datalist suggesting terms
+  from the glossary) before pulling it together in a one-line **synthesis**
+  claim. Nothing is generated for the student — the tool only frames the
+  skeleton they fill in. **Copy** and **Export .md**, plus **localStorage
+  autosave**; no share-by-code, matching the Essay Planner (the closest
+  sibling with saved user work on this shelf) rather than inventing a new
+  pattern.
+- ✅ Glossary content lives in a **lazy-loaded module** (`ap-english.js`,
+  fetched via `<script>` on first open so it also works from a local
+  `file://` copy, then cached), following the `ap-psych.js` pattern, so the
+  single-file fast-paint budget holds.
 
 #### 4.7 Physics Solver → AP Physics C mode  *(deepen, Lab shelf)*
 The existing Physics Solver reads as algebra-based (Physics 1/2 style).
@@ -565,7 +603,7 @@ that respects the offline/lazy-load performance budget.
 High content cost per language for uncertain lift over the existing generic
 drill. Revisit if specific user feedback asks for it.
 
-**Phase 4 exit criteria:** Tier A (4.1–4.4) shipped, a11y-passed, and
+**Phase 4 exit criteria:** ✅ Tier A (4.1–4.4) shipped, a11y-passed, and
 performance-budget-verified — the same bar Phase 1 held. Tier B and Tier C
 are not committed; promote items individually as Tier A clears, the same way
 Phase 4 itself was just promoted from an unscoped placeholder.
@@ -602,7 +640,7 @@ section (bundle ID) as the one decision to lock before kickoff.
 | 2 | New tools | Concept Map, Lab Report, Matrix, Truth Table, Inequality, Music Theory, Cheat-Sheet | ✅ **7 / 7 shipped** |
 | 3 | New shelves | Test Prep, Accessibility & Focus, Code | ✅ **3 / 3 shipped** — Test Prep 5/5 · A11y & Focus 4/4 · Code 5/5 |
 | — | *(ad hoc, untracked)* | SAT/ACT Reading & Writing Drill, Extracurricular Journal, Schedule Builder upgrades, Privacy/Terms pages, GoatCounter analytics, Send Feedback, Help section | ✅ shipped 2026-07 → 2026-08, see "Shipped since v2.0" below |
-| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **2 / 11 shipped** — Algebra Solver (4.1) and AP Psych tool (4.2) done; 4.3, 4.4 next |
+| **4** | New subject coverage *(active cycle)* | Tier A: Algebra Solver, AP Psych tool, Genetics Solver, Personal Finance · Tier B: Economics, AP English Lang/Lit, Physics C, Civics · Tier C: AP Music Theory, AP CS A (Java, feasibility only), foreign-language deepening | 📝 **5 / 11 shipped** — Tier A complete (4.1 Algebra Solver, 4.2 AP Psych tool, 4.3 Genetics Solver, 4.4 Personal Finance Toolkit); Tier B underway (4.6 AP English Lang/Lit tool shipped); 4.5, 4.7, 4.8 next |
 | 5 | Mobile app port | Capacitor · Android + iOS (`MOBILE_PLAN.md`) | ⏸ queued after Phase 4 |
 | — | Growth/marketing | Zero-dollar sprint (`GROWTH_PLAN.md`) | ⏸ sidelined, not run |
 
