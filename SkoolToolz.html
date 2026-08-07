@@ -22967,10 +22967,19 @@ function mountFinance(root) {
   }
 
   function renderPaycheck() {
-    const saved = Storage.get('finance:paycheck', { freq:'biweekly', gross:2000, status:'single', pretax:0 });
+    const saved = Storage.get('finance:paycheck', {
+      mode:'salary', freq:'biweekly', gross:2000, status:'single', pretax:0,
+      hourlyRate:20, hours:40, otHours:0, otMult:1.5,
+    });
     body.innerHTML = `
-      <p class="help">Federal income tax + Social Security + Medicare only, using ${TAX_YEAR} brackets and the standard deduction — no credits, no state or local tax. This estimates a paystub; it isn't one.</p>
+      <p class="help">Federal income tax + Social Security + Medicare only, using ${TAX_YEAR} brackets and the standard deduction — no credits, no state or local tax. Hourly pay converts to an annual figure using a 52-week year, then splits across your pay frequency. This estimates a paystub; it isn't one.</p>
       <div class="grid-3">
+        <div class="field"><label>Pay type</label>
+          <select class="input" id="pc-mode">
+            <option value="salary"${saved.mode==='salary'?' selected':''}>Salary</option>
+            <option value="hourly"${saved.mode==='hourly'?' selected':''}>Hourly</option>
+          </select>
+        </div>
         <div class="field"><label>Pay frequency</label>
           <select class="input" id="pc-freq">
             <option value="weekly"${saved.freq==='weekly'?' selected':''}>Weekly (52/yr)</option>
@@ -22979,7 +22988,6 @@ function mountFinance(root) {
             <option value="monthly"${saved.freq==='monthly'?' selected':''}>Monthly (12/yr)</option>
           </select>
         </div>
-        <div class="field"><label>Gross pay per period</label><input class="input mono" id="pc-gross" type="number" min="0" step="0.01" value="${saved.gross}"></div>
         <div class="field"><label>Filing status</label>
           <select class="input" id="pc-status">
             <option value="single"${saved.status==='single'?' selected':''}>Single</option>
@@ -22987,21 +22995,46 @@ function mountFinance(root) {
           </select>
         </div>
       </div>
+      <div id="pc-pay-fields"></div>
       <div class="field" style="max-width:320px"><label>Pre-tax deductions per period (401k, health, etc. — optional)</label><input class="input mono" id="pc-pretax" type="number" min="0" step="0.01" value="${saved.pretax}"></div>
       <div id="pc-out"></div>
     `;
-    const $freq = $('#pc-freq', body), $gross = $('#pc-gross', body), $status = $('#pc-status', body), $pretax = $('#pc-pretax', body);
+    const $mode = $('#pc-mode', body), $freq = $('#pc-freq', body), $status = $('#pc-status', body), $pretax = $('#pc-pretax', body);
+    const fieldsEl = $('#pc-pay-fields', body);
+    let $gross, $rate, $hours, $otHours, $otMult;
 
     const calc = () => {
-      const freq = $freq.value, status = $status.value;
-      const grossPerPeriod = clampNum($gross.value), pretaxPerPeriod = clampNum($pretax.value);
-      Storage.set('finance:paycheck', { freq, gross:grossPerPeriod, status, pretax:pretaxPerPeriod });
+      const mode = $mode.value, freq = $freq.value, status = $status.value;
+      const pretaxPerPeriod = clampNum($pretax.value);
+      const periodsPerYear = PAY_FREQ[freq];
+
+      let grossAnnual, weeklyGross = null, hourlyBits = null;
+      if (mode === 'hourly') {
+        const rate = clampNum($rate.value), hours = clampNum($hours.value), otHours = clampNum($otHours.value);
+        const otMult = Math.max(1, clampNum($otMult.value, 1.5));
+        weeklyGross = rate * hours + rate * otHours * otMult;
+        grossAnnual = weeklyGross * 52;
+        hourlyBits = { rate, hours, otHours, otMult };
+        Storage.set('finance:paycheck', { mode, freq, gross:saved.gross, status, pretax:pretaxPerPeriod, hourlyRate:rate, hours, otHours, otMult });
+      } else {
+        const grossPerPeriod = clampNum($gross.value);
+        grossAnnual = grossPerPeriod * periodsPerYear;
+        Storage.set('finance:paycheck', { mode, freq, gross:grossPerPeriod, status, pretax:pretaxPerPeriod, hourlyRate:saved.hourlyRate, hours:saved.hours, otHours:saved.otHours, otMult:saved.otMult });
+      }
+      const grossPerPeriod = grossAnnual / periodsPerYear;
 
       const out = $('#pc-out', body);
-      if (grossPerPeriod <= 0) { out.innerHTML = ''; return; }
+      const summaryEl = $('#pc-hourly-summary', body);
+      if (grossAnnual <= 0) {
+        out.innerHTML = '';
+        if (summaryEl) summaryEl.innerHTML = '';
+        return;
+      }
 
-      const periodsPerYear = PAY_FREQ[freq];
-      const grossAnnual = grossPerPeriod * periodsPerYear;
+      if (summaryEl && hourlyBits) {
+        summaryEl.innerHTML = `${usd(weeklyGross)}/wk before taxes · ≈ ${usd(grossAnnual)}/yr equivalent annual salary`;
+      }
+
       const pretaxAnnual = Math.min(pretaxPerPeriod, grossPerPeriod) * periodsPerYear;
       const wagesAnnual = Math.max(grossAnnual - pretaxAnnual, 0);
 
@@ -23019,6 +23052,10 @@ function mountFinance(root) {
 
       const row = (label, annual) => `<tr><td>${label}</td><td class="num">${usd(annual / periodsPerYear)}</td><td class="num">${usd(annual)}</td></tr>`;
 
+      const payDesc = hourlyBits
+        ? `${usd(hourlyBits.rate)}/hr × ${hourlyBits.hours} hrs/wk${hourlyBits.otHours > 0 ? ` + ${hourlyBits.otHours} OT hrs/wk @ ${hourlyBits.otMult}x` : ''}`
+        : `${usd(grossPerPeriod)} gross per ${freq} period`;
+
       out.innerHTML = `
         <table class="data">
           <thead><tr><th></th><th class="num">Per paycheck</th><th class="num">Annual</th></tr></thead>
@@ -23031,15 +23068,38 @@ function mountFinance(root) {
           </tbody>
         </table>
         <div class="result">
-          <button class="copy-btn" data-copytext="${escape(`Paycheck estimate (${TAX_YEAR}, ${status==='mfj'?'married filing jointly':'single'}): ${usd(grossPerPeriod)} gross per ${freq} period → ${usd(netAnnual/periodsPerYear)} net (${usd(netAnnual)}/yr). Federal + FICA effective rate ${effRate.toFixed(1)}%.`)}">Copy</button>
+          <button class="copy-btn" data-copytext="${escape(`Paycheck estimate (${TAX_YEAR}, ${status==='mfj'?'married filing jointly':'single'}): ${payDesc} → ${usd(netAnnual/periodsPerYear)} net per ${freq} period (${usd(netAnnual)}/yr). Federal + FICA effective rate ${effRate.toFixed(1)}%.`)}">Copy</button>
           <div class="result-label">Net (take-home) pay</div>
           <div class="result-big">${usd(netAnnual / periodsPerYear)}</div>
           <div class="result-sub">${usd(netAnnual)}/yr · effective federal + FICA rate ${effRate.toFixed(1)}%</div>
         </div>
       `;
     };
-    [$freq, $gross, $status, $pretax].forEach(i => i.addEventListener('input', calc));
-    calc();
+
+    const renderFields = () => {
+      if ($mode.value === 'hourly') {
+        fieldsEl.innerHTML = `
+          <div class="grid-3">
+            <div class="field"><label>Hourly rate</label><input class="input mono" id="pc-rate" type="number" min="0" step="0.01" value="${saved.hourlyRate}"></div>
+            <div class="field"><label>Avg. hours per week</label><input class="input mono" id="pc-hours" type="number" min="0" step="0.1" value="${saved.hours}"></div>
+            <div class="field"><label>Overtime hours per week</label><input class="input mono" id="pc-ot-hours" type="number" min="0" step="0.1" value="${saved.otHours}"></div>
+          </div>
+          <div class="field" style="max-width:200px"><label>Overtime multiplier</label><input class="input mono" id="pc-ot-mult" type="number" min="1" step="0.05" value="${saved.otMult}"></div>
+          <p class="help" id="pc-hourly-summary"></p>
+        `;
+        $rate = $('#pc-rate', body); $hours = $('#pc-hours', body); $otHours = $('#pc-ot-hours', body); $otMult = $('#pc-ot-mult', body);
+        [$rate, $hours, $otHours, $otMult].forEach(i => i.addEventListener('input', calc));
+      } else {
+        fieldsEl.innerHTML = `<div class="field" style="max-width:320px"><label>Gross pay per period</label><input class="input mono" id="pc-gross" type="number" min="0" step="0.01" value="${saved.gross}"></div>`;
+        $gross = $('#pc-gross', body);
+        $gross.addEventListener('input', calc);
+      }
+      calc();
+    };
+
+    $mode.addEventListener('input', renderFields);
+    [$freq, $status, $pretax].forEach(i => i.addEventListener('input', calc));
+    renderFields();
   }
 
   /* ---------------------------------------------------------
