@@ -24077,6 +24077,16 @@ function mountSchedule(root) {
       .sched-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
       .sched-foot .spacer{flex:1}
 
+      /* Share / import modal */
+      .sched-modal-back{position:fixed;inset:0;z-index:60;background:#0008;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px}
+      .sched-modal{background:var(--paper-2);border:1px solid var(--ink-2);border-radius:4px;box-shadow:var(--shadow-card);padding:20px;width:min(520px,100%);max-height:90vh;overflow:auto}
+      .sched-modal h3{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.015em;margin:0 0 6px}
+      .sched-modal p{font-family:var(--sans);font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 8px}
+      .sched-modal .sched-modal-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);margin:14px 0 5px}
+      .sched-modal textarea,.sched-modal input[type=text]{width:100%;font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;color:var(--ink);padding:8px;resize:vertical}
+      .sched-modal-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+      .sched-modal-row .btn.active{border-color:var(--accent);color:var(--ink)}
+
       /* Print styles — print-optimized layout */
       @media print {
         body{background:#fff !important;color:#000 !important}
@@ -24112,6 +24122,7 @@ function mountSchedule(root) {
     <div class="sched-foot">
       <span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.1em">CLICK ANY CELL TO ASSIGN</span>
       <div class="spacer"></div>
+      <button class="btn ghost sm" id="share">Share Code</button>
       <button class="btn ghost sm" id="print">Print / PDF</button>
       <button class="btn ghost sm" id="reset">Reset</button>
     </div>
@@ -24570,6 +24581,131 @@ function mountSchedule(root) {
     inp.addEventListener('click', (ev) => ev.stopPropagation());
     inp.addEventListener('blur', commit);
   });
+
+  /* ── share-by-code (UTF-8-safe base64url, no backend) ── */
+  function b64urlEncode(bytes) { let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function b64urlDecode(str) { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  const schedUid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // Pack one schedule tab down to compact arrays — the grid references
+  // classes by index instead of id, since ids are meaningless off-device.
+  function packSchedule(s) {
+    const idx = new Map(s.classes.map((c, i) => [c.id, i]));
+    return {
+      n: s.name,
+      d: s.days.slice(),
+      p: s.periods.map(p => [p.label, p.start, p.end]),
+      c: s.classes.map(c => [c.name, c.room, c.teacher, PALETTE.indexOf(c.color)]),
+      g: s.grid.map(row => row.map(id => (id != null && idx.has(id)) ? idx.get(id) : -1)),
+    };
+  }
+  function unpackSchedule(o) {
+    if (!o || !Array.isArray(o.p) || !Array.isArray(o.c) || !Array.isArray(o.g)) return null;
+    const classes = o.c.map(a => ({ id: schedUid('c'), name: String(a[0] || '').slice(0, 60), room: String(a[1] || '').slice(0, 40), teacher: String(a[2] || '').slice(0, 60), color: PALETTE[a[3]] || PALETTE[0] }));
+    const periods = o.p.length ? o.p.map(a => ({ label: String(a[0] || ''), start: String(a[1] || ''), end: String(a[2] || '') })) : clonePeriods(DEFAULT_PERIODS);
+    const days = (Array.isArray(o.d) && o.d.length ? o.d : DEFAULT_DAYS).map(d => String(d)).slice(0, 14);
+    const grid = o.g.map(row => row.map(i => (Number.isInteger(i) && classes[i]) ? classes[i].id : null));
+    return { id: schedUid('s'), name: (String(o.n || '').trim() || 'Imported schedule'), periods, days, classes, grid };
+  }
+  function encodeSchedules(list) {
+    const payload = { app: 'SkoolToolz', kind: 'schedule', v: 1, s: list.map(packSchedule) };
+    return b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  }
+  function decodeSchedules(input) {
+    let str = String(input || '').trim();
+    if (!str) return null;
+    if (str.includes('=')) str = str.slice(str.lastIndexOf('=') + 1);
+    str = str.replace(/[^A-Za-z0-9\-_]/g, '');
+    if (!str) return null;
+    try {
+      const obj = JSON.parse(new TextDecoder().decode(b64urlDecode(str)));
+      if (!obj || !Array.isArray(obj.s)) return null;
+      const list = obj.s.map(unpackSchedule).filter(Boolean);
+      return list.length ? list : null;
+    } catch { return null; }
+  }
+  // Imported schedules always land as new tabs; a name already in use gets
+  // "(2)", "(3)", etc. so nothing local is ever overwritten.
+  function importSchedules(list) {
+    const used = new Set(state.schedules.map(s => s.name));
+    const added = [];
+    list.forEach(s => {
+      const base = s.name;
+      let name = base, i = 2;
+      while (used.has(name)) name = `${base} (${i++})`;
+      used.add(name);
+      s.name = name;
+      state.schedules.push(s);
+      added.push(s);
+    });
+    state.active = state.schedules.indexOf(added[0]);
+    editingId = null;
+    save();
+    renderTabs(); renderSide(); renderGrid();
+    showToast(added.length > 1 ? `Imported ${added.length} schedules.` : `Imported "${added[0].name}".`);
+  }
+  function openShareDialog() {
+    const back = el('div', { class: 'sched-modal-back' });
+    const box = el('div', { class: 'sched-modal' });
+    back.appendChild(box);
+    back.addEventListener('pointerdown', (ev) => { if (ev.target === back) back.remove(); });
+    const mkBtn = (label, cls, fn) => el('button', { class: 'btn ' + cls + ' sm', text: label, on: { click: fn } });
+
+    let scope = 'one';
+    const ta = el('textarea', { attrs: { rows: '4', readonly: 'true' } });
+    const linkInp = el('input', { type: 'text', attrs: { readonly: 'true' } });
+    const oneBtn = mkBtn('This schedule', 'ghost', () => { scope = 'one'; markActive(); refresh(); });
+    const allBtn = mkBtn('All schedules', 'ghost', () => { scope = 'all'; markActive(); refresh(); });
+    const markActive = () => { oneBtn.classList.toggle('active', scope === 'one'); allBtn.classList.toggle('active', scope === 'all'); };
+    const refresh = () => {
+      const list = scope === 'all' ? state.schedules : [curSched()];
+      const code = encodeSchedules(list);
+      ta.value = code;
+      linkInp.value = location.href.split('#')[0] + '#schedule=' + code;
+    };
+    markActive(); refresh();
+
+    const imp = el('textarea', { attrs: { rows: '4', placeholder: 'Paste a #schedule=… code or link here' } });
+
+    box.append(
+      el('h3', { text: 'Share by code' }),
+      el('p', { text: 'No backend — this code is the whole schedule. Send it (or the link) to another device and import it there.' }),
+      el('div', { class: 'sched-modal-row' }, [oneBtn, allBtn]),
+      el('p', { class: 'sched-modal-lbl', text: 'Code' }), ta,
+      el('p', { class: 'sched-modal-lbl', text: 'Link' }), linkInp,
+      el('div', { class: 'sched-modal-row' }, [
+        mkBtn('Copy code', 'primary', (ev) => copy(ta.value, ev.currentTarget)),
+        mkBtn('Copy link', 'ghost', (ev) => copy(linkInp.value, ev.currentTarget)),
+      ]),
+      el('p', { class: 'sched-modal-lbl', text: 'Import a schedule' }), imp,
+      el('div', { class: 'sched-modal-row' }, [
+        mkBtn('Import', 'primary', () => {
+          const list = decodeSchedules(imp.value);
+          if (!list) { showToast('That code didn’t decode.'); return; }
+          importSchedules(list);
+          back.remove();
+        }),
+        mkBtn('Close', 'ghost', () => back.remove()),
+      ]),
+    );
+    root.appendChild(back);
+  }
+  $('#share', root).addEventListener('click', openShareDialog);
+
+  /* ── incoming share link (#schedule=CODE) ── */
+  (function checkSharedLink() {
+    const h = location.hash || '';
+    const eq = h.indexOf('=');
+    if (eq < 0 || !/schedule/i.test(h.slice(0, eq))) return;
+    const list = decodeSchedules(h.slice(eq + 1));
+    if (!list) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    setTimeout(() => {
+      if (confirm(list.length > 1 ? `Import ${list.length} shared schedules?` : `Import shared schedule "${list[0].name}"?`)) {
+        importSchedules(list);
+      }
+    }, 350);
+  })();
 
   // Print
   $('#print', root).addEventListener('click', () => {
