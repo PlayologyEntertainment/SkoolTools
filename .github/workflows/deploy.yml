@@ -6,6 +6,11 @@ on:
       - main
     paths:
       - 'SkoolToolz.html'
+      - 'favicon.ico'
+      - 'favicon-32.png'
+      - 'icon-192.png'
+      - 'apple-touch-icon.png'
+      - 'og-image.png'
       - 'privacy.html'
       - 'terms.html'
       - 'calculus-engine.js'
@@ -113,3 +118,48 @@ jobs:
             --max-time 60 \
             --connect-timeout 20 \
             "ftp://ftp.playologyentertainment.com/SkoolToolz/ap-english.js"
+
+      - name: Upload favicon.ico via FTP
+        run: |
+          curl -T favicon.ico \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/favicon.ico"
+
+      - name: Upload favicon-32.png via FTP
+        run: |
+          curl -T favicon-32.png \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/favicon-32.png"
+
+      - name: Upload icon-192.png via FTP
+        run: |
+          curl -T icon-192.png \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/icon-192.png"
+
+      - name: Upload apple-touch-icon.png via FTP
+        run: |
+          curl -T apple-touch-icon.png \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/apple-touch-icon.png"
+
+      - name: Upload og-image.png via FTP
+        run: |
+          curl -T og-image.png \
+            --user "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" \
+            --ftp-create-dirs \
+            --max-time 60 \
+            --connect-timeout 20 \
+            "ftp://ftp.playologyentertainment.com/SkoolToolz/og-image.png"
